@@ -1,0 +1,16 @@
+export type ProtectedMutationAdapterProbe = {
+    name: string;
+    mutationCount(): number;
+    attemptWithoutVerifiedGatewayCheck(): Promise<unknown>;
+};
+export type ProtectedMutationAdapterConformanceResult = {
+    adapterName: string;
+    beforeMutationCount: number;
+    afterMutationCount: number;
+    passed: boolean;
+    outcomeCode: "no_mutation_without_verified_gate" | "mutated_without_verified_gate";
+};
+export declare function checkProtectedMutationAdapterConformance(probe: ProtectedMutationAdapterProbe): Promise<ProtectedMutationAdapterConformanceResult>;
+export declare function assertProtectedMutationAdapterConformance(probe: ProtectedMutationAdapterProbe): Promise<ProtectedMutationAdapterConformanceResult>;
+export { PackageInstallAdapterEvidenceReportSchema, PackageInstallMaterialEvidenceSchema, PackageInstallMaterialEvidenceStatusSchema, packageInstallMaterialAdapterPack, projectPackageInstallAdapterEvidenceReport, projectPackageInstallMaterialEvidence, type PackageInstallAdapterEvidenceReport, type PackageInstallMaterialEvidence, type PackageInstallMaterialEvidenceStatus, } from "../adapters/package-install/adapter-pack";
+export { X402FirstWedgeSurfaceSchema, X402AuthorityCertificateEvidenceProfileSchema, X402FirstWedgeEvidenceLabelSchema, X402FirstWedgeUnsupportedSurfaceSchema, X402PaymentConformancePostureSchema, assertX402PaymentInstallConformance, checkX402PaymentInstallConformance, classifyX402FirstWedgeEvidenceLabel, classifyX402FirstWedgeSurface, projectX402AuthorityCertificateEvidenceProfile, type X402AuthorityCertificateEvidenceProfile, type X402FirstWedgeEvidenceLabel, type X402FirstWedgeEvidenceLabelClassification, type X402FirstWedgeSurface, type X402FirstWedgeSurfaceClassification, type X402FirstWedgeUnsupportedSurface, type X402FirstWedgeUnsupportedSurfaceReasonCode, type X402PaymentConformancePosture, type X402PaymentConformanceResult, } from "../adapters/x402-payment/conformance";

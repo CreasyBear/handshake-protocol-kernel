@@ -1,0 +1,35 @@
+name: trusted-publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Package version to publish
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@b39c6c9952e78e008bb0c65735243c791ed0c4a3 # v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Verify package version
+        run: node -e "const p=require('./package.json'); if (p.version !== process.env.EXPECTED_VERSION) { throw new Error('Expected '+process.env.EXPECTED_VERSION+' but package.json is '+p.version); }"
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+      - name: Verify repository artifact boundary
+        run: |
+          for path in src test scripts examples docs .planning .agents migrations node_modules; do
+            test ! -e "$path"
+          done
+      - name: Smoke package imports and CLI
+        run: npm run smoke:imports && npm run smoke:cli
+      - name: Publish package with npm provenance
+        run: npm publish --provenance --access public

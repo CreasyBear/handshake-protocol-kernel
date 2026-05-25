@@ -1,0 +1,35 @@
+import { z } from "zod";
+export declare const TransitionRequestContextSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    transitionRequestContextId: z.ZodString;
+    protocolVersionSeen: z.ZodString;
+    requestIdentity: z.ZodString;
+    originatingIdentityDigest: z.ZodNullable<z.ZodString>;
+    originatingIdentityRef: z.ZodNullable<z.ZodString>;
+    callerCustodyRole: z.ZodEnum<{
+        control_plane: "control_plane";
+        runtime_evidence: "runtime_evidence";
+        gateway_custody: "gateway_custody";
+        review_custody: "review_custody";
+    }>;
+    callerIdentityRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerSubjectDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerTenantId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerOrganizationId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerIdentityClaimsDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    authProviderRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    authSessionDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    serviceCredentialDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    revocationEpochRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerIdentityIssuedAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    callerIdentityExpiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    transitionName: z.ZodString;
+    routePattern: z.ZodString;
+    requestDigest: z.ZodString;
+    acceptedAt: z.ZodString;
+    requestContextDigest: z.ZodString;
+}, z.core.$strict>;
+export type TransitionRequestContext = z.infer<typeof TransitionRequestContextSchema>;

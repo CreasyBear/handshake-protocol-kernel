@@ -1,0 +1,20 @@
+import { McpServer } from "@modelcontextprotocol/server";
+import { type McpEvidenceResourceClient } from "../resources";
+import type { McpGatewayPosture, McpInstallPosture, McpRuntimeProposalClient } from "../x402-proposal";
+export declare const MCP_STDIO_SERVER_VERSION: "handshake.mcp.stdio-server.v0.1";
+export declare const mcpStdioStaticResourceUris: readonly ["handshake://metadata/actions/x402_payment.exact", "handshake://evidence/contracts/act_mcp_reference_x402", "handshake://evidence/envelopes/act_mcp_reference_x402", "handshake://evidence/receipts/rcp_mcp_gap/timeline", "handshake://health/install/pre-contract/req_mcp_x402_1"];
+export type HandshakeMcpStdioServerOptions = {
+    readonly runtimeClient?: McpRuntimeProposalClient;
+    readonly evidenceClient?: McpEvidenceResourceClient;
+    readonly currentMetadataDigest?: `sha256:${string}`;
+    readonly toolsListChanged?: boolean;
+    readonly installPosture?: McpInstallPosture;
+    readonly gatewayPosture?: McpGatewayPosture;
+    readonly trustedMaxAtomicAmountPerCall?: string;
+    readonly gatewayReadinessRef?: string;
+    readonly gatewayReadinessDigest?: `sha256:${string}` | string;
+    readonly policyVersionRef?: string;
+    readonly policyVersionDigest?: `sha256:${string}` | string;
+};
+export declare function createHandshakeMcpStdioServer(options?: HandshakeMcpStdioServerOptions): McpServer;
+export declare function startHandshakeMcpStdioServer(options?: HandshakeMcpStdioServerOptions): Promise<McpServer>;

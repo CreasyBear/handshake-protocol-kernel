@@ -1,0 +1,88 @@
+import { z } from "zod";
+export declare const RuntimeExecutionShapeSchema: z.ZodEnum<{
+    unknown: "unknown";
+    single_tool_call: "single_tool_call";
+    tool_dispatch_chain: "tool_dispatch_chain";
+    generated_mcp_tool_chain: "generated_mcp_tool_chain";
+    codemode_block: "codemode_block";
+    shell_exec_block: "shell_exec_block";
+    browser_action: "browser_action";
+    scheduled_job: "scheduled_job";
+    gateway_only: "gateway_only";
+}>;
+export type RuntimeExecutionShape = z.infer<typeof RuntimeExecutionShapeSchema>;
+export declare const RuntimePostureSchema: z.ZodEnum<{
+    unknown: "unknown";
+    prompt_guidance: "prompt_guidance";
+    hook_assisted: "hook_assisted";
+    protected_capability: "protected_capability";
+    bounded_generation: "bounded_generation";
+    gateway_enforced_only: "gateway_enforced_only";
+    hosted_control_plane: "hosted_control_plane";
+}>;
+export type RuntimePosture = z.infer<typeof RuntimePostureSchema>;
+export declare const RuntimeAccessPostureSchema: z.ZodEnum<{
+    unknown: "unknown";
+    isolated: "isolated";
+    controlled_outbound: "controlled_outbound";
+    filesystem_available: "filesystem_available";
+    network_available: "network_available";
+    secrets_available: "secrets_available";
+}>;
+export type RuntimeAccessPosture = z.infer<typeof RuntimeAccessPostureSchema>;
+export declare const RuntimeExecutionRecordSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    runtimeExecutionId: z.ZodString;
+    principalIntentRef: z.ZodString;
+    principalId: z.ZodString;
+    agentId: z.ZodString;
+    runId: z.ZodString;
+    runtimeAdapterId: z.ZodString;
+    executionShape: z.ZodEnum<{
+        unknown: "unknown";
+        single_tool_call: "single_tool_call";
+        tool_dispatch_chain: "tool_dispatch_chain";
+        generated_mcp_tool_chain: "generated_mcp_tool_chain";
+        codemode_block: "codemode_block";
+        shell_exec_block: "shell_exec_block";
+        browser_action: "browser_action";
+        scheduled_job: "scheduled_job";
+        gateway_only: "gateway_only";
+    }>;
+    runtimePosture: z.ZodEnum<{
+        unknown: "unknown";
+        prompt_guidance: "prompt_guidance";
+        hook_assisted: "hook_assisted";
+        protected_capability: "protected_capability";
+        bounded_generation: "bounded_generation";
+        gateway_enforced_only: "gateway_enforced_only";
+        hosted_control_plane: "hosted_control_plane";
+    }>;
+    executionBlockRef: z.ZodString;
+    executionBlockDigest: z.ZodString;
+    generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    allowedToolCapabilityIds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    observedToolCallRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    observedConsequentialCallCount: z.ZodNumber;
+    loopDetected: z.ZodBoolean;
+    retryDetected: z.ZodBoolean;
+    branchDetected: z.ZodBoolean;
+    dynamicToolConstructionDetected: z.ZodBoolean;
+    unobservedRegionRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    accessPosture: z.ZodEnum<{
+        unknown: "unknown";
+        isolated: "isolated";
+        controlled_outbound: "controlled_outbound";
+        filesystem_available: "filesystem_available";
+        network_available: "network_available";
+        secrets_available: "secrets_available";
+    }>;
+    uncertaintyMarkers: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    refusalReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    runtimeExecutionDigest: z.ZodString;
+}, z.core.$strict>;
+export type RuntimeExecutionRecord = z.infer<typeof RuntimeExecutionRecordSchema>;

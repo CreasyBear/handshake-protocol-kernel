@@ -1,0 +1,23 @@
+import type { ContractStreamEvent, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+export declare class D1ProtocolStore implements ProtocolStore {
+    private readonly db;
+    private readonly statements;
+    constructor(db: D1Database);
+    putRecord(record: StoredProtocolRecord): Promise<void>;
+    putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
+    getRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
+    listRecordsByType<T>(objectType: ProtocolObjectType, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
+    listRecordsByActionContract<T>(objectType: ProtocolObjectType, actionContractId: string, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
+    getStreamTail(streamId: string, partitionKey: string): Promise<StreamTail>;
+    getStreamEvent(streamId: string, partitionKey: string, offset: number): Promise<ContractStreamEvent | null>;
+    listStreamEvents(streamId: string, partitionKey: string, range?: StreamEventRange): Promise<ContractStreamEvent[]>;
+    getCurrentProtectedPathPosture(postureScopeKey: string): Promise<StoredProtocolRecord<ProtectedPathPosture> | null>;
+    getCurrentIdempotencyLedgerEntry(ledgerKeyDigest: string): Promise<StoredProtocolRecord<IdempotencyLedgerEntry> | null>;
+    getCurrentProtectedSurfaceOperationClaim(claimKeyDigest: string): Promise<StoredProtocolRecord<ProtectedSurfaceOperationClaim> | null>;
+    getReceiptByMutationAttemptId(mutationAttemptId: string): Promise<StoredProtocolRecord<Receipt> | null>;
+    listIsolationStates(scopeRefs: IsolationScopeRef[]): Promise<IsolationState[]>;
+    consumeGreenlight(consumption: GreenlightConsumption): Promise<"consumed" | "already_consumed">;
+    commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
+    commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
+    private hasGreenlightConsumption;
+}

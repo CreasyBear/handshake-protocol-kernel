@@ -1,0 +1,22 @@
+import { type EvaluatePolicyInput } from "./types";
+import type { ProtocolRecorder } from "../../events/records";
+import { type Greenlight, type PolicyDecision } from "./types";
+import type { ProtocolStore } from "../../store/port";
+export type PolicyEvaluationResponse = {
+    decision: PolicyDecision;
+    greenlight: Greenlight | null;
+    authorityCreated: boolean;
+    gatewayCheckPerformed: false;
+    mutationAttempted: false;
+    policyDecisionRef: string;
+    greenlightRef: string | null;
+    refusalRef: string | null;
+    refusalReasonCode: string | null;
+    proofGapRef: string | null;
+    proofGapReasonCode: string | null;
+    reviewRequired: boolean;
+    nextAction: "use_greenlight_at_gateway" | "read_evidence" | "request_review";
+    retryability: "not_retryable";
+    evidenceRefs: string[];
+};
+export declare function evaluatePolicy(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: EvaluatePolicyInput): Promise<PolicyEvaluationResponse>;

@@ -1,0 +1,76 @@
+import type { ActionContract, AgentTransactionEnvelopeProjection, ActionType, BreakerDecision, BypassProbe, ContractEvidenceProjection, IntentCompilationRecord, IdempotencyRecoveryProjection, IsolationState, OperatingEnvelope, ProtectedPathInstallHealthProjection, ProtectedPathPosture, RecoveryRecommendation, ReceiptExport, DelegatedAuthorityRef, DelegatedAuthorityStatusTransition, GatewayRegistryEntry, GatewayCredentialRef, CredentialResolutionEvidence, GeneratedGraphEvidenceProjection, ReceiptTimelineProjection, ReviewArtifactRecord, ReviewDecision, RuntimeExecutionRecord, ToolCallDraft, ToolCapability } from "../protocol/public/schemas";
+import type { GatewayCheckResult } from "../protocol/areas/gateway-gate";
+import type { SurfaceOperationReconciliationResult } from "../protocol/areas/operation-lifecycle";
+import type { PolicyEvaluationResponse } from "../protocol/areas/policy-greenlight";
+import type { CompileIntentInput, CreateBypassProbeInput, CreateBreakerDecisionInput, CreateIsolationInput, CreateProtectedPathPostureInput, RegisterDelegatedAuthorityRefInput, RegisterGatewayCredentialRefInput, RecordCredentialResolutionEvidenceInput, TransitionDelegatedAuthorityStatusInput, CreateRecoveryRecommendationInput, CreateReceiptExportInput, CreateReviewArtifactInput, CreateReviewDecisionInput, CreateRuntimeExecutionInput, CreateToolCallDraftInput, EvaluatePolicyInput, ProposeActionContractInput, ReconcileSurfaceOperationInput, ResolveRecoveryTerminalConflictInput, GatewayCheckInput, TransitionToolCallDraftInput, TransitionRecoveryRecommendationStatusInput } from "../protocol/public/inputs";
+import type { RecoveryRecommendationStatusChange, RecoveryTerminalConflictResolution } from "../protocol/areas/recovery";
+import type { CallerAuthTokens, TransitionCallerRole } from "../http/admission/caller-auth";
+import { type TransitionErrorEnvelope } from "../http/errors/transition-error-envelope";
+export type HandshakeFetch = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => Promise<Response>;
+export type HandshakeClientOptions = {
+    transitionToken?: string;
+    transitionTokens?: CallerAuthTokens;
+    protocolVersion?: string;
+    requestIdentityFactory?: () => string;
+    originatingIdentity?: string;
+};
+export type EvidenceReadCallerRole = Extract<TransitionCallerRole, "review_custody" | "runtime_evidence">;
+export declare class HandshakeClientError extends Error {
+    readonly status: number;
+    readonly envelope: TransitionErrorEnvelope;
+    readonly code: string;
+    readonly transitionName: string | null;
+    readonly callerCustodyRole: TransitionCallerRole | null;
+    readonly retryability: TransitionErrorEnvelope["retryability"];
+    readonly commitState: TransitionErrorEnvelope["commitState"];
+    readonly requestIdentity: string | null;
+    readonly proofRef: string | null;
+    readonly refusalRef: string | null;
+    constructor(status: number, envelope: TransitionErrorEnvelope);
+}
+export declare class HandshakeClient {
+    private readonly baseUrl;
+    private readonly fetchImpl;
+    private readonly options;
+    constructor(baseUrl: string, fetchImpl?: HandshakeFetch, options?: HandshakeClientOptions);
+    registerToolCapability(input: ToolCapability): Promise<ToolCapability>;
+    registerActionType(input: ActionType): Promise<ActionType>;
+    registerGatewayRegistryEntry(input: GatewayRegistryEntry): Promise<GatewayRegistryEntry>;
+    registerOperatingEnvelope(input: OperatingEnvelope): Promise<OperatingEnvelope>;
+    compileIntent(input: CompileIntentInput): Promise<IntentCompilationRecord>;
+    createRuntimeExecution(input: CreateRuntimeExecutionInput): Promise<RuntimeExecutionRecord>;
+    createBypassProbe(input: CreateBypassProbeInput): Promise<BypassProbe>;
+    createToolCallDraft(input: CreateToolCallDraftInput): Promise<ToolCallDraft>;
+    transitionToolCallDraft(input: TransitionToolCallDraftInput): Promise<ToolCallDraft>;
+    createProtectedPathPosture(input: CreateProtectedPathPostureInput): Promise<ProtectedPathPosture>;
+    registerGatewayCredentialRef(input: RegisterGatewayCredentialRefInput): Promise<GatewayCredentialRef>;
+    registerDelegatedAuthorityRef(input: RegisterDelegatedAuthorityRefInput): Promise<DelegatedAuthorityRef>;
+    transitionDelegatedAuthorityStatus(input: TransitionDelegatedAuthorityStatusInput): Promise<DelegatedAuthorityStatusTransition>;
+    proposeActionContract(input: ProposeActionContractInput): Promise<ActionContract>;
+    evaluatePolicy(input: EvaluatePolicyInput): Promise<PolicyEvaluationResponse>;
+    createReviewDecision(input: CreateReviewDecisionInput): Promise<ReviewDecision>;
+    createReviewArtifact(input: CreateReviewArtifactInput): Promise<ReviewArtifactRecord>;
+    createBreakerDecision(input: CreateBreakerDecisionInput): Promise<{
+        breakerDecision: BreakerDecision;
+        isolationState: IsolationState;
+    }>;
+    createIsolationState(input: CreateIsolationInput): Promise<IsolationState>;
+    createReceiptExport(input: CreateReceiptExportInput): Promise<ReceiptExport>;
+    createRecoveryRecommendation(input: CreateRecoveryRecommendationInput): Promise<RecoveryRecommendation>;
+    transitionRecoveryRecommendationStatus(input: TransitionRecoveryRecommendationStatusInput): Promise<RecoveryRecommendationStatusChange>;
+    resolveRecoveryTerminalConflictProofGap(input: ResolveRecoveryTerminalConflictInput): Promise<RecoveryTerminalConflictResolution>;
+    gatewayCheck(input: GatewayCheckInput): Promise<GatewayCheckResult>;
+    recordCredentialResolutionEvidence(input: RecordCredentialResolutionEvidenceInput): Promise<CredentialResolutionEvidence>;
+    reconcileSurfaceOperation(input: ReconcileSurfaceOperationInput): Promise<SurfaceOperationReconciliationResult>;
+    getGeneratedGraphEvidenceProjection(generatedExecutionGraphId: string, role?: EvidenceReadCallerRole): Promise<GeneratedGraphEvidenceProjection>;
+    getContractEvidenceProjection(actionContractId: string, role?: EvidenceReadCallerRole): Promise<ContractEvidenceProjection>;
+    getAgentTransactionEnvelopeProjection(actionContractId: string, role?: EvidenceReadCallerRole): Promise<AgentTransactionEnvelopeProjection>;
+    getIdempotencyRecoveryProjection(actionContractId: string, role?: EvidenceReadCallerRole): Promise<IdempotencyRecoveryProjection>;
+    getReceiptTimelineProjection(receiptId: string, role?: EvidenceReadCallerRole): Promise<ReceiptTimelineProjection>;
+    getProtectedPathInstallHealthProjection(actionContractId: string, role?: EvidenceReadCallerRole): Promise<ProtectedPathInstallHealthProjection>;
+    private post;
+    private get;
+    private request;
+    private nextRequestIdentity;
+    private errorEnvelopeForResponse;
+}

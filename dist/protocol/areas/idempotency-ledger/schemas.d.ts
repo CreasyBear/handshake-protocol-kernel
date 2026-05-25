@@ -1,0 +1,44 @@
+import { z } from "zod";
+export declare const IdempotencyLedgerStateSchema: z.ZodEnum<{
+    terminal_unknown: "terminal_unknown";
+    authority_reserved: "authority_reserved";
+    mutation_started: "mutation_started";
+    terminal_succeeded: "terminal_succeeded";
+    terminal_failed: "terminal_failed";
+    terminal_refused: "terminal_refused";
+}>;
+export type IdempotencyLedgerState = z.infer<typeof IdempotencyLedgerStateSchema>;
+export declare const IdempotencyLedgerEntrySchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    idempotencyLedgerEntryId: z.ZodString;
+    ledgerKeyDigest: z.ZodString;
+    gatewayId: z.ZodString;
+    protectedSurfaceKind: z.ZodString;
+    actionClass: z.ZodString;
+    resourceRef: z.ZodString;
+    idempotencyKey: z.ZodString;
+    paramsDigest: z.ZodString;
+    actionContractId: z.ZodString;
+    policyDecisionId: z.ZodString;
+    greenlightId: z.ZodNullable<z.ZodString>;
+    gateAttemptId: z.ZodNullable<z.ZodString>;
+    mutationAttemptId: z.ZodNullable<z.ZodString>;
+    receiptId: z.ZodNullable<z.ZodString>;
+    ledgerState: z.ZodEnum<{
+        terminal_unknown: "terminal_unknown";
+        authority_reserved: "authority_reserved";
+        mutation_started: "mutation_started";
+        terminal_succeeded: "terminal_succeeded";
+        terminal_failed: "terminal_failed";
+        terminal_refused: "terminal_refused";
+    }>;
+    reasonCode: z.ZodString;
+    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    firstReservedAt: z.ZodString;
+    updatedAt: z.ZodString;
+    ledgerDigest: z.ZodString;
+}, z.core.$strict>;
+export type IdempotencyLedgerEntry = z.infer<typeof IdempotencyLedgerEntrySchema>;

@@ -1,0 +1,5 @@
+import { type AuthorityCertificateTrustMaterialInput, type AuthorityCertificateVerificationResponse, type AuthorityCertificateVerifierKeySetProjection, type AuthorityCertificateJwksProjection } from "./types";
+export type VerifyAuthorityCertificateResult = AuthorityCertificateVerificationResponse;
+export declare function verifyAuthorityCertificate(certificateValue: unknown, trustMaterialValue: AuthorityCertificateTrustMaterialInput): Promise<VerifyAuthorityCertificateResult>;
+export declare function projectAuthorityCertificateVerifierKeySet(trustMaterialValue: AuthorityCertificateTrustMaterialInput): AuthorityCertificateVerifierKeySetProjection;
+export declare function projectAuthorityCertificateJwks(trustMaterialValue: AuthorityCertificateTrustMaterialInput): AuthorityCertificateJwksProjection;

@@ -1,0 +1,30 @@
+import { type TransitionRequestContext } from "./request-context-schemas";
+export type TransitionRequestCallerEvidence = Pick<TransitionRequestContext, "callerIdentityRef" | "callerSubjectDigest" | "callerTenantId" | "callerOrganizationId" | "callerIdentityClaimsDigest" | "authProviderRef" | "authSessionDigest" | "serviceCredentialDigest" | "revocationEpochRef" | "callerIdentityIssuedAt" | "callerIdentityExpiresAt">;
+export type TransitionRequestContextDraft = {
+    protocolVersionSeen: string;
+    requestIdentity: string;
+    originatingIdentityDigest: `sha256:${string}` | null;
+    originatingIdentityRef: string | null;
+    callerCustodyRole: TransitionRequestContext["callerCustodyRole"];
+    callerIdentityRef: TransitionRequestCallerEvidence["callerIdentityRef"];
+    callerSubjectDigest: TransitionRequestCallerEvidence["callerSubjectDigest"];
+    callerTenantId: TransitionRequestCallerEvidence["callerTenantId"];
+    callerOrganizationId: TransitionRequestCallerEvidence["callerOrganizationId"];
+    callerIdentityClaimsDigest: TransitionRequestCallerEvidence["callerIdentityClaimsDigest"];
+    authProviderRef: TransitionRequestCallerEvidence["authProviderRef"];
+    authSessionDigest: TransitionRequestCallerEvidence["authSessionDigest"];
+    serviceCredentialDigest: TransitionRequestCallerEvidence["serviceCredentialDigest"];
+    revocationEpochRef: TransitionRequestCallerEvidence["revocationEpochRef"];
+    callerIdentityIssuedAt: TransitionRequestCallerEvidence["callerIdentityIssuedAt"];
+    callerIdentityExpiresAt: TransitionRequestCallerEvidence["callerIdentityExpiresAt"];
+    transitionName: string;
+    routePattern: string;
+    requestDigest: `sha256:${string}`;
+    acceptedAt: string;
+};
+export declare function emptyTransitionRequestCallerEvidence(): TransitionRequestCallerEvidence;
+export declare function buildTransitionRequestContext(draft: TransitionRequestContextDraft, scope: {
+    tenantId: string;
+    organizationId: string;
+}): Promise<TransitionRequestContext>;
+export declare function acceptedAtNow(): string;

@@ -1,0 +1,106 @@
+{
+  "name": "handshake-protocol-kernel",
+  "version": "0.2.6",
+  "description": "Protected action infrastructure for automated decision making: protocol kernel, CLI evidence views, and local MCP proposal/evidence server.",
+  "license": "Apache-2.0",
+  "mcpName": "io.github.CreasyBear/handshake-protocol-kernel",
+  "keywords": [
+    "agents",
+    "automated-decision-making",
+    "execution-control",
+    "handshake",
+    "mcp",
+    "protected-actions",
+    "x402"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "handshake": "bin/handshake",
+    "handshake-protocol-kernel": "bin/handshake-mcp",
+    "handshake-mcp": "bin/handshake-mcp"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./conformance": {
+      "types": "./dist/conformance/index.d.ts",
+      "import": "./dist/conformance/index.mjs",
+      "default": "./dist/conformance/index.mjs"
+    },
+    "./adapter-sdk": {
+      "types": "./dist/adapter-sdk/index.d.ts",
+      "import": "./dist/adapter-sdk/index.mjs",
+      "default": "./dist/adapter-sdk/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.mjs",
+      "default": "./dist/runtime/index.mjs"
+    },
+    "./sdk/role-clients": {
+      "types": "./dist/sdk/surface-clients/index.d.ts",
+      "import": "./dist/sdk/surface-clients/index.mjs",
+      "default": "./dist/sdk/surface-clients/index.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.mjs",
+      "default": "./dist/cli/index.mjs"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.mjs",
+      "default": "./dist/mcp/index.mjs"
+    },
+    "./x402-protected-tool": {
+      "types": "./dist/x402-protected-tool/index.d.ts",
+      "import": "./dist/x402-protected-tool/index.mjs",
+      "default": "./dist/x402-protected-tool/index.mjs"
+    },
+    "./experimental": {
+      "types": "./dist/experimental.d.ts",
+      "import": "./dist/experimental.mjs",
+      "default": "./dist/experimental.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "server.json",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "smoke:cli": "node bin/handshake schema",
+    "smoke:imports": "node -e \"Promise.all([import('./dist/index.mjs'),import('./dist/mcp/index.mjs'),import('./dist/x402-protected-tool/index.mjs')]).then(()=>console.log('package imports ok'))\""
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/client": "^2.0.0-alpha.2",
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
+    "@x402/core": "2.12.0",
+    "@x402/evm": "2.12.0",
+    "hono": "^4.12.19",
+    "zod": "^4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CreasyBear/handshake-protocol-kernel.git"
+  },
+  "homepage": "https://github.com/CreasyBear/handshake-protocol-kernel#readme",
+  "bugs": {
+    "url": "https://github.com/CreasyBear/handshake-protocol-kernel/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

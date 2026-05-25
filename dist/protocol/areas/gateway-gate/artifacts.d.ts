@@ -1,0 +1,55 @@
+import type { ActionContract } from "../action-contract";
+import type { ContractStreamEvent } from "../../events/schemas";
+import { type ActionLifecycleStreamRefs, type EventDescriptor } from "../../events/chains";
+import type { GatewayCheckInputSchema } from "./types";
+import { type Greenlight } from "../policy-greenlight";
+import type { IsolationState } from "../isolation-breaker";
+import type { ProtocolRecord } from "../object-registry";
+import type { ProtectedSurfaceOperationClaim } from "../operation-lifecycle";
+import type { ProofGap } from "../proof-gap";
+import type { ProtectedPathPosture } from "../protected-path-posture";
+import { type Refusal } from "../refusal";
+import { type Receipt } from "../receipt-export";
+import { type GatewayPolicyDriftCheck } from "./gateway-policy";
+import { type MutationAttempt, type GatewayCheckAttempt } from "./types";
+import type { StoredProtocolRecord } from "../../store/port";
+export type GatewayCheckResult = {
+    gateAttempt: GatewayCheckAttempt;
+    mutationAttempt: MutationAttempt | null;
+    receipt: Receipt;
+    proofGap: ProofGap | null;
+};
+export type GatewayCheckArtifacts = {
+    result: GatewayCheckResult;
+    refusal: Refusal | null;
+};
+export type VerifiedGatewayCheck = {
+    gatewayCheckStatus: "passed";
+    gateAttemptId: string;
+    mutationAttemptId: string;
+    actionContractId: string;
+    greenlightId: string;
+    gatewayId: string;
+    actionClass: string;
+    resourceRef: string;
+    idempotencyKey: string;
+    surfaceOperationRef: string;
+};
+export type GatewayCheckArtifactInput = {
+    input: ReturnType<typeof GatewayCheckInputSchema.parse>;
+    contract: ActionContract;
+    greenlight: Greenlight;
+    gateAttemptId: string;
+    refusal: string | null;
+    now: string;
+    observedParamsDigest: `sha256:${string}`;
+    greenlightDigestSeen: `sha256:${string}`;
+    isolationStates: IsolationState[];
+    gatewayPolicyDrift: GatewayPolicyDriftCheck;
+    protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null;
+};
+export declare function verifiedGatewayCheckFromResult(result: GatewayCheckResult): VerifiedGatewayCheck | null;
+export declare function buildGateArtifacts(input: GatewayCheckArtifactInput): Promise<GatewayCheckArtifacts>;
+export declare function withReceiptStreamReferences(result: GatewayCheckResult, events: ContractStreamEvent[]): Promise<GatewayCheckResult>;
+export declare function gateEventDescriptors(artifacts: GatewayCheckArtifacts, streamRefs: ActionLifecycleStreamRefs, operationClaim?: ProtectedSurfaceOperationClaim | null): EventDescriptor[];
+export declare function gateProtocolRecords(input: GatewayCheckArtifactInput, result: GatewayCheckResult, refusal: Refusal | null): ProtocolRecord[];

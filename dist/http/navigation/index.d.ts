@@ -1,0 +1,51 @@
+import { type ProtocolNavigationEntry, type ProtocolTransitionId } from "../../protocol/navigation";
+import type { ProtocolObjectType } from "../../protocol/public/schemas";
+import type { TransitionCallerRole } from "../admission/caller-auth";
+import { type EvidenceReadRouteId } from "../routes/evidence-read-route-registry";
+import type { TransitionRouteId } from "../routes/transition-invokers";
+type CompositeTransitionRouteId = Extract<TransitionRouteId, "proposeRuntimeIngressActionContracts">;
+export type HttpTransitionNavigationEntry = {
+    routeId: TransitionRouteId;
+    transitionId: ProtocolTransitionId | CompositeTransitionRouteId;
+    method: "POST";
+    path: `/v0.2/${string}`;
+    role: TransitionCallerRole;
+    kernelMethod: ProtocolNavigationEntry["kernelMethod"] | "composite_runtime_ingress_proposal";
+    phase: ProtocolNavigationEntry["phase"];
+    outcomeClasses: ProtocolNavigationEntry["outcomeClasses"];
+    recordsWritten: ProtocolNavigationEntry["recordsWritten"];
+    authorityBoundary: ProtocolNavigationEntry["authorityBoundary"];
+};
+export type EvidenceReadNavigationEntry = {
+    routeId: EvidenceReadRouteId;
+    method: "GET";
+    honoPath: `/v0.2/${string}`;
+    openApiPath: `/v0.2/${string}`;
+    roles: readonly TransitionCallerRole[];
+    readOnly: true;
+    diagnosticOnly: true;
+    recordsWritten: readonly ProtocolObjectType[];
+};
+export declare const httpTransitionNavigation: {
+    routeId: "gatewayCheck" | "compileIntent" | "proposeActionContract" | "createToolCallDraft" | "transitionToolCallDraft" | "createRuntimeExecution" | "registerToolCapability" | "registerActionType" | "registerGatewayRegistryEntry" | "registerOperatingEnvelope" | "registerInstallProposalCompiledRecords" | "registerGatewayCredentialRef" | "registerDelegatedAuthorityRef" | "transitionDelegatedAuthorityStatus" | "recordGatewayCustodyProofPacket" | "recordCredentialResolutionEvidence" | "proposeRuntimeIngressActionContracts" | "createBypassProbe" | "createProtectedPathPosture" | "evaluatePolicy" | "createReviewArtifact" | "createReviewDecision" | "reconcileSurfaceOperation" | "createIsolationState" | "createBreakerDecision" | "createReceiptExport" | "createRecoveryRecommendation" | "transitionRecoveryRecommendationStatus" | "resolveRecoveryTerminalConflictProofGap";
+    transitionId: "proposeRuntimeIngressActionContracts" | ProtocolTransitionId;
+    method: "POST";
+    path: `/v0.2/${string}`;
+    role: TransitionCallerRole;
+    kernelMethod: import("../../protocol/navigation").KernelTransitionMethod | "composite_runtime_ingress_proposal";
+    phase: import("../../protocol/navigation").ProtocolTransitionPhase;
+    outcomeClasses: readonly import("../../protocol/navigation").TransitionOutcomeClass[];
+    recordsWritten: readonly ("refusal" | "proof_gap" | "receipt" | "greenlight" | "action_contract" | "policy_decision" | "gateway_check_attempt" | "mutation_attempt" | "receipt_export" | "surface_operation_reconciliation" | "credential_resolution_evidence" | "idempotency_ledger_entry" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "isolation_state" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "transition_request_context" | "runtime_execution" | "generated_execution_graph" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "intent_compilation" | "authority_certificate" | "review_artifact" | "review_decision" | "breaker_decision" | "protected_surface_operation_claim" | "contract_stream_event")[];
+    authorityBoundary: string;
+}[];
+export declare const evidenceReadNavigation: {
+    routeId: "getGeneratedGraphEvidenceProjection" | "getContractEvidenceProjection" | "getAgentTransactionEnvelopeProjection" | "getIdempotencyRecoveryProjection" | "getReceiptTimelineProjection" | "getProtectedPathInstallHealthProjection";
+    method: "GET";
+    honoPath: "/v0.2/evidence/generated-execution-graphs/:generatedExecutionGraphId" | "/v0.2/evidence/contracts/:actionContractId" | "/v0.2/evidence/agent-transactions/:actionContractId" | "/v0.2/evidence/idempotency-recovery/:actionContractId" | "/v0.2/evidence/receipts/:receiptId/timeline" | "/v0.2/evidence/protected-path-install-health/:actionContractId";
+    openApiPath: "/v0.2/evidence/generated-execution-graphs/{generatedExecutionGraphId}" | "/v0.2/evidence/contracts/{actionContractId}" | "/v0.2/evidence/agent-transactions/{actionContractId}" | "/v0.2/evidence/idempotency-recovery/{actionContractId}" | "/v0.2/evidence/receipts/{receiptId}/timeline" | "/v0.2/evidence/protected-path-install-health/{actionContractId}";
+    roles: readonly ["review_custody", "runtime_evidence"];
+    readOnly: true;
+    diagnosticOnly: true;
+    recordsWritten: never[];
+}[];
+export {};

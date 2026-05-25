@@ -1,0 +1,20 @@
+import { PROTOCOL_VERSION } from "../../foundation/schema-core";
+import { type Refusal, type RefusalPhase } from "./types";
+export type BuildRefusalInput = {
+    schemaVersion?: typeof PROTOCOL_VERSION;
+    tenantId: string;
+    organizationId: string;
+    createdAt: string;
+    phase: RefusalPhase;
+    actionContractId?: string | null;
+    policyDecisionId?: string | null;
+    greenlightId?: string | null;
+    gateAttemptId?: string | null;
+    refusedObjectRef?: string | null;
+    reasonCode: string;
+    reason: string;
+    evidenceRefs?: string[];
+    refusedAt: string;
+};
+export declare function buildRefusal(input: BuildRefusalInput): Promise<Refusal>;
+export declare function protocolObjectRef(objectType: string, objectId: string): string;
