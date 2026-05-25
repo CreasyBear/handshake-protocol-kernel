@@ -1,7 +1,7 @@
 {
   "manifestKind": "handshake.release_repository_artifact_projection",
   "manifestVersion": "v1",
-  "generatedAt": "2026-05-25T05:40:19.385Z",
+  "generatedAt": "2026-05-25T05:42:59.643Z",
   "repositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel",
   "package": {
     "name": "handshake-protocol-kernel",
@@ -26,7 +26,7 @@
   "files": [
     {
       "path": ".github/workflows/trusted-publish.yml",
-      "sha256": "d961ec2d91ff482e269ff1c4733ee86ea7f92687d3e7ccf10a2ba6b001289f81",
+      "sha256": "ad569a1a149683d8a37d7876855ea0b60d5ecd52b741ea66a98672c30019239b",
       "sizeBytes": 1186,
       "executable": false
     },
