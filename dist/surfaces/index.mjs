@@ -17711,17 +17711,13 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "search endpoint returns the server by package or MCP name"
     ],
     currentEvidence: [
-      "npm registry latest returned handshake-protocol-kernel@0.2.5 with registry signatures; local checkout is 0.2.6",
-      "npm publish --provenance --access public failed locally with EUSAGE because automatic provenance generation was unsupported for provider null",
+      "npm registry latest returned handshake-protocol-kernel@0.2.6 with registry signatures",
+      "trusted-publish workflow completed successfully for expected_version=0.2.6 and published GitHub Actions provenance",
+      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.6",
       "official MCP Registry GET by io.github.CreasyBear/handshake-protocol-kernel returned 404 Server not found",
       "official MCP Registry search for handshake-protocol-kernel returned an empty server list"
     ],
-    blockerReasonCodes: [
-      "current_local_surface_not_republished",
-      "npm_provenance_generation_unsupported",
-      "mcp_registry_submission_not_accepted",
-      "mcp_registry_discoverability_not_verified"
-    ],
+    blockerReasonCodes: ["mcp_registry_submission_not_accepted", "mcp_registry_discoverability_not_verified"],
     nonClaims: ["not_registry_discoverable", "not_marketplace_certified", "not_authority_by_publication"]
   },
   {
@@ -17797,9 +17793,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   },
   {
     gateId: "package_provenance_npm_attestation",
-    status: "resolved_blocked",
-    decision: "The next external release requires npm registry signature/provenance evidence and a republish of the current local product surface before claims can move beyond the already published 0.2.5 artifact.",
-    launchLanguageBoundary: "Published 0.2.5 can be described only as the currently published npm artifact. The current checkout has additional local package surface and must be republished and re-smoked before external release language includes it.",
+    status: "resolved_selected",
+    decision: "Package provenance for 0.2.6 is satisfied by npm trusted publishing through the public artifact repository workflow.",
+    launchLanguageBoundary: "Published 0.2.6 can be described as npm-available with registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.",
     requiredEvidence: [
       "npm latest returns the intended product version",
       "npm dist.integrity and dist.signatures are recorded",
@@ -17807,16 +17803,13 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "clean install smoke passes against the newly published artifact"
     ],
     currentEvidence: [
-      "npm latest returned 0.2.5 with dist.integrity and dist.signatures",
-      "local package check passes for 0.2.6 and reports a larger surface than the published 0.2.5 registry metadata",
-      "npm publish --provenance --access public failed locally with EUSAGE because automatic provenance generation was unsupported for provider null"
+      "npm latest returned 0.2.6 with dist.integrity and dist.signatures",
+      "trusted-publish workflow succeeded for expected_version=0.2.6",
+      "npm publish logged GitHub Actions provenance and Sigstore transparency log index 1628227940",
+      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.6"
     ],
-    blockerReasonCodes: [
-      "current_local_surface_not_republished",
-      "npm_provenance_generation_unsupported",
-      "post_publish_clean_install_for_current_surface_missing"
-    ],
-    nonClaims: ["not_current_checkout_published", "not_supply_chain_safety", "not_npm_audit_replacement"]
+    blockerReasonCodes: [],
+    nonClaims: ["not_authority_by_publication", "not_supply_chain_safety", "not_npm_audit_replacement"]
   }
 ]);
 function productLaunchGateResolutionFor(gateId) {

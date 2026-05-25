@@ -1,7 +1,7 @@
 {
   "manifestKind": "handshake.release_repository_artifact_projection",
   "manifestVersion": "v1",
-  "generatedAt": "2026-05-25T05:42:59.643Z",
+  "generatedAt": "2026-05-25T05:50:06.012Z",
   "repositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel",
   "package": {
     "name": "handshake-protocol-kernel",
@@ -44,8 +44,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "3e8ddd35b5e8368df4637bf934ac45ee7bfaddb48f17f557ed4a35656cbe5ee8",
-      "sizeBytes": 3203,
+      "sha256": "fd7662ed432a88b747b3f17a95d8cb5e9c3b72a0a5e128dd4e847253ee4465d7",
+      "sizeBytes": 3312,
       "executable": false
     },
     {
@@ -1892,8 +1892,8 @@
     },
     {
       "path": "dist/surfaces/index.mjs",
-      "sha256": "063398a113543bd49ac27996eed89211306c2b69b7e57afd6a61789e50639c53",
-      "sizeBytes": 823110,
+      "sha256": "b4eafd0fb76f548b76f4f5191685fca4f652d75a5e2a240b6a1373a5a62ce813",
+      "sizeBytes": 822810,
       "executable": false
     },
     {
@@ -1964,8 +1964,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "24eea1894213513582154458d2977fdcfebc0959e4a2486ca4afac79fdd01abd",
-      "sizeBytes": 19644,
+      "sha256": "5ee5a31b04203a5f1f7054436f93a5a860f2b95215c2c439df8f098773178623",
+      "sizeBytes": 19729,
       "executable": false
     },
     {

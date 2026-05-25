@@ -373,9 +373,10 @@ demo fixtures or source examples.
 This repository is intended to be published through npm Trusted Publishing from
 GitHub Actions.
 
-MCP Registry discoverability is now a launch blocker. current `0.2.6` checkout
-has additional local product surface and must be republished before external
-release language can claim `0.2.6` npm availability.
+MCP Registry discoverability is now the remaining distribution launch blocker.
+`0.2.6` npm availability is verified by registry readback, npm signature
+metadata, GitHub Actions provenance publication, and clean installed-artifact
+smoke. Public npm availability still does not create authority.
 
 Configure the npm package trusted publisher with:
 
