@@ -76,6 +76,7 @@
     "dist",
     "server.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE"
   ],

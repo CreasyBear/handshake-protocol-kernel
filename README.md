@@ -61,6 +61,7 @@ The public repository is intentionally shaped like the npm package:
 .handshake-release-repository-manifest.json
 bin/
 dist/
+CHANGELOG.md
 LICENSE
 NOTICE
 README.md
