@@ -15,11 +15,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@b39c6c9952e78e008bb0c65735243c791ed0c4a3 # v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Verify package version
         run: node -e "const p=require('./package.json'); if (p.version !== process.env.EXPECTED_VERSION) { throw new Error('Expected '+process.env.EXPECTED_VERSION+' but package.json is '+p.version); }"
         env:
