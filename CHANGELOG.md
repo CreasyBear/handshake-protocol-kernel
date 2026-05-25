@@ -7,6 +7,34 @@ public artifact repository. It does not claim hosted operation, provider
 custody, settlement finality, marketplace certification, MCP Registry
 discoverability, or Handshake authority from publication alone.
 
+## 0.2.7 - 2026-05-25
+
+### Changed
+
+- Replaced the long npm-facing README with a shorter contract README focused on
+  install, first-use, MCP, SDK imports, the current x402 wedge, release proof
+  states, and explicit non-claims.
+- Published a package-page cleanup release so npm no longer carries the stale
+  `0.2.6` pre-publish sentence.
+- Kept the public repository as a package artifact repository, not a source
+  mirror.
+
+### Boundary Notes
+
+- This release does not broaden authority. The public package remains proposal,
+  evidence, conformance, SDK, CLI, and local MCP distribution only.
+- MCP Registry discoverability remains a proof gap until registry acceptance
+  and lookup are verified.
+- Public npm availability does not create authority.
+
+### Release State
+
+- `ready_to_publish`: verified locally by repo gates and package projection.
+- `actually_published`: verified by npm trusted-publish workflow, npm registry
+  readback, registry signature metadata, provenance publication, and clean
+  installed-artifact smoke.
+- `registry_discoverable`: pending MCP Registry acceptance and lookup.
+
 ## 0.2.6 - 2026-05-25
 
 ### Added
