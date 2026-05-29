@@ -15,8 +15,8 @@ export declare const AuthorityCertificateArtifactKindSchema: z.ZodEnum<{
     greenlight: "greenlight";
     action_contract: "action_contract";
     policy_decision: "policy_decision";
-    gateway_check_attempt: "gateway_check_attempt";
     mutation_attempt: "mutation_attempt";
+    gateway_check_attempt: "gateway_check_attempt";
     receipt_export: "receipt_export";
     surface_operation_reconciliation: "surface_operation_reconciliation";
     credential_resolution_evidence: "credential_resolution_evidence";
@@ -34,8 +34,8 @@ export declare const AuthorityCertificateArtifactSchema: z.ZodObject<{
         greenlight: "greenlight";
         action_contract: "action_contract";
         policy_decision: "policy_decision";
-        gateway_check_attempt: "gateway_check_attempt";
         mutation_attempt: "mutation_attempt";
+        gateway_check_attempt: "gateway_check_attempt";
         receipt_export: "receipt_export";
         surface_operation_reconciliation: "surface_operation_reconciliation";
         credential_resolution_evidence: "credential_resolution_evidence";
@@ -93,8 +93,8 @@ export declare const AuthorityCertificateVerificationPolicySchema: z.ZodObject<{
         greenlight: "greenlight";
         action_contract: "action_contract";
         policy_decision: "policy_decision";
-        gateway_check_attempt: "gateway_check_attempt";
         mutation_attempt: "mutation_attempt";
+        gateway_check_attempt: "gateway_check_attempt";
         receipt_export: "receipt_export";
         surface_operation_reconciliation: "surface_operation_reconciliation";
         credential_resolution_evidence: "credential_resolution_evidence";
@@ -306,8 +306,8 @@ export declare const AuthorityCertificateSchema: z.ZodObject<{
             greenlight: "greenlight";
             action_contract: "action_contract";
             policy_decision: "policy_decision";
-            gateway_check_attempt: "gateway_check_attempt";
             mutation_attempt: "mutation_attempt";
+            gateway_check_attempt: "gateway_check_attempt";
             receipt_export: "receipt_export";
             surface_operation_reconciliation: "surface_operation_reconciliation";
             credential_resolution_evidence: "credential_resolution_evidence";
@@ -340,8 +340,8 @@ export declare const AuthorityCertificateSchema: z.ZodObject<{
             greenlight: "greenlight";
             action_contract: "action_contract";
             policy_decision: "policy_decision";
-            gateway_check_attempt: "gateway_check_attempt";
             mutation_attempt: "mutation_attempt";
+            gateway_check_attempt: "gateway_check_attempt";
             receipt_export: "receipt_export";
             surface_operation_reconciliation: "surface_operation_reconciliation";
             credential_resolution_evidence: "credential_resolution_evidence";

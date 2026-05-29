@@ -33,8 +33,8 @@ export declare const CreateReviewDecisionInputSchema: z.ZodObject<{
     reviewArtifactDigest: z.ZodString;
     reviewerPrincipalId: z.ZodString;
     decision: z.ZodEnum<{
-        approve: "approve";
         reject: "reject";
+        approve: "approve";
         needs_changes: "needs_changes";
     }>;
     decisionReasonCode: z.ZodString;

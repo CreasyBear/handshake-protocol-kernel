@@ -87,7 +87,7 @@ export declare const RegisterInstallProposalCompiledRecordsInputSchema: z.ZodObj
             }>;
             supersededAt: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>;
-        gatewayRegistryEntry: z.ZodObject<{
+        gatewayRegistryEntry: z.ZodNullable<z.ZodObject<{
             schemaVersion: z.ZodLiteral<"0.2.4">;
             tenantId: z.ZodString;
             organizationId: z.ZodString;
@@ -141,7 +141,7 @@ export declare const RegisterInstallProposalCompiledRecordsInputSchema: z.ZodObj
             mutationCredentialHolderRef: z.ZodString;
             gatewayAuthorityHolderRef: z.ZodString;
             supersededAt: z.ZodNullable<z.ZodString>;
-        }, z.core.$strict>;
+        }, z.core.$strict>>;
         operatingEnvelope: z.ZodObject<{
             schemaVersion: z.ZodLiteral<"0.2.4">;
             tenantId: z.ZodString;

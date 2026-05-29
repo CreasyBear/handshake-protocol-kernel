@@ -4,10 +4,11 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     receipt: "receipt";
     greenlight: "greenlight";
+    intent_compilation: "intent_compilation";
     action_contract: "action_contract";
     policy_decision: "policy_decision";
-    gateway_check_attempt: "gateway_check_attempt";
     mutation_attempt: "mutation_attempt";
+    gateway_check_attempt: "gateway_check_attempt";
     receipt_export: "receipt_export";
     surface_operation_reconciliation: "surface_operation_reconciliation";
     credential_resolution_evidence: "credential_resolution_evidence";
@@ -15,6 +16,7 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     recovery_recommendation: "recovery_recommendation";
     recovery_recommendation_status_transition: "recovery_recommendation_status_transition";
     isolation_state: "isolation_state";
+    generated_execution_graph: "generated_execution_graph";
     tool_capability: "tool_capability";
     action_type: "action_type";
     gateway_registry_entry: "gateway_registry_entry";
@@ -25,11 +27,15 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     gateway_custody_proof_packet: "gateway_custody_proof_packet";
     transition_request_context: "transition_request_context";
     runtime_execution: "runtime_execution";
-    generated_execution_graph: "generated_execution_graph";
     bypass_probe: "bypass_probe";
     tool_call_draft: "tool_call_draft";
     protected_path_posture: "protected_path_posture";
-    intent_compilation: "intent_compilation";
+    negotiation_session: "negotiation_session";
+    negotiation_offer: "negotiation_offer";
+    negotiation_decision: "negotiation_decision";
+    linked_agreement: "linked_agreement";
+    agreement_obligation_binding: "agreement_obligation_binding";
+    agreement_status_transition: "agreement_status_transition";
     authority_certificate: "authority_certificate";
     review_artifact: "review_artifact";
     review_decision: "review_decision";
@@ -1037,6 +1043,276 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         compilerVersion: z.ZodString;
     }, z.core.$strict>;
 }, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"negotiation_session">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        negotiationSessionDigest: z.ZodString;
+        subjectResourceRef: z.ZodString;
+        subjectProtectedActionContextRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        runtimePosture: z.ZodEnum<{
+            proof_gap_recorded: "proof_gap_recorded";
+            declared_runtime_context: "declared_runtime_context";
+            observed_runtime_evidence: "observed_runtime_evidence";
+        }>;
+        parties: z.ZodArray<z.ZodObject<{
+            partyId: z.ZodString;
+            partyRole: z.ZodEnum<{
+                initiator: "initiator";
+                counterparty: "counterparty";
+                observer: "observer";
+            }>;
+            agentRef: z.ZodString;
+            organizationRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            runtimeRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            endpointRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            identityProofPosture: z.ZodEnum<{
+                proof_gap_recorded: "proof_gap_recorded";
+                self_attested: "self_attested";
+                host_verified_ref: "host_verified_ref";
+            }>;
+            identityEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            identityProofDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strict>>;
+        generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        declaredAssumptions: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        uncertaintyMarkers: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        externalProtocolEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            protocol: z.ZodEnum<{
+                a2a: "a2a";
+                acp: "acp";
+                anp: "anp";
+                ap2: "ap2";
+                mcp: "mcp";
+                runtime_handoff: "runtime_handoff";
+                other: "other";
+            }>;
+            protocolVersion: z.ZodString;
+            objectKind: z.ZodString;
+            objectRef: z.ZodString;
+            objectDigest: z.ZodString;
+            evidencePosture: z.ZodLiteral<"imported_evidence_only">;
+            evidenceUse: z.ZodEnum<{
+                conversation_context: "conversation_context";
+                descriptor_context: "descriptor_context";
+                runtime_context: "runtime_context";
+                mandate_context_evidence: "mandate_context_evidence";
+                tool_context: "tool_context";
+                handoff_context: "handoff_context";
+                other_context: "other_context";
+            }>;
+            proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strict>>>;
+        clearingEvidenceRefs: z.ZodDefault<z.ZodObject<{
+            correlationRef: z.ZodOptional<z.ZodString>;
+            obligationRef: z.ZodOptional<z.ZodString>;
+            counterpartyRef: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>>;
+        expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"negotiation_offer">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        negotiationOfferId: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        offerVersionId: z.ZodString;
+        offerSequence: z.ZodNumber;
+        offeredByPartyId: z.ZodString;
+        previousOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        supersedesOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        offerContentDigest: z.ZodString;
+        offerObjectRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        offerContentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        externalProtocolEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            protocol: z.ZodEnum<{
+                a2a: "a2a";
+                acp: "acp";
+                anp: "anp";
+                ap2: "ap2";
+                mcp: "mcp";
+                runtime_handoff: "runtime_handoff";
+                other: "other";
+            }>;
+            protocolVersion: z.ZodString;
+            objectKind: z.ZodString;
+            objectRef: z.ZodString;
+            objectDigest: z.ZodString;
+            evidencePosture: z.ZodLiteral<"imported_evidence_only">;
+            evidenceUse: z.ZodEnum<{
+                conversation_context: "conversation_context";
+                descriptor_context: "descriptor_context";
+                runtime_context: "runtime_context";
+                mandate_context_evidence: "mandate_context_evidence";
+                tool_context: "tool_context";
+                handoff_context: "handoff_context";
+                other_context: "other_context";
+            }>;
+            proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strict>>>;
+        generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        declaredAssumptions: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        uncertaintyMarkers: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        clearingEvidenceRefs: z.ZodDefault<z.ZodObject<{
+            correlationRef: z.ZodOptional<z.ZodString>;
+            obligationRef: z.ZodOptional<z.ZodString>;
+            counterpartyRef: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>>;
+        expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"negotiation_decision">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        negotiationDecisionId: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        decidedOfferVersionId: z.ZodString;
+        decidedOfferSequence: z.ZodNumber;
+        decidedByPartyId: z.ZodString;
+        decision: z.ZodEnum<{
+            accept: "accept";
+            reject: "reject";
+            counter: "counter";
+            withdraw: "withdraw";
+            expire: "expire";
+        }>;
+        reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        counterOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        decisionDigest: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"linked_agreement">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        linkedAgreementId: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        acceptedNegotiationDecisionId: z.ZodString;
+        acceptedOfferVersionId: z.ZodString;
+        acceptedOfferSequence: z.ZodNumber;
+        acceptedOfferContentDigest: z.ZodString;
+        acceptedByPartyId: z.ZodString;
+        counterpartyRef: z.ZodString;
+        agreementDigest: z.ZodString;
+        agreementObjectRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        agreementContentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        agreementEvidencePosture: z.ZodLiteral<"local_evidence_only">;
+        clearingEvidenceRefs: z.ZodDefault<z.ZodObject<{
+            correlationRef: z.ZodOptional<z.ZodString>;
+            obligationRef: z.ZodOptional<z.ZodString>;
+            counterpartyRef: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>>;
+        externalProtocolEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            protocol: z.ZodEnum<{
+                a2a: "a2a";
+                acp: "acp";
+                anp: "anp";
+                ap2: "ap2";
+                mcp: "mcp";
+                runtime_handoff: "runtime_handoff";
+                other: "other";
+            }>;
+            protocolVersion: z.ZodString;
+            objectKind: z.ZodString;
+            objectRef: z.ZodString;
+            objectDigest: z.ZodString;
+            evidencePosture: z.ZodLiteral<"imported_evidence_only">;
+            evidenceUse: z.ZodEnum<{
+                conversation_context: "conversation_context";
+                descriptor_context: "descriptor_context";
+                runtime_context: "runtime_context";
+                mandate_context_evidence: "mandate_context_evidence";
+                tool_context: "tool_context";
+                handoff_context: "handoff_context";
+                other_context: "other_context";
+            }>;
+            proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strict>>>;
+        expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agreement_obligation_binding">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        agreementObligationBindingId: z.ZodString;
+        linkedAgreementId: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        obligationRef: z.ZodString;
+        obligationDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        actionContractId: z.ZodString;
+        actionContractDigest: z.ZodString;
+        paramsDigest: z.ZodString;
+        actionTypeId: z.ZodString;
+        actionClass: z.ZodString;
+        resourceRef: z.ZodString;
+        counterpartyRef: z.ZodString;
+        maxUses: z.ZodDefault<z.ZodLiteral<1>>;
+        bindingPosture: z.ZodLiteral<"local_evidence_only">;
+        localProtectedActionEvidenceRefs: z.ZodArray<z.ZodObject<{
+            refKind: z.ZodEnum<{
+                intent_compilation: "intent_compilation";
+                candidate_action: "candidate_action";
+                action_contract: "action_contract";
+                generated_execution_graph: "generated_execution_graph";
+            }>;
+            ref: z.ZodString;
+            digest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        }, z.core.$strict>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agreement_status_transition">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        agreementStatusTransitionId: z.ZodString;
+        linkedAgreementId: z.ZodString;
+        negotiationSessionId: z.ZodString;
+        fromStatus: z.ZodEnum<{
+            active: "active";
+            expired: "expired";
+            resolved: "resolved";
+            proposed: "proposed";
+            superseded: "superseded";
+            disputed: "disputed";
+            withdrawn: "withdrawn";
+        }>;
+        toStatus: z.ZodEnum<{
+            active: "active";
+            expired: "expired";
+            resolved: "resolved";
+            superseded: "superseded";
+            disputed: "disputed";
+            withdrawn: "withdrawn";
+        }>;
+        reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        transitionDigest: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
     objectType: z.ZodLiteral<"action_contract">;
     payload: z.ZodObject<{
         schemaVersion: z.ZodLiteral<"0.2.4">;
@@ -1377,8 +1653,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 greenlight: "greenlight";
                 action_contract: "action_contract";
                 policy_decision: "policy_decision";
-                gateway_check_attempt: "gateway_check_attempt";
                 mutation_attempt: "mutation_attempt";
+                gateway_check_attempt: "gateway_check_attempt";
                 receipt_export: "receipt_export";
                 surface_operation_reconciliation: "surface_operation_reconciliation";
                 credential_resolution_evidence: "credential_resolution_evidence";
@@ -1411,8 +1687,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 greenlight: "greenlight";
                 action_contract: "action_contract";
                 policy_decision: "policy_decision";
-                gateway_check_attempt: "gateway_check_attempt";
                 mutation_attempt: "mutation_attempt";
+                gateway_check_attempt: "gateway_check_attempt";
                 receipt_export: "receipt_export";
                 surface_operation_reconciliation: "surface_operation_reconciliation";
                 credential_resolution_evidence: "credential_resolution_evidence";
@@ -1600,8 +1876,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         policyInputDigest: z.ZodString;
         gatewayPolicyVersion: z.ZodString;
         decision: z.ZodEnum<{
-            approve: "approve";
             reject: "reject";
+            approve: "approve";
             needs_changes: "needs_changes";
         }>;
         decisionReasonCode: z.ZodString;
@@ -1630,10 +1906,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
+            halted: "halted";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
-            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         decisionReasonCode: z.ZodString;
@@ -1690,10 +1966,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
+            halted: "halted";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
-            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         reasonCode: z.ZodString;
@@ -2316,6 +2592,12 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             idempotency_ledger_recorded: "idempotency_ledger_recorded";
             bypass_probe_recorded: "bypass_probe_recorded";
             tool_call_draft_recorded: "tool_call_draft_recorded";
+            negotiation_session_recorded: "negotiation_session_recorded";
+            negotiation_offer_recorded: "negotiation_offer_recorded";
+            negotiation_decision_recorded: "negotiation_decision_recorded";
+            linked_agreement_recorded: "linked_agreement_recorded";
+            agreement_obligation_binding_recorded: "agreement_obligation_binding_recorded";
+            agreement_status_transition_recorded: "agreement_status_transition_recorded";
             action_proposed: "action_proposed";
             policy_decision_recorded: "policy_decision_recorded";
             action_greenlit: "action_greenlit";

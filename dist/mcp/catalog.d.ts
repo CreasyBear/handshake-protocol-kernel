@@ -1,5 +1,15 @@
 import { z } from "zod";
 export declare const MCP_X402_PAYMENT_PROPOSE_TOOL: "handshake.actions.x402_payment.propose";
+export declare const mcpServiceWorkflowBoundary: {
+    readonly acceptsWorkflowHandleContext: true;
+    readonly workflowHandleCreatesAuthority: false;
+    readonly freshActionContractRequired: true;
+    readonly admissionCreatesPolicyDecision: false;
+    readonly admissionCreatesGreenlight: false;
+    readonly admissionPerformsGatewayCheck: false;
+    readonly handlePermitsMutation: false;
+    readonly handleExportsReceipt: false;
+};
 export declare const mcpResourceTemplates: readonly [{
     readonly uriTemplate: "handshake://metadata/actions/{actionClass}";
     readonly purpose: "discover_proposal_shape";
@@ -135,6 +145,13 @@ export declare const mcpProposalTools: readonly [{
         retryDetected: z.ZodDefault<z.ZodBoolean>;
         branchDetected: z.ZodDefault<z.ZodBoolean>;
         correlationRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        serviceWorkflowContextRefs: z.ZodOptional<z.ZodObject<{
+            passportPackageDigest: z.ZodString;
+            passportPresentationId: z.ZodString;
+            admissionId: z.ZodString;
+            serviceWorkflowHandleId: z.ZodString;
+            serviceWorkflowHandleDigest: z.ZodString;
+        }, z.core.$strict>>;
     }, z.core.$strict>>;
     readonly outputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodDiscriminatedUnion<[z.ZodObject<{
         schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
@@ -193,10 +210,10 @@ export declare const mcpProposalTools: readonly [{
             metadata: "metadata";
             freshness: "freshness";
             bypass: "bypass";
+            replay: "replay";
             readiness: "readiness";
             evidence: "evidence";
             proposal: "proposal";
-            replay: "replay";
             tool_execution: "tool_execution";
         }>;
         authorityCreated: z.ZodLiteral<false>;
@@ -395,6 +412,13 @@ export declare function mcpCatalogSnapshot(): {
             retryDetected: z.ZodDefault<z.ZodBoolean>;
             branchDetected: z.ZodDefault<z.ZodBoolean>;
             correlationRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            serviceWorkflowContextRefs: z.ZodOptional<z.ZodObject<{
+                passportPackageDigest: z.ZodString;
+                passportPresentationId: z.ZodString;
+                admissionId: z.ZodString;
+                serviceWorkflowHandleId: z.ZodString;
+                serviceWorkflowHandleDigest: z.ZodString;
+            }, z.core.$strict>>;
         }, z.core.$strict>>;
         readonly outputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodDiscriminatedUnion<[z.ZodObject<{
             schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
@@ -453,10 +477,10 @@ export declare function mcpCatalogSnapshot(): {
                 metadata: "metadata";
                 freshness: "freshness";
                 bypass: "bypass";
+                replay: "replay";
                 readiness: "readiness";
                 evidence: "evidence";
                 proposal: "proposal";
-                replay: "replay";
                 tool_execution: "tool_execution";
             }>;
             authorityCreated: z.ZodLiteral<false>;
@@ -518,6 +542,16 @@ export declare function mcpCatalogSnapshot(): {
             readonly readOnlyHint: false;
         };
     }];
+    serviceWorkflowBoundary: {
+        readonly acceptsWorkflowHandleContext: true;
+        readonly workflowHandleCreatesAuthority: false;
+        readonly freshActionContractRequired: true;
+        readonly admissionCreatesPolicyDecision: false;
+        readonly admissionCreatesGreenlight: false;
+        readonly admissionPerformsGatewayCheck: false;
+        readonly handlePermitsMutation: false;
+        readonly handleExportsReceipt: false;
+    };
     supportsParallelToolCalls: boolean;
     authorityCreated: boolean;
     gatewayCheckPerformed: boolean;

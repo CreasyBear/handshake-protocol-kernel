@@ -61,8 +61,8 @@ export declare const ReviewDecisionSchema: z.ZodObject<{
     policyInputDigest: z.ZodString;
     gatewayPolicyVersion: z.ZodString;
     decision: z.ZodEnum<{
-        approve: "approve";
         reject: "reject";
+        approve: "approve";
         needs_changes: "needs_changes";
     }>;
     decisionReasonCode: z.ZodString;

@@ -4,6 +4,7 @@ export declare const ActionAttemptLifecyclePhaseSchema: z.ZodEnum<{
     drafting: "drafting";
     compilation: "compilation";
     contract: "contract";
+    negotiation: "negotiation";
     policy: "policy";
     review: "review";
     gateway: "gateway";
@@ -31,6 +32,8 @@ export declare const ActionAttemptLifecycleStateSchema: z.ZodEnum<{
     contract_proposed: "contract_proposed";
     contract_refused: "contract_refused";
     contract_conflict: "contract_conflict";
+    negotiation_recorded: "negotiation_recorded";
+    negotiation_conflict: "negotiation_conflict";
     policy_greenlit: "policy_greenlit";
     policy_refused: "policy_refused";
     policy_proof_gap: "policy_proof_gap";
@@ -88,6 +91,7 @@ export declare const ActionAttemptLifecycleEntrySchema: z.ZodObject<{
         drafting: "drafting";
         compilation: "compilation";
         contract: "contract";
+        negotiation: "negotiation";
         policy: "policy";
         review: "review";
         gateway: "gateway";
@@ -114,6 +118,8 @@ export declare const ActionAttemptLifecycleEntrySchema: z.ZodObject<{
         contract_proposed: "contract_proposed";
         contract_refused: "contract_refused";
         contract_conflict: "contract_conflict";
+        negotiation_recorded: "negotiation_recorded";
+        negotiation_conflict: "negotiation_conflict";
         policy_greenlit: "policy_greenlit";
         policy_refused: "policy_refused";
         policy_proof_gap: "policy_proof_gap";

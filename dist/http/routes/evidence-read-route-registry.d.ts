@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 import type { TransitionCallerRole } from "../admission/caller-auth";
-export type EvidenceReadRouteId = "getGeneratedGraphEvidenceProjection" | "getContractEvidenceProjection" | "getAgentTransactionEnvelopeProjection" | "getIdempotencyRecoveryProjection" | "getReceiptTimelineProjection" | "getProtectedPathInstallHealthProjection";
+export type EvidenceReadRouteId = "getGeneratedGraphEvidenceProjection" | "getContractEvidenceProjection" | "getAgentTransactionEnvelopeProjection" | "getOperationReadbackProjection" | "getOperationCorrelationIndex" | "getIdempotencyRecoveryProjection" | "getReceiptTimelineProjection" | "getProtectedPathInstallHealthProjection";
 export type EvidenceReadRouteDefinition = {
     routeId: EvidenceReadRouteId;
     honoPath: `/v0.2/${string}`;
@@ -352,6 +352,249 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         readonly description: "Action contract identifier used to assemble the redacted transaction envelope.";
     }];
 }, {
+    readonly routeId: "getOperationReadbackProjection";
+    readonly honoPath: "/v0.2/evidence/operations/:actionContractId/readback";
+    readonly openApiPath: "/v0.2/evidence/operations/{actionContractId}/readback";
+    readonly roles: readonly ["review_custody", "runtime_evidence"];
+    readonly summary: "Read redacted operation readback for diagnostics only";
+    readonly responseDescription: "Operation readback projection with compilation provenance stages. Inspection evidence only; does not create authority or greenlights.";
+    readonly responseSchema: import("zod").ZodObject<{
+        schemaVersion: import("zod").ZodLiteral<"handshake.operation-readback.v0.1">;
+        actionContractRef: import("zod").ZodString;
+        contractDigest: import("zod").ZodString;
+        principalRef: import("zod").ZodString;
+        agentRef: import("zod").ZodString;
+        runId: import("zod").ZodString;
+        runtimeAdapterRef: import("zod").ZodString;
+        actionClass: import("zod").ZodString;
+        protectedSurfaceKind: import("zod").ZodString;
+        resourceRef: import("zod").ZodString;
+        gatewayId: import("zod").ZodString;
+        gatewayPolicyVersion: import("zod").ZodString;
+        sourceAuthority: import("zod").ZodLiteral<"protocol_store_projection">;
+        operationStatus: import("zod").ZodEnum<{
+            policy_refused: "policy_refused";
+            policy_proof_gap: "policy_proof_gap";
+            review_required: "review_required";
+            gateway_admitted: "gateway_admitted";
+            gateway_proof_gap: "gateway_proof_gap";
+            replay_refused: "replay_refused";
+            isolated: "isolated";
+            downstream_refused: "downstream_refused";
+            gateway_refused: "gateway_refused";
+            halted: "halted";
+            quarantined: "quarantined";
+            greenlight_available: "greenlight_available";
+            downstream_pending: "downstream_pending";
+            downstream_succeeded: "downstream_succeeded";
+            downstream_failed: "downstream_failed";
+            downstream_unknown: "downstream_unknown";
+            recovery_required: "recovery_required";
+        }>;
+        latestAuthoritativeStage: import("zod").ZodEnum<{
+            isolation: "isolation";
+            recovery: "recovery";
+            receipt: "receipt";
+            greenlight: "greenlight";
+            intent_compilation: "intent_compilation";
+            candidate_action: "candidate_action";
+            action_contract: "action_contract";
+            policy_decision: "policy_decision";
+            gateway_check: "gateway_check";
+            mutation_attempt: "mutation_attempt";
+        }>;
+        policyDecisionRef: import("zod").ZodString;
+        policyDecisionStatus: import("zod").ZodEnum<{
+            review_required: "review_required";
+            proof_gap: "proof_gap";
+            greenlight: "greenlight";
+            refuse: "refuse";
+            halt: "halt";
+            quarantine: "quarantine";
+        }>;
+        agreementObligationPolicy: import("zod").ZodObject<{
+            sourceAuthority: import("zod").ZodLiteral<"policy_decision_snapshot">;
+            evaluationStatus: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                greenlight: "greenlight";
+                refuse: "refuse";
+            }>;
+            ok: import("zod").ZodBoolean;
+            reasonCode: import("zod").ZodNullable<import("zod").ZodString>;
+            reason: import("zod").ZodNullable<import("zod").ZodString>;
+            policyInput: import("zod").ZodObject<{
+                posture: import("zod").ZodEnum<{
+                    proof_gap: "proof_gap";
+                    refused: "refused";
+                    not_applicable: "not_applicable";
+                    bound: "bound";
+                }>;
+                obligationRef: import("zod").ZodNullable<import("zod").ZodString>;
+                linkedAgreementId: import("zod").ZodNullable<import("zod").ZodString>;
+                acceptedNegotiationResolutionId: import("zod").ZodNullable<import("zod").ZodString>;
+            }, import("zod/v4/core").$strict>;
+        }, import("zod/v4/core").$strict>;
+        greenlightRef: import("zod").ZodNullable<import("zod").ZodString>;
+        gateAttemptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        mutationAttemptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        receiptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        gatewayAdmissionStatus: import("zod").ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            not_requested: "not_requested";
+            admitted: "admitted";
+            replayed: "replayed";
+        }>;
+        downstreamOutcomeStatus: import("zod").ZodEnum<{
+            unknown: "unknown";
+            failed: "failed";
+            refused: "refused";
+            succeeded: "succeeded";
+            pending: "pending";
+            not_started: "not_started";
+        }>;
+        finalityStatus: import("zod").ZodNullable<import("zod").ZodEnum<{
+            unknown: "unknown";
+            pending: "pending";
+            final: "final";
+            suspect: "suspect";
+        }>>;
+        greenlightUsePosture: import("zod").ZodEnum<{
+            unknown: "unknown";
+            none: "none";
+            consumed: "consumed";
+            available_for_one_gateway_check: "available_for_one_gateway_check";
+            replayed_or_unusable: "replayed_or_unusable";
+        }>;
+        reasonCodes: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        nextMechanism: import("zod").ZodEnum<{
+            read_evidence: "read_evidence";
+            use_greenlight_at_gateway: "use_greenlight_at_gateway";
+            request_review: "request_review";
+            recraft_request: "recraft_request";
+            create_new_contract: "create_new_contract";
+            recover_terminal_unknown: "recover_terminal_unknown";
+            stop: "stop";
+            wait_for_downstream: "wait_for_downstream";
+        }>;
+        safeToRetryReadback: import("zod").ZodLiteral<true>;
+        safeToReuseGreenlight: import("zod").ZodBoolean;
+        requiresNewContract: import("zod").ZodBoolean;
+        authorityCreatedByReadback: import("zod").ZodLiteral<false>;
+        greenlightCreatedByReadback: import("zod").ZodLiteral<false>;
+        gatewayCheckPerformedByReadback: import("zod").ZodLiteral<false>;
+        mutationAttemptedByReadback: import("zod").ZodLiteral<false>;
+        receiptExportCreatedByReadback: import("zod").ZodLiteral<false>;
+        rawInternalRecordIncluded: import("zod").ZodLiteral<false>;
+        credentialMaterialIncluded: import("zod").ZodLiteral<false>;
+        paymentMaterialIncluded: import("zod").ZodLiteral<false>;
+        evidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        recoveryRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        isolationRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        authorityCertificateRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        providerRequestRef: import("zod").ZodNullable<import("zod").ZodString>;
+        providerOperationRef: import("zod").ZodNullable<import("zod").ZodString>;
+        traceRef: import("zod").ZodNullable<import("zod").ZodString>;
+        spanRef: import("zod").ZodNullable<import("zod").ZodString>;
+        redactionProfileRef: import("zod").ZodLiteral<"operation-readback:v0.1-redacted">;
+        omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        supportContext: import("zod").ZodObject<{
+            schemaVersion: import("zod").ZodLiteral<"handshake.support-context.v0.1">;
+            supportContextRef: import("zod").ZodString;
+            sourceAuthority: import("zod").ZodLiteral<"protocol_store_projection">;
+            surface: import("zod").ZodLiteral<"operation_readback">;
+            actionContractRef: import("zod").ZodString;
+            requestIdentity: import("zod").ZodNullable<import("zod").ZodString>;
+            operationStatus: import("zod").ZodEnum<{
+                policy_refused: "policy_refused";
+                policy_proof_gap: "policy_proof_gap";
+                review_required: "review_required";
+                gateway_admitted: "gateway_admitted";
+                gateway_proof_gap: "gateway_proof_gap";
+                replay_refused: "replay_refused";
+                isolated: "isolated";
+                downstream_refused: "downstream_refused";
+                gateway_refused: "gateway_refused";
+                halted: "halted";
+                quarantined: "quarantined";
+                greenlight_available: "greenlight_available";
+                downstream_pending: "downstream_pending";
+                downstream_succeeded: "downstream_succeeded";
+                downstream_failed: "downstream_failed";
+                downstream_unknown: "downstream_unknown";
+                recovery_required: "recovery_required";
+            }>;
+            reasonCodes: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            nextMechanism: import("zod").ZodEnum<{
+                read_evidence: "read_evidence";
+                use_greenlight_at_gateway: "use_greenlight_at_gateway";
+                request_review: "request_review";
+                recraft_request: "recraft_request";
+                create_new_contract: "create_new_contract";
+                recover_terminal_unknown: "recover_terminal_unknown";
+                stop: "stop";
+                wait_for_downstream: "wait_for_downstream";
+            }>;
+            safeToRetryReadback: import("zod").ZodLiteral<true>;
+            safeToReuseGreenlight: import("zod").ZodBoolean;
+            requiresNewContract: import("zod").ZodBoolean;
+            supportSeverity: import("zod").ZodEnum<{
+                none: "none";
+                info: "info";
+                warning: "warning";
+                urgent: "urgent";
+            }>;
+            docsUrl: import("zod").ZodNullable<import("zod").ZodString>;
+            nextCommand: import("zod").ZodNullable<import("zod").ZodString>;
+            evidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            traceRef: import("zod").ZodNullable<import("zod").ZodString>;
+            spanRef: import("zod").ZodNullable<import("zod").ZodString>;
+            redactionProfileRef: import("zod").ZodLiteral<"operation-readback:v0.1-redacted">;
+        }, import("zod/v4/core").$strict>;
+    }, import("zod/v4/core").$strict>;
+    readonly pathParameters: readonly [{
+        readonly name: "actionContractId";
+        readonly description: "Action contract identifier for operation readback assembly.";
+    }];
+}, {
+    readonly routeId: "getOperationCorrelationIndex";
+    readonly honoPath: "/v0.2/evidence/operations/:actionContractId/correlation";
+    readonly openApiPath: "/v0.2/evidence/operations/{actionContractId}/correlation";
+    readonly roles: readonly ["review_custody", "runtime_evidence"];
+    readonly summary: "Read linked operation correlation refs for diagnostics only";
+    readonly responseDescription: "Read-only correlation index over existing evidence refs. No mutation routes and no authority creation.";
+    readonly responseSchema: import("zod").ZodObject<{
+        schemaVersion: import("zod").ZodLiteral<"handshake.operation-correlation.v0.1">;
+        actionContractRef: import("zod").ZodString;
+        sourceAuthority: import("zod").ZodLiteral<"protocol_store_projection">;
+        authorityCreatedByProjection: import("zod").ZodLiteral<false>;
+        greenlightCreatedByReadback: import("zod").ZodLiteral<false>;
+        gatewayCheckPerformedByReadback: import("zod").ZodLiteral<false>;
+        mutationAttemptedByReadback: import("zod").ZodLiteral<false>;
+        intentCompilationRef: import("zod").ZodNullable<import("zod").ZodString>;
+        candidateActionRef: import("zod").ZodNullable<import("zod").ZodString>;
+        policyDecisionRef: import("zod").ZodString;
+        greenlightRef: import("zod").ZodNullable<import("zod").ZodString>;
+        gateAttemptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        mutationAttemptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        receiptRef: import("zod").ZodNullable<import("zod").ZodString>;
+        proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        recoveryRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        isolationRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        authorityCertificateRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        redactionProfileRef: import("zod").ZodLiteral<"operation-correlation:v0.1-redacted">;
+        omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+    }, import("zod/v4/core").$strict>;
+    readonly pathParameters: readonly [{
+        readonly name: "actionContractId";
+        readonly description: "Action contract identifier for correlation index assembly.";
+    }];
+}, {
     readonly routeId: "getIdempotencyRecoveryProjection";
     readonly honoPath: "/v0.2/evidence/idempotency-recovery/:actionContractId";
     readonly openApiPath: "/v0.2/evidence/idempotency-recovery/{actionContractId}";
@@ -515,6 +758,12 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 idempotency_ledger_recorded: "idempotency_ledger_recorded";
                 bypass_probe_recorded: "bypass_probe_recorded";
                 tool_call_draft_recorded: "tool_call_draft_recorded";
+                negotiation_session_recorded: "negotiation_session_recorded";
+                negotiation_offer_recorded: "negotiation_offer_recorded";
+                negotiation_decision_recorded: "negotiation_decision_recorded";
+                linked_agreement_recorded: "linked_agreement_recorded";
+                agreement_obligation_binding_recorded: "agreement_obligation_binding_recorded";
+                agreement_status_transition_recorded: "agreement_status_transition_recorded";
                 action_proposed: "action_proposed";
                 policy_decision_recorded: "policy_decision_recorded";
                 action_greenlit: "action_greenlit";

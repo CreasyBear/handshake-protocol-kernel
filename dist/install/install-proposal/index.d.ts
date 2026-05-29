@@ -88,7 +88,7 @@ export declare const InstallProposalCompiledKernelRecordsSchema: z.ZodObject<{
         }>;
         supersededAt: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>;
-    gatewayRegistryEntry: z.ZodObject<{
+    gatewayRegistryEntry: z.ZodNullable<z.ZodObject<{
         schemaVersion: z.ZodLiteral<"0.2.4">;
         tenantId: z.ZodString;
         organizationId: z.ZodString;
@@ -142,7 +142,7 @@ export declare const InstallProposalCompiledKernelRecordsSchema: z.ZodObject<{
         mutationCredentialHolderRef: z.ZodString;
         gatewayAuthorityHolderRef: z.ZodString;
         supersededAt: z.ZodNullable<z.ZodString>;
-    }, z.core.$strict>;
+    }, z.core.$strict>>;
     operatingEnvelope: z.ZodObject<{
         schemaVersion: z.ZodLiteral<"0.2.4">;
         tenantId: z.ZodString;
@@ -186,9 +186,10 @@ export declare const InstallProposalCompiledKernelRecordsSchema: z.ZodObject<{
 export type InstallProposalCompiledKernelRecords = {
     toolCapability: ToolCapability;
     actionType: ActionType;
-    gatewayRegistryEntry: GatewayRegistryEntry;
+    gatewayRegistryEntry: GatewayRegistryEntry | null;
     operatingEnvelope: OperatingEnvelope;
 };
+export declare function requireInstallProposalGatewayRegistryEntry(gatewayRegistryEntry: GatewayRegistryEntry | null): GatewayRegistryEntry;
 export declare const InstallProposalSchema: z.ZodObject<{
     installProposalId: z.ZodString;
     schemaVersion: z.ZodLiteral<"0.2.4">;
@@ -277,7 +278,7 @@ export declare const InstallProposalSchema: z.ZodObject<{
             }>;
             supersededAt: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>;
-        gatewayRegistryEntry: z.ZodObject<{
+        gatewayRegistryEntry: z.ZodNullable<z.ZodObject<{
             schemaVersion: z.ZodLiteral<"0.2.4">;
             tenantId: z.ZodString;
             organizationId: z.ZodString;
@@ -331,7 +332,7 @@ export declare const InstallProposalSchema: z.ZodObject<{
             mutationCredentialHolderRef: z.ZodString;
             gatewayAuthorityHolderRef: z.ZodString;
             supersededAt: z.ZodNullable<z.ZodString>;
-        }, z.core.$strict>;
+        }, z.core.$strict>>;
         operatingEnvelope: z.ZodObject<{
             schemaVersion: z.ZodLiteral<"0.2.4">;
             tenantId: z.ZodString;

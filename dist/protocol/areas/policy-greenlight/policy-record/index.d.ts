@@ -27,11 +27,15 @@ export type PolicyCommitResult = {
     refusal: Refusal | null;
     proofGap: ProofGap | null;
 } | {
+    status: "greenlight_issuance_conflict";
+    refusal: null;
+    proofGap: null;
+} | {
     status: "idempotency_ledger_conflict";
     refusal: null;
     proofGap: null;
 };
 export declare function buildPolicyDecision(input: ParsedEvaluatePolicyInput, contract: ActionContract, envelope: OperatingEnvelope, decisionValue: PolicyDecisionValue, policyInputDigest: `sha256:${string}`, isolationSnapshot: string, now: string): Promise<PolicyDecision>;
-export declare function buildGreenlight(contract: ActionContract, decision: PolicyDecision, now: string, protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null, idempotencyLedgerKeyDigest: `sha256:${string}`): Greenlight;
+export declare function buildGreenlight(contract: ActionContract, decision: PolicyDecision, now: string, protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null, idempotencyLedgerKeyDigest: `sha256:${string}`, idempotencyKey?: string): Greenlight;
 export declare function commitPolicyEvaluation(recorder: ProtocolRecorder, plan: PolicyCommitPlan): Promise<PolicyCommitResult>;
 export {};

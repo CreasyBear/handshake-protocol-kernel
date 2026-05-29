@@ -20,6 +20,9 @@ export declare function buildIdempotencyLedgerReservation(input: {
     policyDecision: PolicyDecision;
     greenlight: Greenlight;
     now: string;
+    ledgerKeyDigest?: `sha256:${string}`;
+    idempotencyKey?: string;
+    evidenceRefs?: string[];
 }): Promise<IdempotencyLedgerEntry>;
 export declare function buildIdempotencyLedgerMutationStarted(input: {
     current: IdempotencyLedgerEntry;

@@ -11,7 +11,7 @@ import { type Refusal } from "../areas/refusal";
 import type { Receipt } from "../areas/receipt-export/schemas";
 import type { ContractStreamEvent } from "../events/schemas";
 import type { StoredProtocolRecord } from "../store/port";
-import { type AgentTransactionEnvelopeProjection, type ContractEvidenceProjection, type IdempotencyRecoveryProjection, type ProtectedPathInstallHealthProjection, type ReceiptTimelineProjection } from "./schemas";
+import { type AgentTransactionEnvelopeProjection, type ContractEvidenceProjection, type IdempotencyRecoveryProjection, type OperationCorrelationIndex, type OperationReadbackProjection, type ProtectedPathInstallHealthProjection, type ReceiptTimelineProjection } from "./schemas";
 export declare function projectContractEvidence(contract: ActionContract): ContractEvidenceProjection;
 export type AgentTransactionEnvelopeInput = {
     contract: ActionContract;
@@ -52,3 +52,5 @@ export declare function projectProtectedPathInstallHealth(input: {
     posture: StoredProtocolRecord<ProtectedPathPosture> | null;
     now: string;
 }): ProtectedPathInstallHealthProjection;
+export declare function projectOperationReadback(input: AgentTransactionEnvelopeInput): Promise<OperationReadbackProjection>;
+export declare function projectOperationCorrelationIndex(input: AgentTransactionEnvelopeInput): OperationCorrelationIndex;

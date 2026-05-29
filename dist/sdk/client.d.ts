@@ -26,6 +26,9 @@ export declare class HandshakeClientError extends Error {
     readonly requestIdentity: string | null;
     readonly proofRef: string | null;
     readonly refusalRef: string | null;
+    readonly failureClass: TransitionErrorEnvelope["failureClass"];
+    readonly failurePhase: TransitionErrorEnvelope["failurePhase"];
+    readonly problemType: TransitionErrorEnvelope["problemType"];
     constructor(status: number, envelope: TransitionErrorEnvelope);
 }
 export declare class HandshakeClient {

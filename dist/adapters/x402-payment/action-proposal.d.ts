@@ -56,6 +56,11 @@ export declare const X402PaymentAttemptSchema: z.ZodObject<{
     extensionKeys: z.ZodDefault<z.ZodArray<z.ZodString>>;
     sequenceNumber: z.ZodDefault<z.ZodNumber>;
     requiredPriorActionContractIds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    clearingEvidenceRefs: z.ZodDefault<z.ZodDefault<z.ZodObject<{
+        correlationRef: z.ZodOptional<z.ZodString>;
+        obligationRef: z.ZodOptional<z.ZodString>;
+        counterpartyRef: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>>;
 }, z.core.$strict>;
 export type X402PaymentAttempt = z.input<typeof X402PaymentAttemptSchema>;
 export type BuildX402PaymentAttemptFromRequiredEvidenceInput = {

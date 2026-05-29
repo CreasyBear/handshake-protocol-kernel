@@ -1,5 +1,40 @@
 import { z } from "zod";
 import { type GatewayCredentialRef, type RegisterGatewayCredentialRefInput } from "../../protocol/areas/credential-custody";
+/** Phase 04 plan `04-08` / D-11: shared HTTP transport canonicalization for auth.md exact profile. */
+export declare const AUTH_MD_PROTECTED_API_CALL_EXACT_PROFILE: "auth_md_protected_api_call.exact";
+export declare const AuthMdProtectedApiCallAllowedHttpMethodSchema: z.ZodEnum<{
+    GET: "GET";
+    POST: "POST";
+    PUT: "PUT";
+    PATCH: "PATCH";
+    DELETE: "DELETE";
+}>;
+export type AuthMdProtectedApiCallAllowedHttpMethod = z.infer<typeof AuthMdProtectedApiCallAllowedHttpMethodSchema>;
+export declare const AuthMdProtectedApiCallHeaderAllowlistSchema: z.ZodArray<z.ZodEnum<{
+    accept: "accept";
+    "content-type": "content-type";
+    authorization: "authorization";
+    "x-request-id": "x-request-id";
+    "x-idempotency-key": "x-idempotency-key";
+}>>;
+export type AuthMdProtectedApiCallHeaderAllowlist = z.infer<typeof AuthMdProtectedApiCallHeaderAllowlistSchema>;
+export declare const AuthMdProtectedApiCallExactTransportSchema: z.ZodObject<{
+    targetHttpMethod: z.ZodEnum<{
+        GET: "GET";
+        POST: "POST";
+        PUT: "PUT";
+        PATCH: "PATCH";
+        DELETE: "DELETE";
+    }>;
+    endpointUrl: z.ZodString;
+    pathTemplate: z.ZodString;
+    requestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    selectedHeadersDigest: z.ZodString;
+    dynamicEndpointConstructionObserved: z.ZodDefault<z.ZodBoolean>;
+    dynamicHostConstructionObserved: z.ZodDefault<z.ZodBoolean>;
+    retryAuthorityReuseDetected: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strict>;
+export declare function canonicalizeAuthMdProtectedApiCallExactTransport(input: z.input<typeof AuthMdProtectedApiCallExactTransportSchema>): z.infer<typeof AuthMdProtectedApiCallExactTransportSchema>;
 export declare const AUTH_MD_REGISTERED_CREDENTIAL_PROFILE = "auth_md_registered_credential.v0";
 export declare const AUTH_MD_DISCOVERY_REDACTION_PROFILE = "auth-md-discovery:v0-redacted";
 export declare const AUTH_MD_REGISTRATION_REDACTION_PROFILE = "auth-md-registration:v0-redacted";

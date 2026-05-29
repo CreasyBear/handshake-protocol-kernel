@@ -14535,6 +14535,9 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   observedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -14824,7 +14827,7 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
 var InstallProposalSchema = exports_external.strictObject({

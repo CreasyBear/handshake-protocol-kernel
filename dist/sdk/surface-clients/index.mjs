@@ -14347,6 +14347,7 @@ var ActionAttemptLifecyclePhaseSchema = exports_external.enum([
   "drafting",
   "compilation",
   "contract",
+  "negotiation",
   "policy",
   "review",
   "gateway",
@@ -14373,6 +14374,8 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "contract_proposed",
   "contract_refused",
   "contract_conflict",
+  "negotiation_recorded",
+  "negotiation_conflict",
   "policy_greenlit",
   "policy_refused",
   "policy_proof_gap",
@@ -15153,6 +15156,10 @@ async function signCanonicalHmac(value, secret) {
 function toHex(buffer) {
   return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -15254,7 +15261,7 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
 var InstallProposalSchema = exports_external.strictObject({
@@ -15668,6 +15675,12 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
     "protected_path_posture_recorded",
+    "negotiation_session_recorded",
+    "negotiation_offer_recorded",
+    "negotiation_decision_recorded",
+    "linked_agreement_recorded",
+    "agreement_obligation_binding_recorded",
+    "agreement_status_transition_recorded",
     "action_proposed",
     "policy_decision_recorded",
     "action_greenlit",
@@ -15878,6 +15891,168 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   redactionProfileRef: exports_external.literal("agent-transaction-envelope:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
   envelopeDigest: DigestSchema
+});
+var OperationReadbackAgreementObligationPolicySchema = exports_external.strictObject({
+  sourceAuthority: exports_external.literal("policy_decision_snapshot"),
+  evaluationStatus: exports_external.enum(["greenlight", "refuse", "proof_gap"]),
+  ok: exports_external.boolean(),
+  reasonCode: ReasonCodeSchema.nullable(),
+  reason: exports_external.string().min(1).max(1000).nullable(),
+  policyInput: exports_external.strictObject({
+    posture: exports_external.enum(["not_applicable", "bound", "proof_gap", "refused"]),
+    obligationRef: ResourceRefSchema.nullable(),
+    linkedAgreementId: IdSchema.nullable(),
+    acceptedNegotiationResolutionId: IdSchema.nullable()
+  })
+});
+var OperationReadbackStatusSchema = exports_external.enum([
+  "policy_refused",
+  "review_required",
+  "halted",
+  "quarantined",
+  "policy_proof_gap",
+  "greenlight_available",
+  "gateway_admitted",
+  "gateway_refused",
+  "gateway_proof_gap",
+  "replay_refused",
+  "downstream_pending",
+  "downstream_succeeded",
+  "downstream_refused",
+  "downstream_failed",
+  "downstream_unknown",
+  "recovery_required",
+  "isolated"
+]);
+var OperationReadbackStageSchema = exports_external.enum([
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+]);
+var OperationCorrelationIndexSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-correlation.v0.1"),
+  actionContractRef: IdSchema,
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  authorityCreatedByProjection: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  intentCompilationRef: IdSchema.nullable(),
+  candidateActionRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  redactionProfileRef: exports_external.literal("operation-correlation:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var OperationReadbackNextMechanismSchema = exports_external.enum([
+  "read_evidence",
+  "use_greenlight_at_gateway",
+  "request_review",
+  "recraft_request",
+  "create_new_contract",
+  "recover_terminal_unknown",
+  "stop",
+  "wait_for_downstream"
+]);
+var OperationReadbackSupportSeveritySchema = exports_external.enum(["none", "info", "warning", "urgent"]);
+var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
+  "none",
+  "available_for_one_gateway_check",
+  "consumed",
+  "replayed_or_unusable",
+  "unknown"
+]);
+var OperationSupportContextSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
+  supportContextRef: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  surface: exports_external.literal("operation_readback"),
+  actionContractRef: IdSchema,
+  requestIdentity: exports_external.string().min(1).nullable(),
+  operationStatus: OperationReadbackStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  supportSeverity: OperationReadbackSupportSeveritySchema,
+  docsUrl: exports_external.string().url().nullable(),
+  nextCommand: exports_external.string().min(1).nullable(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted")
+});
+var OperationReadbackProjectionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback.v0.1"),
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  operationStatus: OperationReadbackStatusSchema,
+  latestAuthoritativeStage: OperationReadbackStageSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  agreementObligationPolicy: OperationReadbackAgreementObligationPolicySchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  greenlightUsePosture: OperationReadbackGreenlightUsePostureSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  authorityCreatedByReadback: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  receiptExportCreatedByReadback: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  paymentMaterialIncluded: exports_external.literal(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  supportContext: OperationSupportContextSchema
 });
 var ProtectedPathInstallHealthStatusSchema = exports_external.enum([
   "not_required",
@@ -16626,6 +16801,235 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/areas/negotiation/schemas.ts
+var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
+  "self_attested",
+  "host_verified_ref",
+  "proof_gap_recorded"
+]);
+var NegotiationPartyBindingSchema = exports_external.strictObject({
+  partyId: IdSchema,
+  partyRole: exports_external.enum(["initiator", "counterparty", "observer"]),
+  agentRef: ResourceRefSchema,
+  organizationRef: ResourceRefSchema.nullable().default(null),
+  runtimeRef: ResourceRefSchema.nullable().default(null),
+  endpointRef: ResourceRefSchema.nullable().default(null),
+  identityProofPosture: NegotiationPartyIdentityProofPostureSchema,
+  identityEvidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  identityProofDigest: DigestSchema.nullable().default(null),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+}).superRefine((value, ctx) => {
+  if (value.identityProofPosture === "host_verified_ref" && value.identityEvidenceRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "host verified parties require local identity evidence refs",
+      path: ["identityEvidenceRefs"]
+    });
+  }
+  if (value.identityProofPosture === "proof_gap_recorded" && value.proofGapRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "proof-gap parties require proof gap refs",
+      path: ["proofGapRefs"]
+    });
+  }
+});
+var ExternalProtocolEvidenceRefSchema = exports_external.strictObject({
+  protocol: exports_external.enum(["a2a", "acp", "anp", "ap2", "mcp", "runtime_handoff", "other"]),
+  protocolVersion: exports_external.string().min(1).max(80),
+  objectKind: exports_external.string().min(1).max(120),
+  objectRef: ResourceRefSchema,
+  objectDigest: DigestSchema,
+  evidencePosture: exports_external.literal("imported_evidence_only"),
+  evidenceUse: exports_external.enum([
+    "conversation_context",
+    "descriptor_context",
+    "runtime_context",
+    "mandate_context_evidence",
+    "tool_context",
+    "handoff_context",
+    "other_context"
+  ]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var forbiddenOfferVersionAliases = ["latest", "current", "unspecified"];
+var OfferVersionRefSchema = IdSchema.refine((value) => {
+  const normalized = value.toLowerCase();
+  return !forbiddenOfferVersionAliases.some((alias) => normalized.includes(alias));
+}, {
+  message: "offer version refs must bind to a specific offer version"
+});
+var disallowedObligationRefPattern = new RegExp([
+  "greenlight",
+  "gateway[_:-]?check",
+  "gate[_:-]?attempt",
+  "mutation[_:-]?attempt",
+  "policy[_:-]?decision",
+  "receipt",
+  "authority[_:-]?certificate",
+  "settlement",
+  "payment",
+  "signer",
+  "reusable[_:-]?authority"
+].join("|"), "i");
+var EvidenceRefSchema = exports_external.strictObject({
+  refKind: exports_external.enum(["candidate_action", "action_contract", "intent_compilation", "generated_execution_graph"]),
+  ref: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation evidence ref cannot point at a control or terminal artifact"
+  }),
+  digest: DigestSchema.nullable().default(null)
+});
+var NonAuthorityContextRefSchema = ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+  message: "negotiation context ref cannot point at a control or terminal artifact"
+});
+var NegotiationSessionSchema = ProtocolBaseSchema.extend({
+  negotiationSessionId: IdSchema,
+  negotiationSessionDigest: DigestSchema,
+  subjectResourceRef: ResourceRefSchema,
+  subjectProtectedActionContextRefs: exports_external.array(NonAuthorityContextRefSchema).default([]),
+  runtimePosture: exports_external.enum(["declared_runtime_context", "observed_runtime_evidence", "proof_gap_recorded"]),
+  parties: exports_external.array(NegotiationPartyBindingSchema).min(2),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (!value.parties.some((party) => party.partyRole === "initiator")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require an initiator party",
+      path: ["parties"]
+    });
+  }
+  if (!value.parties.some((party) => party.partyRole === "counterparty")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require a counterparty party",
+      path: ["parties"]
+    });
+  }
+});
+var NegotiationOfferSchema = ProtocolBaseSchema.extend({
+  negotiationOfferId: IdSchema,
+  negotiationSessionId: IdSchema,
+  offerVersionId: OfferVersionRefSchema,
+  offerSequence: exports_external.number().int().positive(),
+  offeredByPartyId: IdSchema,
+  previousOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  supersedesOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  offerContentDigest: DigestSchema,
+  offerObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  offerContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("offer"));
+var NegotiationDecisionSchema = ProtocolBaseSchema.extend({
+  negotiationDecisionId: IdSchema,
+  negotiationSessionId: IdSchema,
+  decidedOfferVersionId: OfferVersionRefSchema,
+  decidedOfferSequence: exports_external.number().int().positive(),
+  decidedByPartyId: IdSchema,
+  decision: exports_external.enum(["accept", "reject", "counter", "withdraw", "expire"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  counterOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  decisionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.decision === "counter" && value.counterOfferVersionId === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "counter decisions require a specific counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+  if (value.decision !== "counter" && value.counterOfferVersionId !== null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "only counter decisions may reference a counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+});
+var LinkedAgreementSchema = ProtocolBaseSchema.extend({
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  acceptedNegotiationDecisionId: IdSchema,
+  acceptedOfferVersionId: OfferVersionRefSchema,
+  acceptedOfferSequence: exports_external.number().int().positive(),
+  acceptedOfferContentDigest: DigestSchema,
+  acceptedByPartyId: IdSchema,
+  counterpartyRef: ResourceRefSchema,
+  agreementDigest: DigestSchema,
+  agreementObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementEvidencePosture: exports_external.literal("local_evidence_only"),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("agreement"));
+var AgreementObligationBindingSchema = ProtocolBaseSchema.extend({
+  agreementObligationBindingId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  obligationRef: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation ref cannot point at a control or terminal artifact"
+  }),
+  obligationDigest: DigestSchema.nullable().default(null),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  paramsDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  counterpartyRef: ResourceRefSchema,
+  maxUses: exports_external.literal(1).default(1),
+  bindingPosture: exports_external.literal("local_evidence_only"),
+  localProtectedActionEvidenceRefs: exports_external.array(EvidenceRefSchema).min(1),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var AgreementStatusTransitionSchema = ProtocolBaseSchema.extend({
+  agreementStatusTransitionId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  fromStatus: exports_external.enum(["proposed", "active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  toStatus: exports_external.enum(["active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  transitionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.fromStatus === value.toStatus) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreement status transitions must change status",
+      path: ["toStatus"]
+    });
+  }
+});
+function requireReconstructionRefs(kind) {
+  return (value, ctx) => {
+    const objectRefs = kind === "offer" ? value.offerObjectRefs : value.agreementObjectRefs;
+    const contentRefs = kind === "offer" ? value.offerContentRefs : value.agreementContentRefs;
+    if (objectRefs.length > 0 || contentRefs.length > 0 || value.proofGapRefs.length > 0)
+      return;
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `${kind} digest requires object refs, content refs, or proof gap refs`,
+      path: kind === "offer" ? ["offerObjectRefs"] : ["agreementObjectRefs"]
+    });
+  };
+}
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -16645,6 +17049,12 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "negotiation_session",
+  "negotiation_offer",
+  "negotiation_decision",
+  "linked_agreement",
+  "agreement_obligation_binding",
+  "agreement_status_transition",
   "action_contract",
   "authority_certificate",
   "policy_decision",
@@ -16692,6 +17102,18 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("linked_agreement"), payload: LinkedAgreementSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_obligation_binding"),
+    payload: AgreementObligationBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_status_transition"),
+    payload: AgreementStatusTransitionSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("action_contract"), payload: ActionContractSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("authority_certificate"), payload: AuthorityCertificateSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("policy_decision"), payload: PolicyDecisionSchema }),
@@ -16721,6 +17143,517 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   }),
   exports_external.strictObject({ objectType: exports_external.literal("contract_stream_event"), payload: ContractStreamEventSchema })
 ]);
+// src/protocol/foundation/reason-code-remediation/index.ts
+var remediationEntries = [
+  {
+    code: "caller_auth_required",
+    docsUrl: "https://handshake.dev/docs/http/caller-auth"
+  },
+  {
+    code: "caller_auth_forbidden",
+    docsUrl: "https://handshake.dev/docs/http/caller-auth"
+  },
+  {
+    code: "hosted_caller_auth_required",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission"
+  },
+  {
+    code: "hosted_caller_identity_stale",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission",
+    requiresNewContract: true
+  },
+  {
+    code: "hosted_caller_identity_expired",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission",
+    requiresNewContract: true
+  },
+  {
+    code: "recovery_terminal_conflict",
+    docsUrl: "https://handshake.dev/problems/recovery_terminal_conflict",
+    requiresNewContract: true
+  },
+  {
+    code: "credential_resolution_replay_refused",
+    docsUrl: "https://handshake.dev/problems/credential_resolution_replay_refused",
+    requiresNewContract: true
+  },
+  {
+    code: "idempotency_duplicate_authority",
+    docsUrl: "https://handshake.dev/problems/idempotency_duplicate_authority",
+    requiresNewContract: true
+  },
+  {
+    code: "agreement_missing",
+    docsUrl: "https://handshake.dev/problems/agreement_missing"
+  }
+];
+var remediationByCode = new Map(remediationEntries.map((entry) => [entry.code, entry]));
+
+// src/http/errors/codes.ts
+var httpTransitionErrorCodes = [
+  code("caller_auth_not_configured", "auth", "terminal", "not_started", true),
+  code("caller_auth_required", "auth", "terminal", "not_started", true),
+  code("caller_auth_forbidden", "auth", "terminal", "not_started", true),
+  code("hosted_admission_config_not_configured", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_admission_config_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_verifier_not_configured", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_auth_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_expired", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_stale", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_revoked", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_role_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_scope_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_provider_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_active_org_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_active_org_mismatch", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_membership_not_current", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_transition_role_not_admitted", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_read_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_readiness_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_unavailable", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_purpose_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_window_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("protocol_version_required", "request_context", "terminal", "not_started", true),
+  code("protocol_version_unsupported", "request_context", "terminal", "not_started", true),
+  code("request_identity_required", "request_context", "terminal", "not_started", true),
+  code("request_identity_invalid", "request_context", "terminal", "not_started", true),
+  code("originating_identity_invalid", "request_context", "terminal", "not_started", true),
+  code("transition_request_body_too_large", "request_body", "terminal", "not_started", true),
+  code("transition_scope_unavailable", "scope_resolution", "terminal", "not_started", true),
+  code("transition_scope_reference_invalid", "scope_resolution", "terminal", "not_started", true),
+  code("intent_compilation_missing", "scope_resolution", "terminal", "not_started", true),
+  code("contract_missing", "scope_resolution", "terminal", "not_started", true),
+  code("policy_decision_missing", "scope_resolution", "terminal", "not_started", true),
+  code("mutation_attempt_missing", "scope_resolution", "terminal", "not_started", true),
+  code("receipt_missing", "scope_resolution", "terminal", "not_started", true),
+  code("recovery_recommendation_missing", "scope_resolution", "terminal", "not_started", true),
+  code("proof_gap_missing", "scope_resolution", "terminal", "not_started", true),
+  code("invalid_protocol_object_type", "record_read", "terminal", "not_applicable", true),
+  code("record_not_found", "record_read", "terminal", "not_applicable", true),
+  code("action_contract_missing", "record_read", "terminal", "not_applicable", true),
+  code("durable_store_unavailable", "store_resolution", "retryable", "unknown", true),
+  code("invalid_request", "error_envelope", "terminal", "not_started", true),
+  code("internal_error", "error_envelope", "retryable", "unknown", false),
+  code("http_error", "client", "ambiguous", "unknown", true)
+];
+var httpTransitionErrorCodeValues = httpTransitionErrorCodes.map((entry) => entry.code);
+var httpTransitionErrorCodeValueSet = new Set(httpTransitionErrorCodeValues);
+function code(value, phase, retryability, commitState, publicSafe) {
+  return {
+    code: value,
+    phase,
+    retryability,
+    commitState,
+    publicSafe
+  };
+}
+
+// src/protocol/foundation/reason-codes.ts
+var protocolReasonCodes = [
+  code2("bootstrap_record_digest_conflict", "transition_error", "catalog"),
+  code2("install_orphan_catalog_missing_gateway", "transition_error", "catalog", {
+    classifiedFailure: "proof_gap"
+  }),
+  code2("invalid_transition_greenlight_already_issued", "transition_error", "policy"),
+  code2("greenlight_issuance_refusal_commit_conflict", "transition_error", "policy"),
+  code2("idempotency_ledger_conflict", "transition_error", "policy"),
+  code2("idempotency_refusal_commit_conflict", "transition_error", "policy"),
+  code2("stream_append_conflict", "transition_error", "gateway"),
+  code2("ambiguous_commit", "transition_error", "gateway", false),
+  code2("secret_bearing_param_in_non_secret_params", "transition_error", "intent_compilation"),
+  code2("undeclared_secret_ref", "transition_error", "intent_compilation"),
+  code2("unwrapped_consequential_tool", "refusal", "intent_compilation"),
+  code2("runtime_unwrapped_consequential_tool", "refusal", "intent_compilation"),
+  code2("generated_execution_block_sibling_refused", "refusal", "intent_compilation"),
+  code2("generated_execution_graph_missing", "refusal", "intent_compilation"),
+  code2("generated_execution_graph_not_contractable", "refusal", "intent_compilation"),
+  code2("generated_execution_node_not_contractable", "refusal", "intent_compilation"),
+  code2("tool_call_draft_missing", "refusal", "intent_compilation"),
+  code2("tool_call_draft_not_finalized", "refusal", "intent_compilation"),
+  code2("tool_call_draft_stale", "refusal", "intent_compilation"),
+  code2("tool_call_draft_binding_mismatch", "refusal", "intent_compilation"),
+  code2("tool_call_draft_params_digest_mismatch", "refusal", "intent_compilation"),
+  code2("tool_call_draft_terminal_state", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_transition_invalid", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_finalize_params_missing", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_invalid_reason_missing", "transition_error", "intent_compilation"),
+  code2("x402_amount_exceeds_call_bound", "refusal", "intent_compilation"),
+  code2("x402_official_payment_required_evidence_incomplete", "refusal", "intent_compilation"),
+  code2("x402_provider_environment_not_sandboxed", "refusal", "intent_compilation"),
+  code2("x402_request_body_digest_missing", "refusal", "intent_compilation"),
+  code2("x402_request_body_posture_mismatch", "refusal", "intent_compilation"),
+  code2("x402_request_body_posture_unsupported", "refusal", "intent_compilation"),
+  code2("protected_x402_gateway_offline", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_credential_custody_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_unverified", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("protected_x402_install_not_ready", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_metadata_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_policy_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_readiness_proof_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_readiness_binding_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_trusted_readiness_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("mcp_candidate_not_contractable", "refusal", "intent_compilation"),
+  code2("candidate_params_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_action_mismatch", "transition_error", "action_contract"),
+  code2("intent_compilation_not_contractable", "transition_error", "action_contract"),
+  code2("candidate_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_digest_missing", "transition_error", "action_contract"),
+  code2("candidate_catalog_digest_drift", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_runtime_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_not_contractable", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_status_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_missing", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_gateway_binding_mismatch", "transition_error", "action_contract"),
+  code2("mcp_candidate_digest_missing", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_missing", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_digest_mismatch", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_scope_mismatch", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_stale", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_unsafe_custody", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_provider_drift", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_missing", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_digest_mismatch", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_scope_mismatch", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_policy_drift", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_not_active", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_stale", "transition_error", "action_contract"),
+  code2("delegated_authority_amount_missing", "transition_error", "action_contract"),
+  code2("delegated_authority_amount_exceeds_action_bound", "transition_error", "action_contract"),
+  code2("delegated_authority_already_terminal", "transition_error", "delegated_authority"),
+  code2("delegated_authority_not_expired", "transition_error", "delegated_authority"),
+  code2("followup_action_contract_proposed", "recovery", "action_contract"),
+  code2("negotiation_session_missing", "transition_error", "negotiation"),
+  code2("negotiation_party_missing", "transition_error", "negotiation"),
+  code2("negotiation_offer_missing", "transition_error", "negotiation"),
+  code2("negotiation_offer_sequence_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_offer_version_conflict", "transition_error", "negotiation"),
+  code2("negotiation_offer_stale", "transition_error", "negotiation"),
+  code2("negotiation_offer_expired", "transition_error", "negotiation"),
+  code2("negotiation_counter_offer_stale", "transition_error", "negotiation"),
+  code2("negotiation_decision_missing", "transition_error", "negotiation"),
+  code2("negotiation_decision_not_accept", "transition_error", "negotiation"),
+  code2("negotiation_decision_session_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_scope_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_session_expired", "transition_error", "negotiation"),
+  code2("linked_agreement_missing", "transition_error", "negotiation"),
+  code2("linked_agreement_offer_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_digest_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_party_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_counterparty_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_duplicate", "transition_error", "negotiation"),
+  code2("linked_agreement_session_mismatch", "transition_error", "negotiation"),
+  code2("agreement_status_stale", "transition_error", "negotiation"),
+  code2("agreement_status_transition_invalid", "transition_error", "negotiation"),
+  code2("agreement_not_active", "policy_decision", "policy"),
+  code2("agreement_missing", "proof_gap", "policy"),
+  code2("agreement_expired", "policy_decision", "policy"),
+  code2("agreement_withdrawn", "policy_decision", "policy"),
+  code2("agreement_disputed", "policy_decision", "policy"),
+  code2("agreement_superseded", "policy_decision", "policy"),
+  code2("agreement_obligation_binding_missing", "proof_gap", "policy"),
+  code2("agreement_obligation_binding_ambiguous", "proof_gap", "policy"),
+  code2("agreement_obligation_contract_missing", "transition_error", "negotiation"),
+  code2("agreement_obligation_contract_mismatch", "transition_error", "negotiation"),
+  code2("agreement_obligation_contract_scope_mismatch", "transition_error", "negotiation"),
+  code2("agreement_obligation_binding_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_counterparty_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_params_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_scope_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_binding_duplicate", "transition_error", "negotiation"),
+  code2("agreement_obligation_reused", "transition_error", "negotiation"),
+  code2("a2a_lifecycle_assembly_failed", "proof_gap", "negotiation"),
+  code2("credential_resolution_before_gateway_check", "transition_error", "credential_custody"),
+  code2("credential_resolution_gate_not_passed", "transition_error", "credential_custody"),
+  code2("credential_resolution_ref_mismatch", "transition_error", "credential_custody"),
+  code2("credential_resolution_provider_unavailable", "proof_gap", "credential_custody"),
+  code2("credential_resolution_vault_auth_denied", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_provider_drift", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_redaction_failed", "proof_gap", "credential_custody"),
+  code2("credential_resolution_replay_refused", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_isolation_blocked", "gateway_decision", "credential_custody"),
+  code2("protected_path_posture_digest_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_scope_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_binding_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_posture_not_gateway_checked", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_source_authority_weak", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_posture_stale", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_unsafe_custody", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_custody_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_bypass_probe_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_external_verification_required", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_fixture_cannot_claim_customer_custody", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_customer_evidence_missing", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_drifted", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_redaction_failed", "transition_error", "credential_custody"),
+  code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("envelope_not_active", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("action_class_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("gateway_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("resource_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_missing", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_refused", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_not_greenlit", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("review_approved", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("review_decision_invalid", "policy_decision", "policy"),
+  code2("idempotency_duplicate_authority", "policy_decision", "policy"),
+  code2("idempotency_key_params_mismatch", "policy_decision", "policy"),
+  code2("protected_action_policy_amount_exceeds_action_bound", "policy_decision", "policy"),
+  code2("protected_action_policy_amount_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_credential_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_delegated_authority_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_payment_requirement_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_selected_payment_requirement_index_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_selected_payment_requirement_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_readiness_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_readiness_binding_mismatch", "policy_decision", "policy"),
+  code2("protected_action_policy_version_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_version_binding_mismatch", "policy_decision", "policy"),
+  code2("idempotency_recovery_missing", "recovery", "recovery"),
+  code2("idempotency_result_reusable", "recovery", "recovery"),
+  code2("idempotency_terminal_unknown_recovery_required", "recovery", "recovery"),
+  code2("gateway_registry_not_enforcing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_scope_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_binding_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_not_gateway_checked", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_source_authority_weak", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_credential_custody_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_raw_sibling_tool_present", "protected_path_posture", "protected_path_posture"),
+  code2("bypass_probe_passed", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_failed", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_source_authority_weak", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_scope_mismatch", "transition_error", "protected_path_posture"),
+  code2("protected_path_probe_stale", "transition_error", "protected_path_posture"),
+  code2("cli_gateway_posture_probe_failed", "protected_path_posture", "protected_path_posture"),
+  code2("cli_gateway_posture_stale", "protected_path_posture", "protected_path_posture"),
+  code2("cli_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("cli_install_not_configured", "protected_path_posture", "protected_path_posture"),
+  code2("cli_install_not_ready", "protected_path_posture", "protected_path_posture"),
+  code2("cli_project_config_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_role_credential_profile_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_role_token_refs_not_distinct", "protected_path_posture", "protected_path_posture"),
+  code2("cli_state_root_inside_workspace", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_inside_workspace", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_permissions_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_symlink", "protected_path_posture", "protected_path_posture"),
+  code2("cli_trust_bundle_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_gateway_offline", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_stale", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_metadata_digest_stale", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_policy_version_binding_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_tools_list_changed", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_trusted_readiness_binding_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_trusted_spend_bound_missing", "protected_path_posture", "protected_path_posture"),
+  code2("host_bypass_proof_gap", "proof_gap", "protected_path_posture"),
+  code2("host_fixture_manifest_stale", "protected_path_posture", "protected_path_posture"),
+  code2("host_gateway_unbound", "protected_path_posture", "protected_path_posture"),
+  code2("host_probe_advisory_only", "protected_path_posture", "protected_path_posture"),
+  code2("host_raw_sibling_mutation_possible", "protected_path_posture", "protected_path_posture"),
+  code2("host_tool_digest_changed", "protected_path_posture", "protected_path_posture"),
+  code2("host_wrapper_drifted", "protected_path_posture", "protected_path_posture"),
+  code2("host_wrapper_missing", "protected_path_posture", "protected_path_posture"),
+  code2("contract_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_digest_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_version_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_version_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_version_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_readiness_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_readiness_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_idempotency_key_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_idempotency_scope_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_credential_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_credential_ref_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_delegated_authority_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_delegated_authority_ref_digest_mismatch", "gateway_decision", "gateway"),
+  code2("action_class_mismatch", "gateway_decision", "gateway"),
+  code2("resource_mismatch", "gateway_decision", "gateway"),
+  code2("params_mismatch", "gateway_decision", "gateway"),
+  code2("contract_digest_mismatch", "gateway_decision", "gateway"),
+  code2("protected_path_requirement_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_not_active", "gateway_decision", "gateway"),
+  code2("greenlight_expired", "gateway_decision", "gateway"),
+  code2("already_consumed", "gateway_decision", "gateway"),
+  code2("gateway_policy_unknown", "gateway_decision", "gateway"),
+  code2("gateway_policy_drift", "gateway_decision", "gateway"),
+  code2("protected_surface_operation_in_progress", "gateway_decision", "gateway"),
+  code2("gate_passed", "gateway_decision", "gateway", { decisionPolarity: "pass" }),
+  code2("downstream_status_unknown", "proof_gap", "gateway"),
+  code2("lockfile_reconstruction_evidence_missing", "proof_gap", "gateway"),
+  code2("npm_provenance_not_verified", "proof_gap", "gateway"),
+  code2("npm_signature_not_verified", "proof_gap", "gateway"),
+  code2("package_lifecycle_scripts_require_separate_contract", "proof_gap", "gateway"),
+  code2("registry_integrity_not_verified", "proof_gap", "gateway"),
+  code2("invalid_transition_unknown_reconciliation_cannot_resolve_proof_gap", "transition_error", "operation_lifecycle"),
+  code2("orphan_mitigation_required", "proof_gap", "operation_lifecycle"),
+  code2("unneeded_retry", "proof_gap", "operation_lifecycle"),
+  code2("breaker_watermark_digest_missing", "transition_error", "isolation"),
+  code2("breaker_watermark_event_missing", "transition_error", "isolation"),
+  code2("breaker_watermark_digest_mismatch", "transition_error", "isolation"),
+  code2("breaker_trip", "isolation", "isolation"),
+  code2("foreign_tenant_breaker", "isolation", "isolation"),
+  code2("foreign_org_resource_breaker", "isolation", "isolation"),
+  code2("gateway_scope_only", "isolation", "isolation"),
+  code2("model_quarantine", "isolation", "isolation"),
+  code2("sequence_divergence", "isolation", "isolation"),
+  code2("review_artifact_policy_contract_mismatch", "transition_error", "review"),
+  code2("review_artifact_not_required", "transition_error", "review"),
+  code2("review_artifact_contract_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_policy_input_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_contract_mismatch", "transition_error", "review"),
+  code2("review_artifact_action_posture_unsafe", "transition_error", "review"),
+  code2("review_artifact_policy_input_mismatch", "transition_error", "review"),
+  code2("review_artifact_gateway_policy_mismatch", "transition_error", "review"),
+  code2("human_verified_exact_contract", "policy_decision", "review", { decisionPolarity: "pass" }),
+  code2("sensitive_action", "policy_decision", "review"),
+  code2("receipt_digest_missing", "transition_error", "receipt_export"),
+  code2("receipt_stream_offsets_missing", "transition_error", "receipt_export"),
+  code2("receipt_digest_mismatch", "transition_error", "receipt_export"),
+  code2("audit_chain_digest_mismatch", "transition_error", "receipt_export"),
+  code2("invalid_authority_certificate_terminal", "transition_error", "authority_certificate"),
+  code2("invalid_authority_certificate_terminal_ref", "transition_error", "authority_certificate"),
+  code2("proof_gap_already_resolved", "transition_error", "recovery"),
+  code2("invalid_transition_proof_gap_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict", "proof_gap", "recovery"),
+  code2("recovery_terminal_conflict_gap_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_scope_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_claim_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_evidence_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_transition_not_current", "transition_error", "recovery"),
+  code2("recovery_source_not_recoverable", "transition_error", "recovery"),
+  code2("recovery_receipt_digest_missing", "transition_error", "recovery"),
+  code2("recovery_receipt_stream_offsets_missing", "transition_error", "recovery"),
+  code2("recovery_receipt_digest_mismatch", "transition_error", "recovery"),
+  code2("recovery_audit_chain_digest_mismatch", "transition_error", "recovery"),
+  code2("recovery_source_ref_mismatch", "transition_error", "recovery"),
+  code2("recovery_next_action_class_missing", "transition_error", "recovery"),
+  code2("recovery_halt_has_next_action_classes", "transition_error", "recovery"),
+  code2("recovery_recommendation_not_open", "transition_error", "recovery"),
+  code2("recovery_recommendation_expired", "transition_error", "recovery"),
+  code2("recovery_retry_not_before", "transition_error", "recovery"),
+  code2("recovery_followup_not_later", "transition_error", "recovery"),
+  code2("recovery_action_class_not_allowed", "transition_error", "recovery"),
+  code2("recovery_required_evidence_missing", "transition_error", "recovery"),
+  code2("recovery_followup_scope_mismatch", "transition_error", "recovery"),
+  code2("recovery_path_not_contractable", "transition_error", "recovery"),
+  code2("recovery_superseding_contract_missing", "transition_error", "recovery"),
+  code2("recovery_expired_has_superseding_contract", "transition_error", "recovery"),
+  code2("recovery_not_expired", "transition_error", "recovery"),
+  code2("recovery_superseding_contract_mismatch", "transition_error", "recovery"),
+  code2("recovery_expired", "recovery", "recovery"),
+  code2("generated_execution_graph_issuer_scope_mismatch", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_nonce_replay", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_duplicate_node_id", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_unknown_node_ref", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_empty", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_missing_entry_node", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_cycle_detected", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_node_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_edge_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_depth_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_byte_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_complete", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_truncated", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_over_limit", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_truncation_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_kind_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_secret_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_argv_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_stdin_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_bypass_risk", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_hidden_trigger", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_observer_only", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_unsupported", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_ambiguous", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_denied", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_warned", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_allowlist", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_allow_once", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_bypass_detected", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_fail_open", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_skipped", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("mcp_runtime_bridge_error", "transition_error", "runtime_evidence")
+];
+var protocolReasonCodePrefixes = [
+  prefix("isolation_", "policy_decision", "policy"),
+  prefix("current_isolation_", "gateway_decision", "gateway"),
+  prefix("prior_action_", "policy_decision", "policy"),
+  prefix("runtime_", "refusal", "intent_compilation")
+];
+var protocolReasonCodeValues = protocolReasonCodes.map((entry) => entry.code);
+var protocolReasonCodeValueSet = new Set(protocolReasonCodeValues);
+function code2(value, kind, phase, publicSafeOrOptions = true) {
+  const options = typeof publicSafeOrOptions === "boolean" ? { publicSafe: publicSafeOrOptions } : publicSafeOrOptions;
+  return {
+    code: value,
+    kind,
+    phase,
+    publicSafe: options.publicSafe ?? true,
+    ...options.decisionPolarity ? { decisionPolarity: options.decisionPolarity } : {},
+    ...options.classifiedFailure ? { classifiedFailure: options.classifiedFailure } : {}
+  };
+}
+function prefix(value, kind, phase, publicSafe = true) {
+  return {
+    prefix: value,
+    kind,
+    phase,
+    publicSafe
+  };
+}
+
+// src/protocol/foundation/failure-class/index.ts
+var FailureClassSchema = exports_external.enum([
+  "auth",
+  "hosted_admission",
+  "protected_action_refusal",
+  "proof_gap",
+  "replay_refusal",
+  "stale_admission",
+  "internal"
+]);
+var internalMisconfigurationCodes = new Set([
+  "caller_auth_not_configured",
+  "hosted_admission_config_not_configured",
+  "hosted_admission_config_invalid",
+  "hosted_caller_verifier_not_configured",
+  "durable_store_unavailable"
+]);
+function failureClassFromHttpStatus(status) {
+  if (status === 401)
+    return "auth";
+  if (status === 403 || status === 409)
+    return "protected_action_refusal";
+  if (status === 422)
+    return "proof_gap";
+  if (status >= 500)
+    return "internal";
+  if (status >= 400 && status < 500)
+    return "proof_gap";
+  return "internal";
+}
+
 // src/http/errors/transition-error-envelope.ts
 var TransitionErrorRetryabilitySchema = exports_external.enum([
   "retryable",
@@ -16736,6 +17669,8 @@ var TransitionCommitStateSchema = exports_external.enum([
   "unknown",
   "not_applicable"
 ]);
+var TransitionFailureClassSchema = FailureClassSchema;
+var TransitionFailurePhaseSchema = exports_external.enum(["admission", "transition", "readback"]).nullable();
 var TransitionErrorEnvelopeSchema = exports_external.strictObject({
   code: exports_external.string(),
   message: exports_external.string(),
@@ -16746,6 +17681,9 @@ var TransitionErrorEnvelopeSchema = exports_external.strictObject({
   requestIdentity: exports_external.string().nullable(),
   proofRef: exports_external.string().nullable(),
   refusalRef: exports_external.string().nullable(),
+  failureClass: TransitionFailureClassSchema,
+  failurePhase: TransitionFailurePhaseSchema,
+  problemType: exports_external.string().url().nullable(),
   issues: exports_external.array(JsonValueSchema).optional()
 });
 var TransitionErrorResponseSchema = exports_external.strictObject({
@@ -16769,6 +17707,9 @@ class HandshakeClientError extends Error {
   requestIdentity;
   proofRef;
   refusalRef;
+  failureClass;
+  failurePhase;
+  problemType;
   constructor(status, envelope) {
     super(`Handshake ${envelope.transitionName ?? "request"} failed: ${envelope.code}`);
     this.status = status;
@@ -16782,6 +17723,9 @@ class HandshakeClientError extends Error {
     this.requestIdentity = envelope.requestIdentity;
     this.proofRef = envelope.proofRef;
     this.refusalRef = envelope.refusalRef;
+    this.failureClass = envelope.failureClass;
+    this.failurePhase = envelope.failurePhase;
+    this.problemType = envelope.problemType;
   }
 }
 // src/sdk/surface-clients/transport.ts
@@ -16829,6 +17773,7 @@ class RoleScopedTransport {
     const parsedError = TransitionErrorResponseSchema.safeParse(parsedBody);
     if (parsedError.success)
       return parsedError.data.error;
+    const failureClass = failureClassFromHttpStatus(response.status);
     return {
       code: "http_error",
       message: `Handshake request failed with HTTP ${response.status}.`,
@@ -16838,7 +17783,10 @@ class RoleScopedTransport {
       commitState: "unknown",
       requestIdentity: response.headers.get(HANDSHAKE_REQUEST_IDENTITY_HEADER),
       proofRef: null,
-      refusalRef: null
+      refusalRef: null,
+      failureClass,
+      failurePhase: null,
+      problemType: null
     };
   }
 }
@@ -17126,8 +18074,8 @@ function terminalBindingFailures(certificate) {
   }
   return failures;
 }
-function failure(code, message, ref) {
-  return AuthorityCertificateVerificationFailureSchema.parse({ code, message, ref });
+function failure(code3, message, ref) {
+  return AuthorityCertificateVerificationFailureSchema.parse({ code: code3, message, ref });
 }
 function verificationResponse(input) {
   const outcome = verificationOutcome(input.failures);
@@ -17196,6 +18144,12 @@ class EvidenceClient {
   }
   getContractEvidenceProjection(actionContractId) {
     return this.transport.get(`/v0.2/evidence/contracts/${encodeURIComponent(actionContractId)}`);
+  }
+  getOperationReadbackProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/operations/${encodeURIComponent(actionContractId)}/readback`);
+  }
+  getOperationCorrelationIndex(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/operations/${encodeURIComponent(actionContractId)}/correlation`);
   }
   getAgentTransactionEnvelopeProjection(actionContractId) {
     return this.transport.get(`/v0.2/evidence/agent-transactions/${encodeURIComponent(actionContractId)}`);

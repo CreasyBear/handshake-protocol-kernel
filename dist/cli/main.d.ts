@@ -8,7 +8,7 @@ export declare function cliCommandErrorOutput(input: {
 }): import("./output").CliOutputEnvelope<{
     errorCode: CliCommandErrorCode;
     message: string;
-    activeCommands: ("schema" | "evidence aps-report" | "cert verify" | "init" | "doctor" | "evidence contract-view" | "evidence receipt-timeline" | "support bundle" | "install x402-payment" | "probes x402-payment" | "register x402-gateway-readiness" | "install health" | "conformance x402-payment")[];
+    activeCommands: ("schema" | "evidence aps-report" | "cert verify" | "init" | "doctor" | "evidence fetch" | "evidence contract-view" | "evidence receipt-timeline" | "support bundle" | "install x402-payment" | "probes x402-payment" | "register x402-gateway-readiness" | "install health" | "host doctor" | "quickstart x402" | "quickstart agent-spine" | "simulate x402-payment" | "conformance x402-payment" | "service bootstrap")[];
     nextAction: "run_schema" | "fix_arguments" | "fix_input_json" | "fix_input_schema";
 }>;
 export {};

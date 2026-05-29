@@ -106,8 +106,8 @@ export declare const PolicyEvaluationResponseSchema: z.ZodObject<{
     refusalReasonCode: z.ZodNullable<z.ZodString>;
     reviewRequired: z.ZodBoolean;
     nextAction: z.ZodEnum<{
-        use_greenlight_at_gateway: "use_greenlight_at_gateway";
         read_evidence: "read_evidence";
+        use_greenlight_at_gateway: "use_greenlight_at_gateway";
         request_review: "request_review";
     }>;
     retryability: z.ZodLiteral<"not_retryable">;
@@ -450,10 +450,10 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
+            halted: "halted";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
-            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         decisionReasonCode: z.ZodString;
@@ -508,10 +508,10 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
+            halted: "halted";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
-            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         reasonCode: z.ZodString;

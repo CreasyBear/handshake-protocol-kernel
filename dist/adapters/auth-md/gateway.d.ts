@@ -27,6 +27,17 @@ export declare const AuthMdProtectedApiCallEvidenceSchema: z.ZodObject<{
     evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>;
 export type AuthMdProtectedApiCallEvidence = z.infer<typeof AuthMdProtectedApiCallEvidenceSchema>;
+export declare const AuthMdProfileConformanceReason: {
+    readonly missingVerifiedGate: "auth_md_profile_missing_verified_gate";
+    readonly paramsDigestDrift: "auth_md_profile_params_digest_drift";
+    readonly leakedCredentialMaterial: "auth_md_profile_leaked_credential_material";
+};
+export type AuthMdProfileConformanceInput = {
+    verifiedGate?: VerifiedGatewayCheck;
+    parameters?: AuthMdProtectedApiCallParameters;
+    expectedActionContractId?: string;
+};
+export declare function assertAuthMdProfileConformance(input: AuthMdProfileConformanceInput): void;
 export type AuthMdProtectedApiCallCommand = {
     verifiedGate: VerifiedGatewayCheck;
     parameters: AuthMdProtectedApiCallParameters;

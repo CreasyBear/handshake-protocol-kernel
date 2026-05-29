@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type FailureClass } from "../protocol/foundation/failure-class";
 import { ActionContractProposedOutcomeSchema, type SurfaceOutcome, type SurfaceOutcomeBaseInput } from "../surfaces/outcome";
 export declare const MCP_SCHEMA_VERSION: "handshake.surface-outcome.v0.1";
 export declare const McpStructuredContentSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
@@ -58,10 +59,10 @@ export declare const McpStructuredContentSchema: z.ZodDiscriminatedUnion<[z.ZodO
         metadata: "metadata";
         freshness: "freshness";
         bypass: "bypass";
+        replay: "replay";
         readiness: "readiness";
         evidence: "evidence";
         proposal: "proposal";
-        replay: "replay";
         tool_execution: "tool_execution";
     }>;
     authorityCreated: z.ZodLiteral<false>;
@@ -174,10 +175,10 @@ export declare const McpToolResultSchema: z.ZodObject<{
             metadata: "metadata";
             freshness: "freshness";
             bypass: "bypass";
+            replay: "replay";
             readiness: "readiness";
             evidence: "evidence";
             proposal: "proposal";
-            replay: "replay";
             tool_execution: "tool_execution";
         }>;
         authorityCreated: z.ZodLiteral<false>;
@@ -232,6 +233,15 @@ export declare const McpToolResultSchema: z.ZodObject<{
             raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
         }>;
     }, z.core.$strict>], "outcome">;
+    failureClass: z.ZodOptional<z.ZodNullable<z.ZodEnum<{
+        proof_gap: "proof_gap";
+        replay_refusal: "replay_refusal";
+        auth: "auth";
+        hosted_admission: "hosted_admission";
+        protected_action_refusal: "protected_action_refusal";
+        stale_admission: "stale_admission";
+        internal: "internal";
+    }>>>;
     content: z.ZodArray<z.ZodObject<{
         type: z.ZodLiteral<"text">;
         text: z.ZodString;
@@ -239,7 +249,7 @@ export declare const McpToolResultSchema: z.ZodObject<{
     isError: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strict>;
 export type McpToolResult = z.infer<typeof McpToolResultSchema>;
-export declare function mcpToolResult(structuredContent: SurfaceOutcome, isError?: boolean): McpToolResult;
+export declare function mcpToolResult(structuredContent: SurfaceOutcome, isError?: boolean, failureClass?: FailureClass | null): McpToolResult;
 export declare function mcpNonContractOutcome(input: SurfaceOutcomeBaseInput, isError?: boolean): {
     structuredContent: {
         schemaVersion: "handshake.surface-outcome.v0.1";
@@ -278,7 +288,7 @@ export declare function mcpNonContractOutcome(input: SurfaceOutcomeBaseInput, is
         generatedExecutionGraphPosture: "not_exposed_by_role_scoped_runtime_surface";
     } | {
         schemaVersion: "handshake.surface-outcome.v0.1";
-        phase: "metadata" | "freshness" | "bypass" | "readiness" | "evidence" | "proposal" | "replay" | "tool_execution";
+        phase: "metadata" | "freshness" | "bypass" | "replay" | "readiness" | "evidence" | "proposal" | "tool_execution";
         authorityCreated: false;
         authorityCertificateMinted: false;
         credentialMaterialIncluded: false;
@@ -309,5 +319,6 @@ export declare function mcpNonContractOutcome(input: SurfaceOutcomeBaseInput, is
         text: string;
     }[];
     isError: boolean;
+    failureClass?: "proof_gap" | "replay_refusal" | "auth" | "hosted_admission" | "protected_action_refusal" | "stale_admission" | "internal" | null | undefined;
 };
 export declare function mcpActionContractProposedOutcome(input: Omit<z.input<typeof ActionContractProposedOutcomeSchema>, "schemaVersion">): SurfaceOutcome;

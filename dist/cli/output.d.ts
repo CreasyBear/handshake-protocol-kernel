@@ -1,5 +1,5 @@
 export declare const CLI_SCHEMA_VERSION: "handshake.cli.v1";
-export declare const cliNonClaims: readonly ["hosted operation", "provider custody", "payment settlement finality", "aggregate payment-budget management", "broad x402 compatibility", "broad MCP/CLI/browser/shell/network control", "marketplace certification", "clearing-house readiness", "cross-org AuthorityCertificate trust"];
+export declare const cliNonClaims: readonly ["hosted operation", "provider custody", "payment settlement finality", "aggregate payment-budget management", "broad x402 compatibility", "broad MCP/CLI/browser/shell/network control", "marketplace certification", "clearing-house readiness", "cross-org AuthorityCertificate trust", "service workflow admission or handle authority"];
 export type CliPlane = "operator" | "evidence";
 export type CliCustodyRole = "none" | "review_custody";
 export type CliNextAction = "read_result" | "read_evidence" | "run_schema" | "run_doctor" | "fix_arguments" | "fix_input_json" | "fix_input_schema" | "fix_install" | "register_control_plane_install" | "provision_credentials" | "stop";

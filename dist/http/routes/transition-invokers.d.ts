@@ -90,7 +90,7 @@ export declare const transitionInvokers: {
                 mutationCredentialHolderRef: string;
                 gatewayAuthorityHolderRef: string;
                 supersededAt: string | null;
-            };
+            } | null;
             operatingEnvelope: {
                 schemaVersion: "0.2.4";
                 tenantId: string;
@@ -747,7 +747,7 @@ export declare const transitionInvokers: {
         actionContractDigest: string;
         policyInputDigest: string;
         gatewayPolicyVersion: string;
-        decision: "approve" | "reject" | "needs_changes";
+        decision: "reject" | "approve" | "needs_changes";
         decisionReasonCode: string;
         decisionExpiresAt: string;
         signatureOrAttestationRef: string;
@@ -762,7 +762,7 @@ export declare const transitionInvokers: {
         isolationStateId: string;
         scopeType: "gateway" | "agent" | "tenant" | "organization" | "run" | "envelope" | "action_class" | "credential_ref" | "authority_ref" | "resource";
         scopeId: string;
-        state: "active" | "revoked" | "review_only" | "rate_limited" | "quarantined" | "halted" | "state_suspect";
+        state: "active" | "revoked" | "halted" | "quarantined" | "review_only" | "rate_limited" | "state_suspect";
         reasonCode: string;
         reasonSummary: string;
         sourceDecisionRef: string;

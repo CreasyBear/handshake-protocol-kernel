@@ -12,6 +12,7 @@ import type { CompileIntentInput, IntentCompilationRecord } from "./areas/intent
 import { type BreakerDecisionResult } from "./areas/isolation-breaker";
 import type { CreateBreakerDecisionInput, CreateIsolationInput, IsolationState } from "./areas/isolation-breaker";
 import { type ProtocolRecord } from "./areas/object-registry";
+import type { AgreementObligationBinding, AgreementStatusTransition, LinkedAgreement, NegotiationDecision, NegotiationOffer, NegotiationSession } from "./areas/negotiation";
 import type { EvaluatePolicyInput, PolicyEvaluationResponse } from "./areas/policy-greenlight";
 import type { CreateProtectedPathPostureInput, ProtectedPathPosture } from "./areas/protected-path-posture";
 import type { CreateReceiptExportInput, ReceiptExport } from "./areas/receipt-export";
@@ -37,6 +38,12 @@ export declare class HandshakeKernel {
     createProtectedPathPosture(input: CreateProtectedPathPostureInput): Promise<ProtectedPathPosture>;
     compileIntent(input: CompileIntentInput): Promise<IntentCompilationRecord>;
     proposeActionContract(input: ProposeActionContractInput): Promise<ActionContract>;
+    recordNegotiationSession(input: NegotiationSession): Promise<NegotiationSession>;
+    recordNegotiationOffer(input: NegotiationOffer): Promise<NegotiationOffer>;
+    recordNegotiationDecision(input: NegotiationDecision): Promise<NegotiationDecision>;
+    recordLinkedAgreement(input: LinkedAgreement): Promise<LinkedAgreement>;
+    recordAgreementObligationBinding(input: AgreementObligationBinding): Promise<AgreementObligationBinding>;
+    transitionAgreementStatus(input: AgreementStatusTransition): Promise<AgreementStatusTransition>;
     registerGatewayCredentialRef(input: RegisterGatewayCredentialRefInput): Promise<GatewayCredentialRef>;
     registerDelegatedAuthorityRef(input: RegisterDelegatedAuthorityRefInput): Promise<DelegatedAuthorityRef>;
     transitionDelegatedAuthorityStatus(input: TransitionDelegatedAuthorityStatusInput): Promise<DelegatedAuthorityStatusTransition>;

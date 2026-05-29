@@ -14347,6 +14347,7 @@ var ActionAttemptLifecyclePhaseSchema = exports_external.enum([
   "drafting",
   "compilation",
   "contract",
+  "negotiation",
   "policy",
   "review",
   "gateway",
@@ -14373,6 +14374,8 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "contract_proposed",
   "contract_refused",
   "contract_conflict",
+  "negotiation_recorded",
+  "negotiation_conflict",
   "policy_greenlit",
   "policy_refused",
   "policy_proof_gap",
@@ -15148,6 +15151,10 @@ async function digestCanonical(value) {
 function toHex(buffer) {
   return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -15167,6 +15174,18 @@ var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   observedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/foundation/errors.ts
+class HandshakeProtocolError extends Error {
+  code;
+  status;
+  metadata;
+  constructor(code, message, status = 400, metadata = {}) {
+    super(message);
+    this.code = code;
+    this.status = status;
+    this.metadata = metadata;
+  }
+}
 // src/protocol/areas/credential-custody/inputs.ts
 var RegisterGatewayCredentialRefInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -15253,7 +15272,7 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
 var InstallProposalSchema = exports_external.strictObject({
@@ -15667,6 +15686,12 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
     "protected_path_posture_recorded",
+    "negotiation_session_recorded",
+    "negotiation_offer_recorded",
+    "negotiation_decision_recorded",
+    "linked_agreement_recorded",
+    "agreement_obligation_binding_recorded",
+    "agreement_status_transition_recorded",
     "action_proposed",
     "policy_decision_recorded",
     "action_greenlit",
@@ -15877,6 +15902,168 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   redactionProfileRef: exports_external.literal("agent-transaction-envelope:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
   envelopeDigest: DigestSchema
+});
+var OperationReadbackAgreementObligationPolicySchema = exports_external.strictObject({
+  sourceAuthority: exports_external.literal("policy_decision_snapshot"),
+  evaluationStatus: exports_external.enum(["greenlight", "refuse", "proof_gap"]),
+  ok: exports_external.boolean(),
+  reasonCode: ReasonCodeSchema.nullable(),
+  reason: exports_external.string().min(1).max(1000).nullable(),
+  policyInput: exports_external.strictObject({
+    posture: exports_external.enum(["not_applicable", "bound", "proof_gap", "refused"]),
+    obligationRef: ResourceRefSchema.nullable(),
+    linkedAgreementId: IdSchema.nullable(),
+    acceptedNegotiationResolutionId: IdSchema.nullable()
+  })
+});
+var OperationReadbackStatusSchema = exports_external.enum([
+  "policy_refused",
+  "review_required",
+  "halted",
+  "quarantined",
+  "policy_proof_gap",
+  "greenlight_available",
+  "gateway_admitted",
+  "gateway_refused",
+  "gateway_proof_gap",
+  "replay_refused",
+  "downstream_pending",
+  "downstream_succeeded",
+  "downstream_refused",
+  "downstream_failed",
+  "downstream_unknown",
+  "recovery_required",
+  "isolated"
+]);
+var OperationReadbackStageSchema = exports_external.enum([
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+]);
+var OperationCorrelationIndexSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-correlation.v0.1"),
+  actionContractRef: IdSchema,
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  authorityCreatedByProjection: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  intentCompilationRef: IdSchema.nullable(),
+  candidateActionRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  redactionProfileRef: exports_external.literal("operation-correlation:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var OperationReadbackNextMechanismSchema = exports_external.enum([
+  "read_evidence",
+  "use_greenlight_at_gateway",
+  "request_review",
+  "recraft_request",
+  "create_new_contract",
+  "recover_terminal_unknown",
+  "stop",
+  "wait_for_downstream"
+]);
+var OperationReadbackSupportSeveritySchema = exports_external.enum(["none", "info", "warning", "urgent"]);
+var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
+  "none",
+  "available_for_one_gateway_check",
+  "consumed",
+  "replayed_or_unusable",
+  "unknown"
+]);
+var OperationSupportContextSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
+  supportContextRef: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  surface: exports_external.literal("operation_readback"),
+  actionContractRef: IdSchema,
+  requestIdentity: exports_external.string().min(1).nullable(),
+  operationStatus: OperationReadbackStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  supportSeverity: OperationReadbackSupportSeveritySchema,
+  docsUrl: exports_external.string().url().nullable(),
+  nextCommand: exports_external.string().min(1).nullable(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted")
+});
+var OperationReadbackProjectionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback.v0.1"),
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  operationStatus: OperationReadbackStatusSchema,
+  latestAuthoritativeStage: OperationReadbackStageSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  agreementObligationPolicy: OperationReadbackAgreementObligationPolicySchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  greenlightUsePosture: OperationReadbackGreenlightUsePostureSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  authorityCreatedByReadback: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  receiptExportCreatedByReadback: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  paymentMaterialIncluded: exports_external.literal(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  supportContext: OperationSupportContextSchema
 });
 var ProtectedPathInstallHealthStatusSchema = exports_external.enum([
   "not_required",
@@ -16625,6 +16812,235 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/areas/negotiation/schemas.ts
+var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
+  "self_attested",
+  "host_verified_ref",
+  "proof_gap_recorded"
+]);
+var NegotiationPartyBindingSchema = exports_external.strictObject({
+  partyId: IdSchema,
+  partyRole: exports_external.enum(["initiator", "counterparty", "observer"]),
+  agentRef: ResourceRefSchema,
+  organizationRef: ResourceRefSchema.nullable().default(null),
+  runtimeRef: ResourceRefSchema.nullable().default(null),
+  endpointRef: ResourceRefSchema.nullable().default(null),
+  identityProofPosture: NegotiationPartyIdentityProofPostureSchema,
+  identityEvidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  identityProofDigest: DigestSchema.nullable().default(null),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+}).superRefine((value, ctx) => {
+  if (value.identityProofPosture === "host_verified_ref" && value.identityEvidenceRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "host verified parties require local identity evidence refs",
+      path: ["identityEvidenceRefs"]
+    });
+  }
+  if (value.identityProofPosture === "proof_gap_recorded" && value.proofGapRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "proof-gap parties require proof gap refs",
+      path: ["proofGapRefs"]
+    });
+  }
+});
+var ExternalProtocolEvidenceRefSchema = exports_external.strictObject({
+  protocol: exports_external.enum(["a2a", "acp", "anp", "ap2", "mcp", "runtime_handoff", "other"]),
+  protocolVersion: exports_external.string().min(1).max(80),
+  objectKind: exports_external.string().min(1).max(120),
+  objectRef: ResourceRefSchema,
+  objectDigest: DigestSchema,
+  evidencePosture: exports_external.literal("imported_evidence_only"),
+  evidenceUse: exports_external.enum([
+    "conversation_context",
+    "descriptor_context",
+    "runtime_context",
+    "mandate_context_evidence",
+    "tool_context",
+    "handoff_context",
+    "other_context"
+  ]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var forbiddenOfferVersionAliases = ["latest", "current", "unspecified"];
+var OfferVersionRefSchema = IdSchema.refine((value) => {
+  const normalized = value.toLowerCase();
+  return !forbiddenOfferVersionAliases.some((alias) => normalized.includes(alias));
+}, {
+  message: "offer version refs must bind to a specific offer version"
+});
+var disallowedObligationRefPattern = new RegExp([
+  "greenlight",
+  "gateway[_:-]?check",
+  "gate[_:-]?attempt",
+  "mutation[_:-]?attempt",
+  "policy[_:-]?decision",
+  "receipt",
+  "authority[_:-]?certificate",
+  "settlement",
+  "payment",
+  "signer",
+  "reusable[_:-]?authority"
+].join("|"), "i");
+var EvidenceRefSchema = exports_external.strictObject({
+  refKind: exports_external.enum(["candidate_action", "action_contract", "intent_compilation", "generated_execution_graph"]),
+  ref: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation evidence ref cannot point at a control or terminal artifact"
+  }),
+  digest: DigestSchema.nullable().default(null)
+});
+var NonAuthorityContextRefSchema = ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+  message: "negotiation context ref cannot point at a control or terminal artifact"
+});
+var NegotiationSessionSchema = ProtocolBaseSchema.extend({
+  negotiationSessionId: IdSchema,
+  negotiationSessionDigest: DigestSchema,
+  subjectResourceRef: ResourceRefSchema,
+  subjectProtectedActionContextRefs: exports_external.array(NonAuthorityContextRefSchema).default([]),
+  runtimePosture: exports_external.enum(["declared_runtime_context", "observed_runtime_evidence", "proof_gap_recorded"]),
+  parties: exports_external.array(NegotiationPartyBindingSchema).min(2),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (!value.parties.some((party) => party.partyRole === "initiator")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require an initiator party",
+      path: ["parties"]
+    });
+  }
+  if (!value.parties.some((party) => party.partyRole === "counterparty")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require a counterparty party",
+      path: ["parties"]
+    });
+  }
+});
+var NegotiationOfferSchema = ProtocolBaseSchema.extend({
+  negotiationOfferId: IdSchema,
+  negotiationSessionId: IdSchema,
+  offerVersionId: OfferVersionRefSchema,
+  offerSequence: exports_external.number().int().positive(),
+  offeredByPartyId: IdSchema,
+  previousOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  supersedesOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  offerContentDigest: DigestSchema,
+  offerObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  offerContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("offer"));
+var NegotiationDecisionSchema = ProtocolBaseSchema.extend({
+  negotiationDecisionId: IdSchema,
+  negotiationSessionId: IdSchema,
+  decidedOfferVersionId: OfferVersionRefSchema,
+  decidedOfferSequence: exports_external.number().int().positive(),
+  decidedByPartyId: IdSchema,
+  decision: exports_external.enum(["accept", "reject", "counter", "withdraw", "expire"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  counterOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  decisionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.decision === "counter" && value.counterOfferVersionId === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "counter decisions require a specific counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+  if (value.decision !== "counter" && value.counterOfferVersionId !== null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "only counter decisions may reference a counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+});
+var LinkedAgreementSchema = ProtocolBaseSchema.extend({
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  acceptedNegotiationDecisionId: IdSchema,
+  acceptedOfferVersionId: OfferVersionRefSchema,
+  acceptedOfferSequence: exports_external.number().int().positive(),
+  acceptedOfferContentDigest: DigestSchema,
+  acceptedByPartyId: IdSchema,
+  counterpartyRef: ResourceRefSchema,
+  agreementDigest: DigestSchema,
+  agreementObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementEvidencePosture: exports_external.literal("local_evidence_only"),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("agreement"));
+var AgreementObligationBindingSchema = ProtocolBaseSchema.extend({
+  agreementObligationBindingId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  obligationRef: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation ref cannot point at a control or terminal artifact"
+  }),
+  obligationDigest: DigestSchema.nullable().default(null),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  paramsDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  counterpartyRef: ResourceRefSchema,
+  maxUses: exports_external.literal(1).default(1),
+  bindingPosture: exports_external.literal("local_evidence_only"),
+  localProtectedActionEvidenceRefs: exports_external.array(EvidenceRefSchema).min(1),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var AgreementStatusTransitionSchema = ProtocolBaseSchema.extend({
+  agreementStatusTransitionId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  fromStatus: exports_external.enum(["proposed", "active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  toStatus: exports_external.enum(["active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  transitionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.fromStatus === value.toStatus) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreement status transitions must change status",
+      path: ["toStatus"]
+    });
+  }
+});
+function requireReconstructionRefs(kind) {
+  return (value, ctx) => {
+    const objectRefs = kind === "offer" ? value.offerObjectRefs : value.agreementObjectRefs;
+    const contentRefs = kind === "offer" ? value.offerContentRefs : value.agreementContentRefs;
+    if (objectRefs.length > 0 || contentRefs.length > 0 || value.proofGapRefs.length > 0)
+      return;
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `${kind} digest requires object refs, content refs, or proof gap refs`,
+      path: kind === "offer" ? ["offerObjectRefs"] : ["agreementObjectRefs"]
+    });
+  };
+}
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -16644,6 +17060,12 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "negotiation_session",
+  "negotiation_offer",
+  "negotiation_decision",
+  "linked_agreement",
+  "agreement_obligation_binding",
+  "agreement_status_transition",
   "action_contract",
   "authority_certificate",
   "policy_decision",
@@ -16691,6 +17113,18 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("linked_agreement"), payload: LinkedAgreementSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_obligation_binding"),
+    payload: AgreementObligationBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_status_transition"),
+    payload: AgreementStatusTransitionSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("action_contract"), payload: ActionContractSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("authority_certificate"), payload: AuthorityCertificateSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("policy_decision"), payload: PolicyDecisionSchema }),
@@ -17110,6 +17544,12 @@ var protocolObjectRegistry = {
   tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
   protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
   intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
+  negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
+  negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
+  negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
+  linked_agreement: entry("linked_agreement", LinkedAgreementSchema, (record2) => record2.payload.linkedAgreementId, "transition_evidence", "audit_read"),
+  agreement_obligation_binding: entry("agreement_obligation_binding", AgreementObligationBindingSchema, (record2) => record2.payload.agreementObligationBindingId, "transition_evidence", "audit_read"),
+  agreement_status_transition: entry("agreement_status_transition", AgreementStatusTransitionSchema, (record2) => record2.payload.agreementStatusTransitionId, "transition_evidence", "audit_read"),
   action_contract: entry("action_contract", ActionContractSchema, (record2) => record2.payload.actionContractId, "transition_evidence", "audit_read"),
   authority_certificate: entry("authority_certificate", AuthorityCertificateSchema, (record2) => record2.payload.authorityCertificateId, "receipt_evidence", "audit_read"),
   policy_decision: entry("policy_decision", PolicyDecisionSchema, (record2) => record2.payload.policyDecisionId, "transition_evidence", "audit_read"),
@@ -20224,12 +20664,12 @@ class ZodTuple2 extends ZodType2 {
     });
   }
 }
-ZodTuple2.create = (schemas56, params) => {
-  if (!Array.isArray(schemas56)) {
+ZodTuple2.create = (schemas58, params) => {
+  if (!Array.isArray(schemas58)) {
     throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
   }
   return new ZodTuple2({
-    items: schemas56,
+    items: schemas58,
     typeName: ZodFirstPartyTypeKind2.ZodTuple,
     rest: null,
     ...processCreateParams(params)
@@ -21411,6 +21851,50 @@ var X402PaymentParametersSchema = exports_external.strictObject({
   policyVersionRef: exports_external.string().min(1),
   policyVersionDigest: DigestSchema
 });
+function assertGatewayHeldSigningCommand(command) {
+  const refuse = (reasonCode, detail) => {
+    throw new Error(`x402 gateway-held custody refused signing (${reasonCode}): ${detail}`);
+  };
+  const gate = command.verifiedGate;
+  if (gate.gatewayCheckStatus !== "passed") {
+    refuse("gateway_check_not_authoritative", "verified gate status is not passed.");
+  }
+  const requiredGateIds = [
+    ["gateAttemptId", gate.gateAttemptId],
+    ["mutationAttemptId", gate.mutationAttemptId],
+    ["surfaceOperationRef", gate.surfaceOperationRef],
+    ["actionContractId", gate.actionContractId],
+    ["greenlightId", gate.greenlightId],
+    ["gatewayId", gate.gatewayId],
+    ["idempotencyKey", gate.idempotencyKey]
+  ];
+  for (const [field, value] of requiredGateIds) {
+    if (!value)
+      refuse("gateway_check_not_authoritative", `verified gate ${String(field)} is empty.`);
+  }
+  const evidence = command.credentialResolutionEvidence;
+  if (!evidence) {
+    refuse("credential_resolution_evidence_missing", "no gateway credential resolution evidence present.");
+  }
+  if (evidence.credentialMaterialIncluded !== false) {
+    refuse("credential_material_not_redacted", "resolution evidence must not include credential material.");
+  }
+  if (evidence.resultClass !== "used_by_gateway") {
+    refuse("credential_not_used_by_gateway", `resolution evidence resultClass is ${evidence.resultClass}.`);
+  }
+  if (evidence.redactionStatus !== "redacted") {
+    refuse("credential_resolution_not_redacted", `resolution evidence redactionStatus is ${evidence.redactionStatus}.`);
+  }
+  if (evidence.gateAttemptId !== gate.gateAttemptId) {
+    refuse("credential_resolution_gate_unbound", "resolution evidence is not bound to the verified gate attempt.");
+  }
+  if (evidence.actionContractId !== gate.actionContractId) {
+    refuse("credential_resolution_contract_unbound", "resolution evidence is not bound to the gate action contract.");
+  }
+  if (evidence.greenlightId !== gate.greenlightId) {
+    refuse("credential_resolution_greenlight_unbound", "resolution evidence is not bound to the gate greenlight.");
+  }
+}
 async function runX402WalletGateway(input) {
   const observedParameters = X402PaymentParametersSchema.parse(input.observedParameters);
   const surfaceOperationRef = input.surfaceOperationRef ?? `surface-op:x402:${input.actionContractId}`;
@@ -21447,13 +21931,15 @@ async function runX402WalletGateway(input) {
         `digest:${observedParameters.policyVersionDigest}`
       ]
     });
-    const signatureEvidence = await input.surface.signPayment({
+    const signingCommand = {
       verifiedGate,
       parameters: observedParameters,
       credentialResolutionEvidence,
       credentialUseRef: `gateway-credential-use:x402:${verifiedGate.gateAttemptId}`,
       ...providerRefs
-    });
+    };
+    assertGatewayHeldSigningCommand(signingCommand);
+    const signatureEvidence = await input.surface.signPayment(signingCommand);
     const evidenceRefs = [
       signatureEvidence.evidenceRef,
       signatureEvidence.paymentSignatureHeaderRef,
@@ -21532,7 +22018,55 @@ function providerRefsForGate(verifiedGate) {
     providerOperationRef: `provider-operation:x402:${verifiedGate.gateAttemptId}`
   };
 }
+// src/adapters/http-profile/schemas.ts
+var HttpProtectedMutationProfileSchema = exports_external.strictObject({
+  targetHttpMethod: exports_external.string().min(1),
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
+
+// src/adapters/http-profile/canonicalize.ts
+function canonicalizeHttpProfile(input) {
+  const parsed = HttpProtectedMutationProfileSchema.parse(input);
+  if (parsed.dynamicEndpointConstructionObserved || parsed.dynamicHostConstructionObserved) {
+    throw new exports_external.ZodError([
+      {
+        code: "custom",
+        message: "dynamic endpoint or host construction is not allowed on protected HTTP profiles",
+        path: ["dynamicEndpointConstructionObserved"]
+      }
+    ]);
+  }
+  return {
+    ...parsed,
+    targetHttpMethod: parsed.targetHttpMethod.trim().toUpperCase(),
+    pathTemplate: parsed.pathTemplate.trim()
+  };
+}
+
 // src/adapters/auth-md/profiles.ts
+var AuthMdProtectedApiCallAllowedHttpMethodSchema = exports_external.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+var AuthMdProtectedApiCallHeaderAllowlistSchema = exports_external.array(exports_external.enum(["accept", "content-type", "authorization", "x-request-id", "x-idempotency-key"]));
+var AuthMdProtectedApiCallExactTransportSchema = exports_external.strictObject({
+  targetHttpMethod: AuthMdProtectedApiCallAllowedHttpMethodSchema,
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1).refine((value) => value.startsWith("/"), { message: "pathTemplate must start with /" }),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
+function canonicalizeAuthMdProtectedApiCallExactTransport(input) {
+  const parsed = AuthMdProtectedApiCallExactTransportSchema.parse(input);
+  const canonical = canonicalizeHttpProfile(parsed);
+  return AuthMdProtectedApiCallExactTransportSchema.parse(canonical);
+}
 var AUTH_MD_REGISTERED_CREDENTIAL_PROFILE = "auth_md_registered_credential.v0";
 var AUTH_MD_DISCOVERY_REDACTION_PROFILE = "auth-md-discovery:v0-redacted";
 var AUTH_MD_REGISTRATION_REDACTION_PROFILE = "auth-md-registration:v0-redacted";
@@ -22413,6 +22947,19 @@ async function buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, a
     dynamicHostConstructionObserved: attempt.dynamicHostConstructionObserved,
     retryAuthorityReuseDetected: attempt.retryAuthorityReuseDetected
   });
+  const refusalReasonCodes = authMdProtectedApiCallRefusalReasonCodes(attempt);
+  if (refusalReasonCodes.length === 0) {
+    canonicalizeHttpProfile({
+      targetHttpMethod: parameters.targetHttpMethod,
+      endpointUrl: parameters.endpointUrl,
+      pathTemplate: parameters.pathTemplate,
+      requestBodyDigest: parameters.requestBodyDigest,
+      selectedHeadersDigest: parameters.selectedHeadersDigest,
+      dynamicEndpointConstructionObserved: parameters.dynamicEndpointConstructionObserved,
+      dynamicHostConstructionObserved: parameters.dynamicHostConstructionObserved,
+      retryAuthorityReuseDetected: parameters.retryAuthorityReuseDetected
+    });
+  }
   const idempotencyDigest = await digestCanonical({
     profile: AUTH_MD_PROTECTED_API_CALL_PROFILE,
     protectedResource: attempt.protectedResource,
@@ -22704,6 +23251,36 @@ var AuthMdProtectedApiCallEvidenceSchema = exports_external.strictObject({
   providerOperationRef: exports_external.string().min(1).nullable().default(null),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([])
 });
+var AuthMdProfileConformanceReason = {
+  missingVerifiedGate: "auth_md_profile_missing_verified_gate",
+  paramsDigestDrift: "auth_md_profile_params_digest_drift",
+  leakedCredentialMaterial: "auth_md_profile_leaked_credential_material"
+};
+function assertAuthMdProfileConformance(input) {
+  if (!input.verifiedGate) {
+    throw new HandshakeProtocolError(AuthMdProfileConformanceReason.missingVerifiedGate, "auth.md profile conformance requires a verified gateway check before protected API call I/O", 409);
+  }
+  if (input.expectedActionContractId && input.verifiedGate.actionContractId !== input.expectedActionContractId) {
+    throw new HandshakeProtocolError(AuthMdProfileConformanceReason.paramsDigestDrift, "auth.md observed parameters drift from verified greenlight action contract binding", 409);
+  }
+  if (input.parameters) {
+    try {
+      canonicalizeAuthMdProtectedApiCallExactTransport({
+        targetHttpMethod: AuthMdProtectedApiCallAllowedHttpMethodSchema.parse(input.parameters.targetHttpMethod.trim().toUpperCase()),
+        endpointUrl: input.parameters.endpointUrl,
+        pathTemplate: input.parameters.pathTemplate,
+        requestBodyDigest: input.parameters.requestBodyDigest,
+        selectedHeadersDigest: input.parameters.selectedHeadersDigest,
+        dynamicEndpointConstructionObserved: input.parameters.dynamicEndpointConstructionObserved,
+        dynamicHostConstructionObserved: input.parameters.dynamicHostConstructionObserved,
+        retryAuthorityReuseDetected: input.parameters.retryAuthorityReuseDetected
+      });
+    } catch (error51) {
+      throw new HandshakeProtocolError(AuthMdProfileConformanceReason.paramsDigestDrift, error51 instanceof Error ? error51.message : "auth.md profile transport canonicalization failed", 409);
+    }
+    assertNoLeakedAuthMdCredentialMaterial(input.parameters);
+  }
+}
 async function runAuthMdProtectedApiCallGateway(input) {
   const observedParameters = AuthMdProtectedApiCallParametersSchema.parse(input.observedParameters);
   const surfaceOperationRef = input.surfaceOperationRef ?? `surface-op:auth-md:${input.actionContractId}`;
@@ -22718,9 +23295,34 @@ async function runAuthMdProtectedApiCallGateway(input) {
     const outcome = gatewayCheck.gateAttempt.gateDecision === "refused" ? "gateway_check_refused" : "gateway_check_not_authoritative";
     return { outcome, gatewayCheck, credentialResolutionEvidence: null, reconciliation: null, apiCallEvidence: null };
   }
+  const unsafeObservedReasons = authMdGatewayUnsafeObservedParameterReasons(observedParameters);
+  if (unsafeObservedReasons.length > 0) {
+    const failureEvidence = await redactedAuthMdFailureEvidence({
+      surfaceOperationRef,
+      error: new HandshakeProtocolError(unsafeObservedReasons[0] ?? "auth_md_gateway_observed_parameters_refused", `auth.md gateway refused unsafe observed parameters: ${unsafeObservedReasons.join(",")}`, 409, { refusalRef: `refusal:auth-md-unsafe:${verifiedGate.gateAttemptId}` })
+    });
+    const { reconciliation } = await input.protocol.reconcileSurfaceOperation({
+      mutationAttemptId: verifiedGate.mutationAttemptId,
+      idempotencyKey: verifiedGate.idempotencyKey,
+      observedSurfaceOperationRef: surfaceOperationRef,
+      observedDownstreamStatus: "refused",
+      ...failureEvidence,
+      evidenceRefs: [
+        ...failureEvidence.evidenceRefs ?? [],
+        ...unsafeObservedReasons.map((reasonCode) => `reason_code:${reasonCode}`)
+      ],
+      resolvedProofGapIds: []
+    });
+    return {
+      outcome: "protected_api_call_failed",
+      gatewayCheck,
+      credentialResolutionEvidence: null,
+      reconciliation,
+      apiCallEvidence: null
+    };
+  }
   let credentialResolutionEvidence = null;
   try {
-    assertNoGatewayUnsafeObservedParameters(observedParameters);
     const providerRefs = providerRefsForGate2(verifiedGate);
     credentialResolutionEvidence = await input.protocol.recordCredentialResolutionEvidence({
       actionContractId: input.actionContractId,
@@ -22746,7 +23348,11 @@ async function runAuthMdProtectedApiCallGateway(input) {
       credentialUseRef: `gateway-credential-use:auth-md:${verifiedGate.gateAttemptId}`,
       ...providerRefs
     };
-    assertNoLeakedAuthMdCredentialMaterial(command);
+    assertAuthMdProfileConformance({
+      verifiedGate,
+      parameters: observedParameters,
+      expectedActionContractId: input.actionContractId
+    });
     const apiCallEvidence = AuthMdProtectedApiCallEvidenceSchema.parse(await input.surface.executeProtectedApiCall(command));
     assertNoLeakedAuthMdCredentialMaterial(apiCallEvidence);
     const { reconciliation } = await input.protocol.reconcileSurfaceOperation({
@@ -22799,8 +23405,8 @@ async function runAuthMdProtectedApiCallGateway(input) {
     };
   }
 }
-function assertNoGatewayUnsafeObservedParameters(parameters) {
-  const reasons = authMdProtectedApiCallRefusalReasonCodes({
+function authMdGatewayUnsafeObservedParameterReasons(parameters) {
+  const reasons = [...authMdProtectedApiCallRefusalReasonCodes({
     principalIntentRef: "gateway-observed:auth-md-protected-api-call",
     generatedCodeOrSpecRef: "gateway-observed:auth-md-protected-api-call",
     protectedResource: parameters.protectedResource,
@@ -22826,13 +23432,11 @@ function assertNoGatewayUnsafeObservedParameters(parameters) {
     dynamicEndpointConstructionObserved: parameters.dynamicEndpointConstructionObserved,
     dynamicHostConstructionObserved: parameters.dynamicHostConstructionObserved,
     retryAuthorityReuseDetected: parameters.retryAuthorityReuseDetected
-  });
-  if (reasons.length > 0) {
-    throw new Error(`auth.md gateway refused unsafe observed parameters: ${reasons.join(",")}`);
-  }
+  })];
   if (new URL(parameters.protectedResource).origin !== parameters.protectedResourceOrigin || new URL(parameters.endpointUrl).origin !== parameters.endpointOrigin) {
-    throw new Error("auth.md gateway refused origin field drift in observed parameters");
+    reasons.push("auth_md_protected_resource_origin_mismatch");
   }
+  return reasons;
 }
 async function credentialResolutionRequestDigest2(verifiedGate, parameters) {
   return digestCanonical({

@@ -14347,6 +14347,7 @@ var ActionAttemptLifecyclePhaseSchema = exports_external.enum([
   "drafting",
   "compilation",
   "contract",
+  "negotiation",
   "policy",
   "review",
   "gateway",
@@ -14373,6 +14374,8 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "contract_proposed",
   "contract_refused",
   "contract_conflict",
+  "negotiation_recorded",
+  "negotiation_conflict",
   "policy_greenlit",
   "policy_refused",
   "policy_proof_gap",
@@ -15121,6 +15124,9 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   observedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -15222,7 +15228,7 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
 var InstallProposalSchema = exports_external.strictObject({
@@ -15636,6 +15642,12 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
     "protected_path_posture_recorded",
+    "negotiation_session_recorded",
+    "negotiation_offer_recorded",
+    "negotiation_decision_recorded",
+    "linked_agreement_recorded",
+    "agreement_obligation_binding_recorded",
+    "agreement_status_transition_recorded",
     "action_proposed",
     "policy_decision_recorded",
     "action_greenlit",
@@ -15846,6 +15858,168 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   redactionProfileRef: exports_external.literal("agent-transaction-envelope:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
   envelopeDigest: DigestSchema
+});
+var OperationReadbackAgreementObligationPolicySchema = exports_external.strictObject({
+  sourceAuthority: exports_external.literal("policy_decision_snapshot"),
+  evaluationStatus: exports_external.enum(["greenlight", "refuse", "proof_gap"]),
+  ok: exports_external.boolean(),
+  reasonCode: ReasonCodeSchema.nullable(),
+  reason: exports_external.string().min(1).max(1000).nullable(),
+  policyInput: exports_external.strictObject({
+    posture: exports_external.enum(["not_applicable", "bound", "proof_gap", "refused"]),
+    obligationRef: ResourceRefSchema.nullable(),
+    linkedAgreementId: IdSchema.nullable(),
+    acceptedNegotiationResolutionId: IdSchema.nullable()
+  })
+});
+var OperationReadbackStatusSchema = exports_external.enum([
+  "policy_refused",
+  "review_required",
+  "halted",
+  "quarantined",
+  "policy_proof_gap",
+  "greenlight_available",
+  "gateway_admitted",
+  "gateway_refused",
+  "gateway_proof_gap",
+  "replay_refused",
+  "downstream_pending",
+  "downstream_succeeded",
+  "downstream_refused",
+  "downstream_failed",
+  "downstream_unknown",
+  "recovery_required",
+  "isolated"
+]);
+var OperationReadbackStageSchema = exports_external.enum([
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+]);
+var OperationCorrelationIndexSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-correlation.v0.1"),
+  actionContractRef: IdSchema,
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  authorityCreatedByProjection: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  intentCompilationRef: IdSchema.nullable(),
+  candidateActionRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  redactionProfileRef: exports_external.literal("operation-correlation:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var OperationReadbackNextMechanismSchema = exports_external.enum([
+  "read_evidence",
+  "use_greenlight_at_gateway",
+  "request_review",
+  "recraft_request",
+  "create_new_contract",
+  "recover_terminal_unknown",
+  "stop",
+  "wait_for_downstream"
+]);
+var OperationReadbackSupportSeveritySchema = exports_external.enum(["none", "info", "warning", "urgent"]);
+var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
+  "none",
+  "available_for_one_gateway_check",
+  "consumed",
+  "replayed_or_unusable",
+  "unknown"
+]);
+var OperationSupportContextSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
+  supportContextRef: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  surface: exports_external.literal("operation_readback"),
+  actionContractRef: IdSchema,
+  requestIdentity: exports_external.string().min(1).nullable(),
+  operationStatus: OperationReadbackStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  supportSeverity: OperationReadbackSupportSeveritySchema,
+  docsUrl: exports_external.string().url().nullable(),
+  nextCommand: exports_external.string().min(1).nullable(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted")
+});
+var OperationReadbackProjectionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback.v0.1"),
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  operationStatus: OperationReadbackStatusSchema,
+  latestAuthoritativeStage: OperationReadbackStageSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  agreementObligationPolicy: OperationReadbackAgreementObligationPolicySchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  greenlightUsePosture: OperationReadbackGreenlightUsePostureSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  authorityCreatedByReadback: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  receiptExportCreatedByReadback: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  paymentMaterialIncluded: exports_external.literal(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  supportContext: OperationSupportContextSchema
 });
 var ProtectedPathInstallHealthStatusSchema = exports_external.enum([
   "not_required",
@@ -16594,6 +16768,235 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/areas/negotiation/schemas.ts
+var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
+  "self_attested",
+  "host_verified_ref",
+  "proof_gap_recorded"
+]);
+var NegotiationPartyBindingSchema = exports_external.strictObject({
+  partyId: IdSchema,
+  partyRole: exports_external.enum(["initiator", "counterparty", "observer"]),
+  agentRef: ResourceRefSchema,
+  organizationRef: ResourceRefSchema.nullable().default(null),
+  runtimeRef: ResourceRefSchema.nullable().default(null),
+  endpointRef: ResourceRefSchema.nullable().default(null),
+  identityProofPosture: NegotiationPartyIdentityProofPostureSchema,
+  identityEvidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  identityProofDigest: DigestSchema.nullable().default(null),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+}).superRefine((value, ctx) => {
+  if (value.identityProofPosture === "host_verified_ref" && value.identityEvidenceRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "host verified parties require local identity evidence refs",
+      path: ["identityEvidenceRefs"]
+    });
+  }
+  if (value.identityProofPosture === "proof_gap_recorded" && value.proofGapRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "proof-gap parties require proof gap refs",
+      path: ["proofGapRefs"]
+    });
+  }
+});
+var ExternalProtocolEvidenceRefSchema = exports_external.strictObject({
+  protocol: exports_external.enum(["a2a", "acp", "anp", "ap2", "mcp", "runtime_handoff", "other"]),
+  protocolVersion: exports_external.string().min(1).max(80),
+  objectKind: exports_external.string().min(1).max(120),
+  objectRef: ResourceRefSchema,
+  objectDigest: DigestSchema,
+  evidencePosture: exports_external.literal("imported_evidence_only"),
+  evidenceUse: exports_external.enum([
+    "conversation_context",
+    "descriptor_context",
+    "runtime_context",
+    "mandate_context_evidence",
+    "tool_context",
+    "handoff_context",
+    "other_context"
+  ]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var forbiddenOfferVersionAliases = ["latest", "current", "unspecified"];
+var OfferVersionRefSchema = IdSchema.refine((value) => {
+  const normalized = value.toLowerCase();
+  return !forbiddenOfferVersionAliases.some((alias) => normalized.includes(alias));
+}, {
+  message: "offer version refs must bind to a specific offer version"
+});
+var disallowedObligationRefPattern = new RegExp([
+  "greenlight",
+  "gateway[_:-]?check",
+  "gate[_:-]?attempt",
+  "mutation[_:-]?attempt",
+  "policy[_:-]?decision",
+  "receipt",
+  "authority[_:-]?certificate",
+  "settlement",
+  "payment",
+  "signer",
+  "reusable[_:-]?authority"
+].join("|"), "i");
+var EvidenceRefSchema = exports_external.strictObject({
+  refKind: exports_external.enum(["candidate_action", "action_contract", "intent_compilation", "generated_execution_graph"]),
+  ref: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation evidence ref cannot point at a control or terminal artifact"
+  }),
+  digest: DigestSchema.nullable().default(null)
+});
+var NonAuthorityContextRefSchema = ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+  message: "negotiation context ref cannot point at a control or terminal artifact"
+});
+var NegotiationSessionSchema = ProtocolBaseSchema.extend({
+  negotiationSessionId: IdSchema,
+  negotiationSessionDigest: DigestSchema,
+  subjectResourceRef: ResourceRefSchema,
+  subjectProtectedActionContextRefs: exports_external.array(NonAuthorityContextRefSchema).default([]),
+  runtimePosture: exports_external.enum(["declared_runtime_context", "observed_runtime_evidence", "proof_gap_recorded"]),
+  parties: exports_external.array(NegotiationPartyBindingSchema).min(2),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (!value.parties.some((party) => party.partyRole === "initiator")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require an initiator party",
+      path: ["parties"]
+    });
+  }
+  if (!value.parties.some((party) => party.partyRole === "counterparty")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require a counterparty party",
+      path: ["parties"]
+    });
+  }
+});
+var NegotiationOfferSchema = ProtocolBaseSchema.extend({
+  negotiationOfferId: IdSchema,
+  negotiationSessionId: IdSchema,
+  offerVersionId: OfferVersionRefSchema,
+  offerSequence: exports_external.number().int().positive(),
+  offeredByPartyId: IdSchema,
+  previousOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  supersedesOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  offerContentDigest: DigestSchema,
+  offerObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  offerContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("offer"));
+var NegotiationDecisionSchema = ProtocolBaseSchema.extend({
+  negotiationDecisionId: IdSchema,
+  negotiationSessionId: IdSchema,
+  decidedOfferVersionId: OfferVersionRefSchema,
+  decidedOfferSequence: exports_external.number().int().positive(),
+  decidedByPartyId: IdSchema,
+  decision: exports_external.enum(["accept", "reject", "counter", "withdraw", "expire"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  counterOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  decisionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.decision === "counter" && value.counterOfferVersionId === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "counter decisions require a specific counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+  if (value.decision !== "counter" && value.counterOfferVersionId !== null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "only counter decisions may reference a counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+});
+var LinkedAgreementSchema = ProtocolBaseSchema.extend({
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  acceptedNegotiationDecisionId: IdSchema,
+  acceptedOfferVersionId: OfferVersionRefSchema,
+  acceptedOfferSequence: exports_external.number().int().positive(),
+  acceptedOfferContentDigest: DigestSchema,
+  acceptedByPartyId: IdSchema,
+  counterpartyRef: ResourceRefSchema,
+  agreementDigest: DigestSchema,
+  agreementObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementEvidencePosture: exports_external.literal("local_evidence_only"),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("agreement"));
+var AgreementObligationBindingSchema = ProtocolBaseSchema.extend({
+  agreementObligationBindingId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  obligationRef: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation ref cannot point at a control or terminal artifact"
+  }),
+  obligationDigest: DigestSchema.nullable().default(null),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  paramsDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  counterpartyRef: ResourceRefSchema,
+  maxUses: exports_external.literal(1).default(1),
+  bindingPosture: exports_external.literal("local_evidence_only"),
+  localProtectedActionEvidenceRefs: exports_external.array(EvidenceRefSchema).min(1),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var AgreementStatusTransitionSchema = ProtocolBaseSchema.extend({
+  agreementStatusTransitionId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  fromStatus: exports_external.enum(["proposed", "active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  toStatus: exports_external.enum(["active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  transitionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.fromStatus === value.toStatus) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreement status transitions must change status",
+      path: ["toStatus"]
+    });
+  }
+});
+function requireReconstructionRefs(kind) {
+  return (value, ctx) => {
+    const objectRefs = kind === "offer" ? value.offerObjectRefs : value.agreementObjectRefs;
+    const contentRefs = kind === "offer" ? value.offerContentRefs : value.agreementContentRefs;
+    if (objectRefs.length > 0 || contentRefs.length > 0 || value.proofGapRefs.length > 0)
+      return;
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `${kind} digest requires object refs, content refs, or proof gap refs`,
+      path: kind === "offer" ? ["offerObjectRefs"] : ["agreementObjectRefs"]
+    });
+  };
+}
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -16613,6 +17016,12 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "negotiation_session",
+  "negotiation_offer",
+  "negotiation_decision",
+  "linked_agreement",
+  "agreement_obligation_binding",
+  "agreement_status_transition",
   "action_contract",
   "authority_certificate",
   "policy_decision",
@@ -16660,6 +17069,18 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("linked_agreement"), payload: LinkedAgreementSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_obligation_binding"),
+    payload: AgreementObligationBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_status_transition"),
+    payload: AgreementStatusTransitionSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("action_contract"), payload: ActionContractSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("authority_certificate"), payload: AuthorityCertificateSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("policy_decision"), payload: PolicyDecisionSchema }),
@@ -16884,7 +17305,11 @@ var surfaceIds = [
   "cli.evidence",
   "cli.process",
   "mcp.runtime",
-  "x402.protected_tool"
+  "x402.protected_tool",
+  "surfaces.a2a_negotiation",
+  "surfaces.a2a_readback",
+  "surfaces.service_workflow_admission",
+  "surfaces.hosted_admission"
 ];
 var surfaceRouteFamilies = [
   "action_contract_proposal_write",
@@ -16925,7 +17350,7 @@ var surfaceAuthorityPostures = [
   "evidence_only",
   "setup_only",
   "transport_only",
-  "policy_authority"
+  "policy_transition_transport"
 ];
 var surfaceNonAuthorityFlags = [
   "authorityCreated",
@@ -17020,7 +17445,7 @@ var sharedClaimBoundaries = [
   "no_provider_custody",
   "no_settlement_claim"
 ];
-var surfaceBoundaryManifest = {
+var sdkSurfaceBoundaryManifest = {
   "sdk.runtime": {
     id: "sdk.runtime",
     status: "active",
@@ -17042,7 +17467,15 @@ var surfaceBoundaryManifest = {
       "protected_path_posture_write",
       "surface_reconciliation_write"
     ],
-    allowedImportRoots: ["src/sdk", "src/runtime", "src/protocol/public", "src/http/errors", "src/http/admission"],
+    allowedImportRoots: [
+      "src/sdk",
+      "src/runtime",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
+      "src/http/errors",
+      "src/http/admission"
+    ],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "protocol/areas/gateway-gate/"],
     forbiddenCredentialShapes: [...authorityCredentialShapes, "review_custody_token"],
     forbiddenOutputFields: [...cliAuthorityOutputFields, "greenlightId", "greenlightRef", "gatewayCheckInput"],
@@ -17072,6 +17505,8 @@ var surfaceBoundaryManifest = {
       "src/sdk",
       "src/protocol/public",
       "src/protocol/areas/authority-certificate/verify",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
       "src/http/errors",
       "src/http/admission"
     ],
@@ -17103,7 +17538,14 @@ var surfaceBoundaryManifest = {
       "surface_reconciliation_write",
       "tool_call_draft_write"
     ],
-    allowedImportRoots: ["src/sdk", "src/protocol/public", "src/http/errors", "src/http/admission"],
+    allowedImportRoots: [
+      "src/sdk",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
+      "src/http/errors",
+      "src/http/admission"
+    ],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
     forbiddenCredentialShapes: [
       "allRoles",
@@ -17124,7 +17566,7 @@ var surfaceBoundaryManifest = {
     status: "active",
     plane: "operator",
     custodyRole: "control_plane",
-    authorityPosture: "policy_authority",
+    authorityPosture: "policy_transition_transport",
     sourceRoots: ["src/sdk/surface-clients/policy-client.ts", "src/sdk/surface-clients/transport.ts"],
     allowedRouteFamilies: ["policy_decision_write"],
     forbiddenRouteFamilies: [
@@ -17146,7 +17588,14 @@ var surfaceBoundaryManifest = {
       "surface_reconciliation_write",
       "tool_call_draft_write"
     ],
-    allowedImportRoots: ["src/sdk", "src/protocol/public", "src/http/errors", "src/http/admission"],
+    allowedImportRoots: [
+      "src/sdk",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
+      "src/http/errors",
+      "src/http/admission"
+    ],
     forbiddenImportFragments: [
       "adapters/",
       "experimental",
@@ -17187,7 +17636,7 @@ var surfaceBoundaryManifest = {
       rawInternalRecordIncluded: false,
       receiptExportCreated: false
     },
-    claimBoundaryLabels: [...sharedClaimBoundaries, "policy_authority_is_not_gateway_execution"]
+    claimBoundaryLabels: [...sharedClaimBoundaries, "policy_transition_transport_is_not_gateway_execution"]
   },
   "sdk.adapter": {
     id: "sdk.adapter",
@@ -17237,7 +17686,15 @@ var surfaceBoundaryManifest = {
       "surface_reconciliation_write",
       "tool_call_draft_write"
     ],
-    allowedImportRoots: ["src/sdk", "src/install", "src/protocol/public", "src/http/errors", "src/http/admission"],
+    allowedImportRoots: [
+      "src/sdk",
+      "src/install",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
+      "src/http/errors",
+      "src/http/admission"
+    ],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
     forbiddenCredentialShapes: [
       "allRoles",
@@ -17274,7 +17731,14 @@ var surfaceBoundaryManifest = {
       "runtime_evidence_write",
       "tool_call_draft_write"
     ],
-    allowedImportRoots: ["src/sdk", "src/protocol/public", "src/http/errors", "src/http/admission"],
+    allowedImportRoots: [
+      "src/sdk",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/protocol/foundation/failure-class",
+      "src/http/errors",
+      "src/http/admission"
+    ],
     forbiddenImportFragments: [
       "adapters/x402-payment/wallet-gateway",
       "experimental",
@@ -17307,7 +17771,9 @@ var surfaceBoundaryManifest = {
       receiptExportCreated: false
     },
     claimBoundaryLabels: [...sharedClaimBoundaries, "gateway_transport_is_not_signer_custody"]
-  },
+  }
+};
+var cliSurfaceBoundaryManifest = {
   "cli.operator": {
     id: "cli.operator",
     status: "active",
@@ -17316,12 +17782,18 @@ var surfaceBoundaryManifest = {
     authorityPosture: "setup_only",
     sourceRoots: [
       "src/cli/command-manifest.ts",
+      "src/cli/demo/x402.ts",
+      "src/cli/host/doctor.ts",
       "src/cli/local-project/doctor.ts",
       "src/cli/local-project/index.ts",
       "src/cli/main.ts",
+      "src/cli/mcp/doctor.ts",
       "src/cli/output.ts",
+      "src/cli/quickstart/x402.ts",
+      "src/cli/state/inspect.ts",
       "src/cli/x402/index.ts",
-      "src/cli/x402/local-state.ts"
+      "src/cli/x402/local-state.ts",
+      "src/cli/x402/readiness.ts"
     ],
     allowedRouteFamilies: ["catalog_install_write", "install_health_read"],
     forbiddenRouteFamilies: [
@@ -17337,8 +17809,12 @@ var surfaceBoundaryManifest = {
       "src/adapters/x402-payment/bypass-probes",
       "src/adapters/x402-payment/conformance",
       "src/adapters/x402-payment/install-proposal",
+      "src/adapters/x402-payment/protected-tool-profile",
       "src/adapters/x402-payment/protected-tool-readiness",
+      "src/install/install-proposal",
+      "src/mcp",
       "src/protocol/areas/bypass-probe",
+      "src/protocol/evidence-projections",
       "src/protocol/foundation",
       "src/surfaces"
     ],
@@ -17364,9 +17840,12 @@ var surfaceBoundaryManifest = {
       "src/cli/aps-report.ts",
       "src/cli/certificate.ts",
       "src/cli/command-manifest.ts",
+      "src/cli/evidence/operation-readback-view.ts",
       "src/cli/main.ts",
       "src/cli/output.ts",
       "src/cli/projection-evidence.ts",
+      "src/cli/quality/report.ts",
+      "src/cli/simulate/x402-payment.ts",
       "src/cli/support-bundle.ts"
     ],
     allowedRouteFamilies: ["certificate_verify_local", "evidence_projection_read", "install_health_read"],
@@ -17381,6 +17860,8 @@ var surfaceBoundaryManifest = {
     ],
     allowedImportRoots: [
       "src/cli",
+      "src/hosted-admission",
+      "src/mcp",
       "src/protocol/areas/authority-certificate/verify",
       "src/protocol/evidence-projections",
       "src/protocol/public",
@@ -17421,7 +17902,9 @@ var surfaceBoundaryManifest = {
     forbiddenOutputFields: [...cliAuthorityOutputFields, "greenlightId", "greenlightRef", "gatewayCheckInput"],
     requiredNonAuthorityFlags: proposalNonAuthorityFlags,
     claimBoundaryLabels: [...sharedClaimBoundaries, "process_start_is_not_gateway_custody"]
-  },
+  }
+};
+var runtimeSurfaceBoundaryManifest = {
   "mcp.runtime": {
     id: "mcp.runtime",
     status: "active",
@@ -17444,7 +17927,7 @@ var surfaceBoundaryManifest = {
       "protected_path_posture_write",
       "surface_reconciliation_write"
     ],
-    allowedImportRoots: ["src/mcp", "src/sdk", "src/surfaces"],
+    allowedImportRoots: ["src/mcp", "src/protocol/evidence-projections", "src/protocol/foundation/failure-class", "src/sdk", "src/surfaces"],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
     forbiddenCredentialShapes: [...authorityCredentialShapes, "review_custody_token"],
     forbiddenOutputFields: [
@@ -17508,6 +17991,181 @@ var surfaceBoundaryManifest = {
       "tool_visibility_is_not_authorization"
     ]
   }
+};
+var productSurfaceBoundaryManifest = {
+  "surfaces.a2a_negotiation": {
+    id: "surfaces.a2a_negotiation",
+    status: "active",
+    plane: "runtime",
+    custodyRole: "runtime_evidence",
+    authorityPosture: "evidence_only",
+    sourceRoots: ["src/surfaces/a2a-negotiation-support"],
+    allowedRouteFamilies: ["evidence_projection_read", "runtime_evidence_write"],
+    forbiddenRouteFamilies: [
+      ...forbiddenAuthorityRouteFamilies,
+      "action_contract_proposal_write",
+      "bypass_probe_write",
+      "catalog_install_write",
+      "gateway_check_write",
+      "gateway_credential_write",
+      "protected_path_posture_write",
+      "surface_reconciliation_write",
+      "tool_call_draft_write"
+    ],
+    allowedImportRoots: [
+      "src/surfaces/a2a-negotiation-support",
+      "src/protocol/areas/action-contract",
+      "src/protocol/areas/negotiation",
+      "src/protocol/areas/policy-greenlight",
+      "src/protocol/evidence-projections",
+      "src/protocol/foundation",
+      "src/protocol/public",
+      "src/protocol/store/port"
+    ],
+    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/x402-payment/wallet-gateway", "storage/"],
+    forbiddenCredentialShapes: [
+      ...authorityCredentialShapes.filter((shape) => shape !== "signer"),
+      "review_custody_token"
+    ],
+    forbiddenOutputFields: [
+      ...cliAuthorityOutputFields,
+      "greenlightId",
+      "greenlightRef",
+      "gatewayCheckInput",
+      "mutationCommand"
+    ],
+    requiredNonAuthorityFlags: evidenceNonAuthorityFlags,
+    claimBoundaryLabels: [
+      ...sharedClaimBoundaries,
+      "admission_readback_is_not_receipt_evidence",
+      "agreement_is_not_permission",
+      "a2a_ingress_admission_is_not_policy_or_gateway"
+    ]
+  },
+  "surfaces.a2a_readback": {
+    id: "surfaces.a2a_readback",
+    status: "active",
+    plane: "evidence",
+    custodyRole: "review_custody",
+    authorityPosture: "evidence_only",
+    sourceRoots: ["src/surfaces/a2a-negotiation-readback"],
+    allowedRouteFamilies: ["evidence_projection_read", "install_health_read"],
+    forbiddenRouteFamilies: [
+      ...forbiddenAuthorityRouteFamilies,
+      "action_contract_proposal_write",
+      "bypass_probe_write",
+      "catalog_install_write",
+      "gateway_check_write",
+      "runtime_evidence_write",
+      "surface_reconciliation_write",
+      "tool_call_draft_write"
+    ],
+    allowedImportRoots: [
+      "src/surfaces/a2a-negotiation-readback",
+      "src/protocol/public",
+      "src/protocol/foundation",
+      "src/protocol/evidence-projections"
+    ],
+    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
+    forbiddenCredentialShapes: [
+      ...authorityCredentialShapes.filter((shape) => shape !== "signer"),
+      "signerMaterialIncluded"
+    ],
+    forbiddenOutputFields: [...cliAuthorityOutputFields.filter((field) => field !== "signer"), "downstreamSuccess"],
+    requiredNonAuthorityFlags: evidenceNonAuthorityFlags,
+    claimBoundaryLabels: [
+      ...sharedClaimBoundaries,
+      "gateway_check_remains_final_enforcement_point",
+      "agreement_evidence_is_not_downstream_success",
+      "admission_readback_is_not_receipt_evidence"
+    ]
+  },
+  "surfaces.service_workflow_admission": {
+    id: "surfaces.service_workflow_admission",
+    status: "active",
+    plane: "evidence",
+    custodyRole: "review_custody",
+    authorityPosture: "evidence_only",
+    sourceRoots: ["src/surfaces/service-workflow-admission"],
+    allowedRouteFamilies: ["evidence_projection_read", "install_health_read"],
+    forbiddenRouteFamilies: [
+      ...forbiddenAuthorityRouteFamilies,
+      "action_contract_proposal_write",
+      "bypass_probe_write",
+      "catalog_install_write",
+      "gateway_check_write",
+      "runtime_evidence_write",
+      "surface_reconciliation_write",
+      "tool_call_draft_write"
+    ],
+    allowedImportRoots: [
+      "src/surfaces/service-workflow-admission",
+      "src/protocol/public",
+      "src/protocol/foundation"
+    ],
+    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
+    forbiddenCredentialShapes: [...authorityCredentialShapes],
+    forbiddenOutputFields: [...cliAuthorityOutputFields, "downstreamSuccess"],
+    requiredNonAuthorityFlags: evidenceNonAuthorityFlags,
+    claimBoundaryLabels: [
+      ...sharedClaimBoundaries,
+      "admission_readback_is_not_receipt_evidence",
+      "service_workflow_handle_is_not_clearance",
+      "fresh_action_contract_required"
+    ]
+  },
+  "surfaces.hosted_admission": {
+    id: "surfaces.hosted_admission",
+    status: "active",
+    plane: "operator",
+    custodyRole: "control_plane",
+    authorityPosture: "setup_only",
+    sourceRoots: ["src/hosted-admission"],
+    allowedRouteFamilies: ["evidence_projection_read", "install_health_read"],
+    forbiddenRouteFamilies: [
+      ...forbiddenAuthorityRouteFamilies,
+      "action_contract_proposal_write",
+      "bypass_probe_write",
+      "catalog_install_write",
+      "gateway_check_write",
+      "gateway_credential_write",
+      "runtime_evidence_write",
+      "surface_reconciliation_write",
+      "tool_call_draft_write"
+    ],
+    allowedImportRoots: [
+      "src/hosted-admission",
+      "src/protocol/context",
+      "src/protocol/foundation",
+      "src/protocol/public",
+      "src/protocol/foundation/errors",
+      "src/http/errors"
+    ],
+    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
+    forbiddenCredentialShapes: [
+      "allRoles",
+      "CallerAuthTokens",
+      "gateway_custody_token",
+      "private_key",
+      "signer",
+      "transitionTokens",
+      "wallet"
+    ],
+    forbiddenOutputFields: [...cliAuthorityOutputFields, "greenlightId", "greenlightRef", "gatewayCheckInput"],
+    requiredNonAuthorityFlags: proposalNonAuthorityFlags,
+    claimBoundaryLabels: [
+      ...sharedClaimBoundaries,
+      "hosted_admission_package_is_not_http_internals",
+      "hosted_caller_identity_is_not_reusable_auth",
+      "verifier_adapter_claim_is_not_gateway_check"
+    ]
+  }
+};
+var surfaceBoundaryManifest = {
+  ...sdkSurfaceBoundaryManifest,
+  ...cliSurfaceBoundaryManifest,
+  ...runtimeSurfaceBoundaryManifest,
+  ...productSurfaceBoundaryManifest
 };
 // src/surfaces/outcome.ts
 var surfaceOutcomeSchemaVersion = "handshake.surface-outcome.v0.1";
@@ -17666,7 +18324,7 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   {
     gateId: "first_external_runtime_transcript",
     status: "resolved_selected",
-    decision: "Codex-local is the first live runtime target, and run-local evidence now shows a fresh Codex host attempted handshake.actions.x402_payment.propose through a handshake_x402 MCP server entry pinned to the current 0.2.7 local artifact.",
+    decision: "Codex-local is the first live runtime target, and run-local evidence now shows a fresh Codex host attempted handshake.actions.x402_payment.propose through a handshake_x402 MCP server entry pinned to the current 0.2.8 local artifact.",
     launchLanguageBoundary: "Codex-local host-origin MCP tool invocation may be claimed for the pinned artifact. Do not claim native certification, host-wide containment, policy authority, gateway checks, signer use, payment material, customer gateway custody, live paid execution, or registry discovery.",
     requiredEvidence: [
       "read /Users/joelchan/.codex/config.toml",
@@ -17675,7 +18333,7 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "record proposal/readback transcript and raw sibling posture"
     ],
     currentEvidence: [
-      "live /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to handshake-protocol-kernel@0.2.7 artifact sha256 c80c3985a9c695c6008c9c9eb5323085e2dcfa262f9c090aab2a78056e6bcf42",
+      "live /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to handshake-protocol-kernel@0.2.8 artifact sha256 c80c3985a9c695c6008c9c9eb5323085e2dcfa262f9c090aab2a78056e6bcf42",
       "fresh Codex host observed and attempted handshake.actions.x402_payment.propose; empty-object input failed schema validation before authority or mutation"
     ],
     blockerReasonCodes: [],
@@ -17711,9 +18369,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "search endpoint returns the server by package or MCP name"
     ],
     currentEvidence: [
-      "npm registry latest returned handshake-protocol-kernel@0.2.7 with registry signatures",
-      "trusted-publish workflow completed successfully for expected_version=0.2.7 and published GitHub Actions provenance",
-      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.7",
+      "npm registry latest returned handshake-protocol-kernel@0.2.8 with registry signatures",
+      "trusted-publish workflow completed successfully for expected_version=0.2.8 and published GitHub Actions provenance",
+      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.8",
       "official MCP Registry GET by io.github.CreasyBear/handshake-protocol-kernel returned 404 Server not found",
       "official MCP Registry search for handshake-protocol-kernel returned an empty server list"
     ],
@@ -17794,8 +18452,8 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   {
     gateId: "package_provenance_npm_attestation",
     status: "resolved_selected",
-    decision: "Package provenance for 0.2.7 is satisfied by npm trusted publishing through the public artifact repository workflow.",
-    launchLanguageBoundary: "Published 0.2.7 can be described as npm-available with registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.",
+    decision: "Package provenance for 0.2.8 is satisfied by npm trusted publishing through the public artifact repository workflow.",
+    launchLanguageBoundary: "Published 0.2.8 can be described as npm-available with registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.",
     requiredEvidence: [
       "npm latest returns the intended product version",
       "npm dist.integrity and dist.signatures are recorded",
@@ -17803,10 +18461,10 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "clean install smoke passes against the newly published artifact"
     ],
     currentEvidence: [
-      "npm latest returned 0.2.7 with dist.integrity and dist.signatures",
-      "trusted-publish workflow succeeded for expected_version=0.2.7",
+      "npm latest returned 0.2.8 with dist.integrity and dist.signatures",
+      "trusted-publish workflow succeeded for expected_version=0.2.8",
       "npm publish logged GitHub Actions provenance and Sigstore transparency log index 1628227940",
-      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.7"
+      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.8"
     ],
     blockerReasonCodes: [],
     nonClaims: ["not_authority_by_publication", "not_supply_chain_safety", "not_npm_audit_replacement"]
@@ -17818,9 +18476,414 @@ function productLaunchGateResolutionFor(gateId) {
     throw new Error(`Unknown product launch gate: ${gateId}`);
   return resolution;
 }
-// src/surfaces/proof-packets.ts
-import { Buffer } from "node:buffer";
+// src/surfaces/proof-packets/shared.ts
 import { createHash } from "node:crypto";
+var PROOF_PACKET_VERSION = "proof-packets.v0.1";
+var nonAuthorityBoundary = {
+  createsAuthority: false,
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  performsMutation: false
+};
+function gap(reasonCode, nonClaim) {
+  return { reasonCode, nonClaim };
+}
+function arrayEquals(left, right) {
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
+}
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+function stableDigest(value) {
+  return `sha256:${sha256Text(stableStringify(value))}`;
+}
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function stableStringify(value) {
+  if (Array.isArray(value))
+    return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record2 = value;
+    return `{${Object.keys(record2).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record2[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+// src/surfaces/proof-packets/clean-installed-activation.ts
+function projectCleanInstalledActivationProof(input) {
+  return {
+    proofKind: "clean_installed_activation_proof",
+    proofVersion: PROOF_PACKET_VERSION,
+    generatedAt: input.generatedAt,
+    status: "local_activation_passed",
+    scope: "Pinned local packed artifact activation for the x402 protected-tool proposal/evidence surface. This is not live host activation.",
+    package: input.package,
+    requiredInstalledSurfaces: input.requiredInstalledSurfaces,
+    activationEvidence: input.activationEvidence,
+    commandRefs: input.commandRefs,
+    evidenceRefs: [
+      `package:${input.package.name}@${input.package.version}:tarball-sha256:${input.package.tarballSha256}`,
+      "evidence:clean-installed-import:x402-protected-tool",
+      "evidence:clean-installed-demo:x402-protected-spend",
+      ...input.activationEvidence.outputRefs
+    ],
+    authorityBoundary: {
+      ...nonAuthorityBoundary,
+      resolvesCredential: false,
+      invokesSigner: false,
+      createsPaymentPayload: false,
+      configuresLiveHost: false,
+      provesMcpRegistryDiscoverability: false,
+      provesPublicNpmCurrentSurface: false,
+      provesCustomerGatewayCustody: false,
+      provesLivePaidExecution: false
+    },
+    proofGaps: [
+      gap("live_codex_host_not_configured_by_clean_install_check", "Clean installed activation does not prove live Codex host configuration or host-origin tool invocation."),
+      gap("mcp_registry_discoverability_not_checked_by_clean_install_check", "Clean installed activation does not prove MCP Registry acceptance or lookup."),
+      gap("public_npm_current_surface_not_checked_by_clean_install_check", "Clean installed activation uses a local packed artifact and does not prove that the current surface is published."),
+      gap("customer_gateway_live_payment_not_checked_by_clean_install_check", "Clean installed activation does not exercise a funded customer-gateway-held signer or live x402 paid retry.")
+    ],
+    nextMechanism: "Configure a live Codex MCP host against this exact artifact only after explicit approval."
+  };
+}
+// src/surfaces/proof-packets/codex-toml.ts
+function parseCodexMcpServerNames(configText) {
+  return parseCodexMcpServerRecords(configText).map((server) => server.name);
+}
+function parseCodexMcpServerRecords(configText) {
+  const sections = parseTomlSections(configText);
+  return sections.filter((section) => section.kind === "mcp_server").map((section) => ({
+    name: section.name,
+    command: parseTomlStringField(section.body, "command"),
+    args: parseTomlStringArrayField(section.body, "args"),
+    startupTimeoutSec: parseTomlNumberField(section.body, "startup_timeout_sec"),
+    envKeys: parseCodexMcpServerEnvKeys(sections, section.name)
+  })).sort((left, right) => left.name.localeCompare(right.name));
+}
+function buildCodexMcpServerTomlBlock(input) {
+  const startupTimeoutSec = input.startupTimeoutSec ?? 120;
+  return [
+    `[mcp_servers.${input.name}]`,
+    `command = ${tomlString(input.command)}`,
+    `args = [${input.args.map(tomlString).join(", ")}]`,
+    `startup_timeout_sec = ${startupTimeoutSec}`,
+    ""
+  ].join(`
+`);
+}
+function upsertCodexMcpServerToml(input) {
+  const newline = input.existingToml.includes(`\r
+`) ? `\r
+` : `
+`;
+  const sourceLines = input.existingToml.split(/\r?\n/u);
+  const retainedLines = [];
+  let skippingTargetSection = false;
+  for (const line of sourceLines) {
+    const header = parseTomlHeader(line);
+    if (header) {
+      skippingTargetSection = isCodexMcpServerHeader(header, input.serverName);
+    }
+    if (!skippingTargetSection)
+      retainedLines.push(line);
+  }
+  const insertIndex = lastMcpSectionEndIndex(retainedLines);
+  const blockLines = input.serverBlockToml.trimEnd().split(/\r?\n/u);
+  const before = retainedLines.slice(0, insertIndex);
+  const after = retainedLines.slice(insertIndex);
+  const nextLines = [...trimTrailingBlankLines(before), "", ...blockLines, "", ...trimLeadingBlankLines(after)];
+  const nextToml = `${nextLines.join(newline).replace(/\n{4,}/gu, `${newline}${newline}${newline}`)}${newline}`;
+  return {
+    changed: nextToml !== input.existingToml,
+    toml: nextToml
+  };
+}
+function parseTomlSections(configText) {
+  const sections = [];
+  let current = null;
+  for (const line of configText.split(/\r?\n/u)) {
+    const header = parseTomlHeader(line);
+    if (header) {
+      if (current)
+        sections.push(current);
+      current = {
+        name: header.name,
+        kind: header.kind,
+        body: []
+      };
+      continue;
+    }
+    if (current)
+      current.body.push(line);
+  }
+  if (current)
+    sections.push(current);
+  return sections;
+}
+function parseTomlHeader(line) {
+  const trimmed = line.trim();
+  const mcpServer = /^\[mcp_servers\.([^\].\n]+)\]$/u.exec(trimmed);
+  if (mcpServer?.[1])
+    return { name: mcpServer[1], kind: "mcp_server" };
+  const mcpServerEnv = /^\[mcp_servers\.([^\].\n]+)\.env\]$/u.exec(trimmed);
+  if (mcpServerEnv?.[1])
+    return { name: mcpServerEnv[1], kind: "mcp_server_env" };
+  if (/^\[.+\]$/u.test(trimmed))
+    return { name: trimmed, kind: "other" };
+  return null;
+}
+function parseCodexMcpServerEnvKeys(sections, serverName) {
+  return sections.filter((section) => section.kind === "mcp_server_env" && section.name === serverName).flatMap((section) => section.body.flatMap((line) => {
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/u.exec(line);
+    return match?.[1] ? [match[1]] : [];
+  })).sort();
+}
+function parseTomlStringField(lines, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(".*")\\s*$`, "u");
+  for (const line of lines) {
+    const match = pattern.exec(line);
+    if (!match?.[1])
+      continue;
+    try {
+      const value = JSON.parse(match[1]);
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function parseTomlStringArrayField(lines, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(\\[.*\\])\\s*$`, "u");
+  for (const line of lines) {
+    const match = pattern.exec(line);
+    if (!match?.[1])
+      continue;
+    try {
+      const value = JSON.parse(match[1]);
+      return Array.isArray(value) && value.every((entry) => typeof entry === "string") ? value : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function parseTomlNumberField(lines, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*([0-9]+)\\s*$`, "u");
+  for (const line of lines) {
+    const match = pattern.exec(line);
+    if (!match?.[1])
+      continue;
+    const value = Number.parseInt(match[1], 10);
+    return Number.isFinite(value) ? value : null;
+  }
+  return null;
+}
+function lastMcpSectionEndIndex(lines) {
+  let lastMcpHeaderIndex = -1;
+  lines.forEach((line, index2) => {
+    const header = parseTomlHeader(line);
+    if (header?.kind === "mcp_server" || header?.kind === "mcp_server_env")
+      lastMcpHeaderIndex = index2;
+  });
+  if (lastMcpHeaderIndex === -1) {
+    const firstSectionIndex = lines.findIndex((line) => parseTomlHeader(line) !== null);
+    return firstSectionIndex === -1 ? lines.length : firstSectionIndex;
+  }
+  let index = lastMcpHeaderIndex + 1;
+  while (index < lines.length && !parseTomlHeader(lines[index] ?? ""))
+    index += 1;
+  return index;
+}
+function isCodexMcpServerHeader(header, serverName) {
+  return (header.kind === "mcp_server" || header.kind === "mcp_server_env") && header.name === serverName;
+}
+function trimTrailingBlankLines(lines) {
+  const output = [...lines];
+  while (output.length > 0 && output.at(-1)?.trim() === "")
+    output.pop();
+  return output;
+}
+function trimLeadingBlankLines(lines) {
+  const output = [...lines];
+  while (output.length > 0 && output[0]?.trim() === "")
+    output.shift();
+  return output;
+}
+function tomlString(value) {
+  return JSON.stringify(value);
+}
+
+// src/surfaces/proof-packets/codex-host-activation.ts
+function projectCodexHostActivationReadback(input) {
+  const serverRecords = parseCodexMcpServerRecords(input.configText ?? "");
+  const observedMcpServers = [...input.observedMcpServers ?? serverRecords.map((server) => server.name)].sort();
+  const targetServerName = input.expectedServer?.name ?? "handshake_x402";
+  const targetServer = serverRecords.find((server) => server.name === targetServerName) ?? null;
+  const targetPresent = observedMcpServers.includes(targetServerName);
+  const expectedServerMatches = input.expectedServer ? targetServer !== null && targetServer.command === input.expectedServer.command && arrayEquals(targetServer.args ?? [], input.expectedServer.args) : targetPresent;
+  const hostToolInvocationObserved = expectedServerMatches && input.hostToolInvocation?.toolVisible === true && input.hostToolInvocation.toolCallAttempted === true;
+  const status = targetPresent ? hostToolInvocationObserved ? "host_tool_invocation_observed" : expectedServerMatches ? "configured_unverified" : "blocked" : "blocked";
+  return {
+    proofKind: "codex_host_activation_readback",
+    proofVersion: PROOF_PACKET_VERSION,
+    generatedAt: input.generatedAt,
+    status,
+    scope: "Read-only Codex-local MCP host configuration readback for the Handshake x402 proposal/evidence server.",
+    config: {
+      path: input.configPath,
+      exists: input.configExists,
+      sha256: input.configSha256,
+      observedMcpServers,
+      targetServerName,
+      targetPresent,
+      targetServer,
+      expectedServer: input.expectedServer ?? null,
+      expectedServerMatches,
+      hostToolInvocation: input.hostToolInvocation ?? null,
+      hostToolInvocationObserved
+    },
+    expectedArtifact: input.expectedArtifact,
+    commandRefs: input.commandRefs,
+    evidenceRefs: codexEvidenceRefs({
+      configSha256: input.configSha256,
+      expectedArtifactSha256: input.expectedArtifact?.sha256 ?? null,
+      targetPresent
+    }),
+    authorityBoundary: {
+      ...nonAuthorityBoundary,
+      resolvesCredential: false,
+      invokesSigner: false,
+      createsPaymentPayload: false,
+      configuresLiveHost: false,
+      observesHostToolInvocation: hostToolInvocationObserved,
+      provesHostWideContainment: false,
+      provesMcpRegistryDiscoverability: false,
+      provesCustomerGatewayCustody: false,
+      provesLivePaidExecution: false
+    },
+    proofGaps: codexProofGaps(input, targetPresent, hostToolInvocationObserved),
+    nextMechanism: hostToolInvocationObserved ? "Move to public distribution/provenance; Codex-local host invocation does not prove registry discovery, customer gateway custody, or live paid execution." : targetPresent ? "Exercise `handshake.actions.x402_payment.propose` through the configured Codex host and capture a host-origin transcript." : "Add `mcp_servers.handshake_x402` to Codex config against the pinned artifact after explicit approval."
+  };
+}
+function codexEvidenceRefs(input) {
+  const refs = [];
+  if (input.configSha256)
+    refs.push(`codex-config:sha256:${input.configSha256}`);
+  if (input.expectedArtifactSha256)
+    refs.push(`expected-artifact:sha256:${input.expectedArtifactSha256}`);
+  refs.push(input.targetPresent ? "codex-config:mcp-server:handshake_x402:present" : "codex-config:mcp-server:handshake_x402:absent");
+  return refs;
+}
+function codexProofGaps(input, targetPresent, hostToolInvocationObserved) {
+  const gaps = [];
+  const targetServer = parseCodexMcpServerRecords(input.configText ?? "").find((server) => server.name === (input.expectedServer?.name ?? "handshake_x402"));
+  const expectedServerMatches = input.expectedServer ? targetServer !== undefined && targetServer.command === input.expectedServer.command && arrayEquals(targetServer.args ?? [], input.expectedServer.args) : targetPresent;
+  if (!input.configExists) {
+    gaps.push(gap("codex_config_not_found", "Codex-local host activation cannot be claimed without readable host configuration."));
+  }
+  if (input.expectedArtifact && !input.expectedArtifact.exists) {
+    gaps.push(gap("expected_activation_artifact_not_found", "Codex-local host activation cannot be pinned to a missing local artifact."));
+  }
+  if (!targetPresent) {
+    gaps.push(gap("codex_handshake_x402_mcp_server_absent", "Codex-local host activation is not configured while `mcp_servers.handshake_x402` is absent."));
+  }
+  if (targetPresent && !expectedServerMatches) {
+    gaps.push(gap("codex_handshake_x402_mcp_server_config_mismatch", "Codex-local host activation cannot be pinned while the configured command or args differ from the expected artifact-derived executable."));
+  }
+  if (!hostToolInvocationObserved) {
+    gaps.push(gap("host_origin_tool_invocation_not_exercised", "Config readback does not prove `handshake.actions.x402_payment.propose` was invoked through the live host."));
+  }
+  return gaps;
+}
+// src/surfaces/proof-packets/distribution-provenance.ts
+function projectDistributionProvenanceReadback(input) {
+  const localExports = [...input.localPackage.exports].sort();
+  const publishedExports = [...input.npmLatest.exports].sort();
+  const missingLocalExports = localExports.filter((entry) => !publishedExports.includes(entry));
+  const extraPublishedExports = publishedExports.filter((entry) => !localExports.includes(entry));
+  const npmLatestMatchesLocalVersion = input.npmLatest.version === input.localPackage.version;
+  const currentSurfacePublished = input.npmLatest.status === 200 && npmLatestMatchesLocalVersion && missingLocalExports.length === 0;
+  const mcpRegistryAccepted = input.mcpRegistry.lookupStatus === 200;
+  const mcpRegistryDiscoverable = mcpRegistryAccepted && input.mcpRegistry.searchCount !== null && input.mcpRegistry.searchCount > 0;
+  const status = currentSurfacePublished && mcpRegistryDiscoverable ? "registry_discoverable" : "blocked";
+  return {
+    proofKind: "distribution_provenance_readback",
+    proofVersion: PROOF_PACKET_VERSION,
+    generatedAt: input.generatedAt,
+    status,
+    scope: "Public npm and MCP Registry readback for the current local package surface. Publication and registry discovery are distribution facts only.",
+    localPackage: {
+      ...input.localPackage,
+      exports: localExports
+    },
+    npmLatest: {
+      ...input.npmLatest,
+      exports: publishedExports,
+      missingLocalExports,
+      extraPublishedExports,
+      currentSurfacePublished
+    },
+    mcpRegistry: {
+      ...input.mcpRegistry,
+      accepted: mcpRegistryAccepted,
+      discoverable: mcpRegistryDiscoverable
+    },
+    publishAttempt: input.publishAttempt ?? null,
+    commandRefs: input.commandRefs,
+    evidenceRefs: input.evidenceRefs,
+    authorityBoundary: {
+      ...nonAuthorityBoundary,
+      holdsCustody: false,
+      hostsOperation: false,
+      certifiesMarketplace: false,
+      managesSettlement: false,
+      managesPayment: false,
+      establishesTrust: false,
+      enforcesHostWidePolicy: false
+    },
+    proofGaps: distributionProofGaps({
+      npmLatestStatus: input.npmLatest.status,
+      npmLatestMatchesLocalVersion,
+      missingLocalExports,
+      currentSurfacePublished,
+      mcpRegistryAccepted,
+      mcpRegistryDiscoverable,
+      publishAttempt: input.publishAttempt ?? null
+    }),
+    nextMechanism: currentSurfacePublished ? "Submit and verify MCP Registry publication for the current package version." : "Publish a new package version containing the current local export surface, then rerun npm and MCP Registry readback."
+  };
+}
+function distributionProofGaps(input) {
+  const gaps = [];
+  if (input.npmLatestStatus !== 200) {
+    gaps.push(gap("npm_latest_readback_failed", "Current package distribution cannot be claimed without npm registry readback."));
+  }
+  if (input.npmLatestStatus === 200 && !input.npmLatestMatchesLocalVersion) {
+    gaps.push(gap("npm_latest_version_does_not_match_local", "The local package version is not the public latest version."));
+  }
+  if (input.missingLocalExports.length > 0) {
+    gaps.push(gap("npm_latest_missing_current_local_exports", `Public npm latest does not include current local exports: ${input.missingLocalExports.join(", ")}.`));
+  }
+  if (!input.currentSurfacePublished) {
+    gaps.push(gap("current_surface_not_publicly_published", "Public npm availability does not yet prove the current local product surface."));
+  }
+  if (!input.mcpRegistryAccepted) {
+    gaps.push(gap("mcp_registry_lookup_not_accepted", "MCP Registry direct lookup does not return the Handshake server."));
+  }
+  if (!input.mcpRegistryDiscoverable) {
+    gaps.push(gap("mcp_registry_discoverability_not_verified", "MCP Registry search/discovery does not prove the Handshake server is discoverable."));
+  }
+  if (input.publishAttempt?.attempted === true && input.publishAttempt.provenanceRequested && input.publishAttempt.status === "failed" && input.publishAttempt.provenanceSupported === false) {
+    gaps.push(gap("npm_provenance_generation_unsupported", "npm rejected trusted provenance generation in this local provider context; publishing without provenance requires explicit release-risk acceptance."));
+  }
+  return gaps;
+}
+// src/surfaces/proof-packets/live-x402-requirement.ts
+import { Buffer } from "node:buffer";
 
 // node_modules/@x402/core/node_modules/zod/v3/external.js
 var exports_external2 = {};
@@ -21879,211 +22942,7 @@ function isPaymentRequiredV2(value) {
   return PaymentRequiredV2Schema.safeParse(value).success;
 }
 
-// src/surfaces/proof-packets.ts
-var PROOF_PACKET_VERSION = "proof-packets.v0.1";
-var nonAuthorityBoundary = {
-  createsAuthority: false,
-  createsPolicyDecision: false,
-  createsGreenlight: false,
-  performsGatewayCheck: false,
-  performsMutation: false
-};
-function projectCleanInstalledActivationProof(input) {
-  return {
-    proofKind: "clean_installed_activation_proof",
-    proofVersion: PROOF_PACKET_VERSION,
-    generatedAt: input.generatedAt,
-    status: "local_activation_passed",
-    scope: "Pinned local packed artifact activation for the x402 protected-tool proposal/evidence surface. This is not live host activation.",
-    package: input.package,
-    requiredInstalledSurfaces: input.requiredInstalledSurfaces,
-    activationEvidence: input.activationEvidence,
-    commandRefs: input.commandRefs,
-    evidenceRefs: [
-      `package:${input.package.name}@${input.package.version}:tarball-sha256:${input.package.tarballSha256}`,
-      "evidence:clean-installed-import:x402-protected-tool",
-      "evidence:clean-installed-demo:x402-protected-spend",
-      ...input.activationEvidence.outputRefs
-    ],
-    authorityBoundary: {
-      ...nonAuthorityBoundary,
-      resolvesCredential: false,
-      invokesSigner: false,
-      createsPaymentPayload: false,
-      configuresLiveHost: false,
-      provesMcpRegistryDiscoverability: false,
-      provesPublicNpmCurrentSurface: false,
-      provesCustomerGatewayCustody: false,
-      provesLivePaidExecution: false
-    },
-    proofGaps: [
-      gap("live_codex_host_not_configured_by_clean_install_check", "Clean installed activation does not prove live Codex host configuration or host-origin tool invocation."),
-      gap("mcp_registry_discoverability_not_checked_by_clean_install_check", "Clean installed activation does not prove MCP Registry acceptance or lookup."),
-      gap("public_npm_current_surface_not_checked_by_clean_install_check", "Clean installed activation uses a local packed artifact and does not prove that the current surface is published."),
-      gap("customer_gateway_live_payment_not_checked_by_clean_install_check", "Clean installed activation does not exercise a funded customer-gateway-held signer or live x402 paid retry.")
-    ],
-    nextMechanism: "Configure a live Codex MCP host against this exact artifact only after explicit approval."
-  };
-}
-function projectCodexHostActivationReadback(input) {
-  const serverRecords = parseCodexMcpServerRecords(input.configText ?? "");
-  const observedMcpServers = [...input.observedMcpServers ?? serverRecords.map((server) => server.name)].sort();
-  const targetServerName = input.expectedServer?.name ?? "handshake_x402";
-  const targetServer = serverRecords.find((server) => server.name === targetServerName) ?? null;
-  const targetPresent = observedMcpServers.includes(targetServerName);
-  const expectedServerMatches = input.expectedServer ? targetServer !== null && targetServer.command === input.expectedServer.command && arrayEquals(targetServer.args ?? [], input.expectedServer.args) : targetPresent;
-  const hostToolInvocationObserved = expectedServerMatches && input.hostToolInvocation?.toolVisible === true && input.hostToolInvocation.toolCallAttempted === true;
-  const status = targetPresent ? hostToolInvocationObserved ? "host_tool_invocation_observed" : expectedServerMatches ? "configured_unverified" : "blocked" : "blocked";
-  return {
-    proofKind: "codex_host_activation_readback",
-    proofVersion: PROOF_PACKET_VERSION,
-    generatedAt: input.generatedAt,
-    status,
-    scope: "Read-only Codex-local MCP host configuration readback for the Handshake x402 proposal/evidence server.",
-    config: {
-      path: input.configPath,
-      exists: input.configExists,
-      sha256: input.configSha256,
-      observedMcpServers,
-      targetServerName,
-      targetPresent,
-      targetServer,
-      expectedServer: input.expectedServer ?? null,
-      expectedServerMatches,
-      hostToolInvocation: input.hostToolInvocation ?? null,
-      hostToolInvocationObserved
-    },
-    expectedArtifact: input.expectedArtifact,
-    commandRefs: input.commandRefs,
-    evidenceRefs: codexEvidenceRefs({
-      configSha256: input.configSha256,
-      expectedArtifactSha256: input.expectedArtifact?.sha256 ?? null,
-      targetPresent
-    }),
-    authorityBoundary: {
-      ...nonAuthorityBoundary,
-      resolvesCredential: false,
-      invokesSigner: false,
-      createsPaymentPayload: false,
-      configuresLiveHost: false,
-      observesHostToolInvocation: hostToolInvocationObserved,
-      provesHostWideContainment: false,
-      provesMcpRegistryDiscoverability: false,
-      provesCustomerGatewayCustody: false,
-      provesLivePaidExecution: false
-    },
-    proofGaps: codexProofGaps(input, targetPresent, hostToolInvocationObserved),
-    nextMechanism: hostToolInvocationObserved ? "Move to public distribution/provenance; Codex-local host invocation does not prove registry discovery, customer gateway custody, or live paid execution." : targetPresent ? "Exercise `handshake.actions.x402_payment.propose` through the configured Codex host and capture a host-origin transcript." : "Add `mcp_servers.handshake_x402` to Codex config against the pinned artifact after explicit approval."
-  };
-}
-function parseCodexMcpServerNames(configText) {
-  return parseCodexMcpServerRecords(configText).map((server) => server.name);
-}
-function parseCodexMcpServerRecords(configText) {
-  const sections = parseTomlSections(configText);
-  return sections.filter((section) => section.kind === "mcp_server").map((section) => ({
-    name: section.name,
-    command: parseTomlStringField(section.body, "command"),
-    args: parseTomlStringArrayField(section.body, "args"),
-    startupTimeoutSec: parseTomlNumberField(section.body, "startup_timeout_sec"),
-    envKeys: parseCodexMcpServerEnvKeys(sections, section.name)
-  })).sort((left, right) => left.name.localeCompare(right.name));
-}
-function buildCodexMcpServerTomlBlock(input) {
-  const startupTimeoutSec = input.startupTimeoutSec ?? 120;
-  return [
-    `[mcp_servers.${input.name}]`,
-    `command = ${tomlString(input.command)}`,
-    `args = [${input.args.map(tomlString).join(", ")}]`,
-    `startup_timeout_sec = ${startupTimeoutSec}`,
-    ""
-  ].join(`
-`);
-}
-function upsertCodexMcpServerToml(input) {
-  const newline = input.existingToml.includes(`\r
-`) ? `\r
-` : `
-`;
-  const sourceLines = input.existingToml.split(/\r?\n/u);
-  const retainedLines = [];
-  let skippingTargetSection = false;
-  for (const line of sourceLines) {
-    const header = parseTomlHeader(line);
-    if (header) {
-      skippingTargetSection = isCodexMcpServerHeader(header, input.serverName);
-    }
-    if (!skippingTargetSection)
-      retainedLines.push(line);
-  }
-  const insertIndex = lastMcpSectionEndIndex(retainedLines);
-  const blockLines = input.serverBlockToml.trimEnd().split(/\r?\n/u);
-  const before = retainedLines.slice(0, insertIndex);
-  const after = retainedLines.slice(insertIndex);
-  const nextLines = [...trimTrailingBlankLines(before), "", ...blockLines, "", ...trimLeadingBlankLines(after)];
-  const nextToml = `${nextLines.join(newline).replace(/\n{4,}/gu, `${newline}${newline}${newline}`)}${newline}`;
-  return {
-    changed: nextToml !== input.existingToml,
-    toml: nextToml
-  };
-}
-function projectDistributionProvenanceReadback(input) {
-  const localExports = [...input.localPackage.exports].sort();
-  const publishedExports = [...input.npmLatest.exports].sort();
-  const missingLocalExports = localExports.filter((entry) => !publishedExports.includes(entry));
-  const extraPublishedExports = publishedExports.filter((entry) => !localExports.includes(entry));
-  const npmLatestMatchesLocalVersion = input.npmLatest.version === input.localPackage.version;
-  const currentSurfacePublished = input.npmLatest.status === 200 && npmLatestMatchesLocalVersion && missingLocalExports.length === 0;
-  const mcpRegistryAccepted = input.mcpRegistry.lookupStatus === 200;
-  const mcpRegistryDiscoverable = mcpRegistryAccepted && input.mcpRegistry.searchCount !== null && input.mcpRegistry.searchCount > 0;
-  const status = currentSurfacePublished && mcpRegistryDiscoverable ? "registry_discoverable" : "blocked";
-  return {
-    proofKind: "distribution_provenance_readback",
-    proofVersion: PROOF_PACKET_VERSION,
-    generatedAt: input.generatedAt,
-    status,
-    scope: "Public npm and MCP Registry readback for the current local package surface. Publication and registry discovery are distribution facts only.",
-    localPackage: {
-      ...input.localPackage,
-      exports: localExports
-    },
-    npmLatest: {
-      ...input.npmLatest,
-      exports: publishedExports,
-      missingLocalExports,
-      extraPublishedExports,
-      currentSurfacePublished
-    },
-    mcpRegistry: {
-      ...input.mcpRegistry,
-      accepted: mcpRegistryAccepted,
-      discoverable: mcpRegistryDiscoverable
-    },
-    publishAttempt: input.publishAttempt ?? null,
-    commandRefs: input.commandRefs,
-    evidenceRefs: input.evidenceRefs,
-    authorityBoundary: {
-      ...nonAuthorityBoundary,
-      holdsCustody: false,
-      hostsOperation: false,
-      certifiesMarketplace: false,
-      managesSettlement: false,
-      managesPayment: false,
-      establishesTrust: false,
-      enforcesHostWidePolicy: false
-    },
-    proofGaps: distributionProofGaps({
-      npmLatestStatus: input.npmLatest.status,
-      npmLatestMatchesLocalVersion,
-      missingLocalExports,
-      currentSurfacePublished,
-      mcpRegistryAccepted,
-      mcpRegistryDiscoverable,
-      publishAttempt: input.publishAttempt ?? null
-    }),
-    nextMechanism: currentSurfacePublished ? "Submit and verify MCP Registry publication for the current package version." : "Publish a new package version containing the current local export surface, then rerun npm and MCP Registry readback."
-  };
-}
+// src/surfaces/proof-packets/live-x402-requirement.ts
 function projectLiveX402RequirementReadback(input) {
   const paymentRequired = validatePaymentRequired(JSON.parse(Buffer.from(input.paymentRequiredHeader, "base64").toString("utf8")));
   if (!isPaymentRequiredV2(paymentRequired)) {
@@ -22096,6 +22955,11 @@ function projectLiveX402RequirementReadback(input) {
     throw new Error("The live x402 first wedge only admits exact requirements.");
   }
   const status = input.request.responseStatus === 402 && input.customerGatewayCustody.present ? "ready_for_gateway_signed_retry" : "blocked";
+  const selectedPaymentRequirementDigest = stableDigest({
+    paymentRequired,
+    selectedPaymentRequirementIndex: input.selectedPaymentRequirementIndex,
+    selectedPaymentRequirement
+  });
   return {
     proofKind: "live_x402_requirement_readback",
     proofVersion: PROOF_PACKET_VERSION,
@@ -22109,21 +22973,13 @@ function projectLiveX402RequirementReadback(input) {
       acceptsCount: paymentRequired.accepts.length,
       selectedPaymentRequirementIndex: input.selectedPaymentRequirementIndex,
       selectedPaymentRequirement,
-      selectedPaymentRequirementDigest: stableDigest({
-        paymentRequired,
-        selectedPaymentRequirementIndex: input.selectedPaymentRequirementIndex,
-        selectedPaymentRequirement
-      })
+      selectedPaymentRequirementDigest
     },
     customerGatewayCustody: input.customerGatewayCustody,
     commandRefs: input.commandRefs,
     evidenceRefs: [
       input.request.headersEvidenceRef,
-      `selected-payment-requirement:${stableDigest({
-        paymentRequired,
-        selectedPaymentRequirementIndex: input.selectedPaymentRequirementIndex,
-        selectedPaymentRequirement
-      })}`
+      `selected-payment-requirement:${selectedPaymentRequirementDigest}`
     ],
     authorityBoundary: {
       ...nonAuthorityBoundary,
@@ -22143,6 +22999,47 @@ function projectLiveX402RequirementReadback(input) {
     nextMechanism: input.customerGatewayCustody.present ? "Create one exact x402 action contract from the selected requirement and run a post-VerifiedGatewayCheck signed retry." : "Attach a funded customer-gateway custody packet before any live signed retry can be attempted."
   };
 }
+function liveX402ProofGaps(input) {
+  const gaps = [];
+  if (input.responseStatus !== 402) {
+    gaps.push(gap("live_x402_payment_required_not_observed", "The live endpoint did not return HTTP 402 in the captured response."));
+  }
+  if (!input.custodyPresent) {
+    gaps.push(gap("customer_gateway_custody_packet_absent", "A live 402 challenge does not prove customer-gateway-held signer custody."));
+  }
+  gaps.push(gap("live_paid_retry_not_performed", "No post-VerifiedGatewayCheck live x402 signed retry was performed."));
+  gaps.push(gap("settlement_finality_not_proven", "A challenge readback does not prove settlement finality or downstream business success."));
+  return gaps;
+}
+// src/surfaces/proof-packets/product-completion-contract/index.ts
+var PRODUCT_COMPLETION_READBACK_KIND = "product_completion_readback";
+var PRODUCT_COMPLETION_STATUSES = [
+  "completed",
+  "closed_with_hard_blocks",
+  "incomplete"
+];
+var PRODUCT_COMPLETION_GATE_IDS = [
+  "codex_local_host_activation",
+  "public_distribution_and_registry",
+  "customer_gateway_live_x402_paid_proof",
+  "auth_md_x402_admission_packet",
+  "dual_enforcement_posture",
+  "per_customer_bypass_scaffold"
+];
+var PRODUCT_COMPLETION_PACK_CHECK_EXPECT_STATUS = "incomplete";
+function assertProductCompletionGateIds(gateIds) {
+  const expected = new Set(PRODUCT_COMPLETION_GATE_IDS);
+  for (const gateId of gateIds) {
+    if (!expected.has(gateId)) {
+      throw new Error(`Unexpected product completion gate id: ${gateId}`);
+    }
+  }
+  if (gateIds.length !== PRODUCT_COMPLETION_GATE_IDS.length) {
+    throw new Error(`Product completion gate count mismatch: expected ${PRODUCT_COMPLETION_GATE_IDS.length}, got ${gateIds.length}`);
+  }
+}
+
+// src/surfaces/proof-packets/product-completion.ts
 function projectProductCompletionReadback(input) {
   const gateResults = [
     productCompletionGateResult({
@@ -22176,18 +23073,21 @@ function projectProductCompletionReadback(input) {
       hardBlocked: false,
       blockers: [],
       evidenceRefs: input.gates.authMdX402AdmissionPacket.evidenceRefs
-    })
+    }),
+    dualEnforcementPostureGateResult(input),
+    perCustomerBypassScaffoldGateResult(input)
   ];
+  assertProductCompletionGateIds(gateResults.map((result) => result.gateId));
   const incompleteGateIds = gateResults.filter((result) => result.status !== "completed" && result.status !== "hard_blocked").map((result) => result.gateId);
   const hardBlockedGateIds = gateResults.filter((result) => result.status === "hard_blocked").map((result) => result.gateId);
   const overclaimViolations = productCompletionOverclaimViolations(input);
   const status = input.qualityGate.passed && incompleteGateIds.length === 0 && overclaimViolations.length === 0 ? hardBlockedGateIds.length === 0 ? "completed" : "closed_with_hard_blocks" : "incomplete";
   return {
-    proofKind: "product_completion_readback",
+    proofKind: PRODUCT_COMPLETION_READBACK_KIND,
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
     status,
-    scope: "Aggregate source-owned closeout readback for the four product gates. This object audits evidence posture only; it creates no authority.",
+    scope: "Aggregate source-owned closeout readback for the product gates. This object audits evidence posture only; it creates no authority.",
     qualityGate: input.qualityGate,
     gates: gateResults,
     incompleteGateIds,
@@ -22212,72 +23112,37 @@ function projectProductCompletionReadback(input) {
     nextMechanism: status === "completed" ? "Move from local/product-surface closeout to hosted operation design." : hardBlockedGateIds.includes("public_distribution_and_registry") ? "Resolve public distribution: publish the current package with provenance support or explicitly accept the no-provenance release risk, then verify npm and MCP Registry readback." : "Resolve the remaining incomplete gate with source-owned evidence before claiming product closeout."
   };
 }
-function codexEvidenceRefs(input) {
-  const refs = [];
-  if (input.configSha256)
-    refs.push(`codex-config:sha256:${input.configSha256}`);
-  if (input.expectedArtifactSha256)
-    refs.push(`expected-artifact:sha256:${input.expectedArtifactSha256}`);
-  refs.push(input.targetPresent ? "codex-config:mcp-server:handshake_x402:present" : "codex-config:mcp-server:handshake_x402:absent");
-  return refs;
+function dualEnforcementPostureGateResult(input) {
+  const structuralEvidenceReady = input.gates.dualEnforcementPosture?.dualEnforcementPostureTestPassed === true && input.gates.dualEnforcementPosture?.mutationManifestGatingTestPassed === true;
+  const blockers = structuralEvidenceReady ? [] : [
+    "dual_enforcement_structural_evidence_absent",
+    "awaiting_test_architecture_dual_enforcement_posture",
+    "awaiting_test_architecture_http_handler_mutation_gating"
+  ];
+  return productCompletionGateResult({
+    gateId: "dual_enforcement_posture",
+    title: "Dual enforcement: admission identifies callers; adapter run*Gateway before mutation enforces",
+    completed: structuralEvidenceReady,
+    hardBlocked: false,
+    blockers,
+    evidenceRefs: input.gates.dualEnforcementPosture?.evidenceRefs ?? [
+      "evidence:phase-04:04-01",
+      "evidence:phase-04:04-11-deferred",
+      "evidence:test:dual-enforcement-posture"
+    ]
+  });
 }
-function codexProofGaps(input, targetPresent, hostToolInvocationObserved) {
-  const gaps = [];
-  const targetServer = parseCodexMcpServerRecords(input.configText ?? "").find((server) => server.name === (input.expectedServer?.name ?? "handshake_x402"));
-  const expectedServerMatches = input.expectedServer ? targetServer !== undefined && targetServer.command === input.expectedServer.command && arrayEquals(targetServer.args ?? [], input.expectedServer.args) : targetPresent;
-  if (!input.configExists) {
-    gaps.push(gap("codex_config_not_found", "Codex-local host activation cannot be claimed without readable host configuration."));
-  }
-  if (input.expectedArtifact && !input.expectedArtifact.exists) {
-    gaps.push(gap("expected_activation_artifact_not_found", "Codex-local host activation cannot be pinned to a missing local artifact."));
-  }
-  if (!targetPresent) {
-    gaps.push(gap("codex_handshake_x402_mcp_server_absent", "Codex-local host activation is not configured while `mcp_servers.handshake_x402` is absent."));
-  }
-  if (targetPresent && !expectedServerMatches) {
-    gaps.push(gap("codex_handshake_x402_mcp_server_config_mismatch", "Codex-local host activation cannot be pinned while the configured command or args differ from the expected artifact-derived executable."));
-  }
-  if (!hostToolInvocationObserved) {
-    gaps.push(gap("host_origin_tool_invocation_not_exercised", "Config readback does not prove `handshake.actions.x402_payment.propose` was invoked through the live host."));
-  }
-  return gaps;
-}
-function distributionProofGaps(input) {
-  const gaps = [];
-  if (input.npmLatestStatus !== 200) {
-    gaps.push(gap("npm_latest_readback_failed", "Current package distribution cannot be claimed without npm registry readback."));
-  }
-  if (input.npmLatestStatus === 200 && !input.npmLatestMatchesLocalVersion) {
-    gaps.push(gap("npm_latest_version_does_not_match_local", "The local package version is not the public latest version."));
-  }
-  if (input.missingLocalExports.length > 0) {
-    gaps.push(gap("npm_latest_missing_current_local_exports", `Public npm latest does not include current local exports: ${input.missingLocalExports.join(", ")}.`));
-  }
-  if (!input.currentSurfacePublished) {
-    gaps.push(gap("current_surface_not_publicly_published", "Public npm availability does not yet prove the current local product surface."));
-  }
-  if (!input.mcpRegistryAccepted) {
-    gaps.push(gap("mcp_registry_lookup_not_accepted", "MCP Registry direct lookup does not return the Handshake server."));
-  }
-  if (!input.mcpRegistryDiscoverable) {
-    gaps.push(gap("mcp_registry_discoverability_not_verified", "MCP Registry search/discovery does not prove the Handshake server is discoverable."));
-  }
-  if (input.publishAttempt?.attempted === true && input.publishAttempt.provenanceRequested && input.publishAttempt.status === "failed" && input.publishAttempt.provenanceSupported === false) {
-    gaps.push(gap("npm_provenance_generation_unsupported", "npm rejected trusted provenance generation in this local provider context; publishing without provenance requires explicit release-risk acceptance."));
-  }
-  return gaps;
-}
-function liveX402ProofGaps(input) {
-  const gaps = [];
-  if (input.responseStatus !== 402) {
-    gaps.push(gap("live_x402_payment_required_not_observed", "The live endpoint did not return HTTP 402 in the captured response."));
-  }
-  if (!input.custodyPresent) {
-    gaps.push(gap("customer_gateway_custody_packet_absent", "A live 402 challenge does not prove customer-gateway-held signer custody."));
-  }
-  gaps.push(gap("live_paid_retry_not_performed", "No post-VerifiedGatewayCheck live x402 signed retry was performed."));
-  gaps.push(gap("settlement_finality_not_proven", "A challenge readback does not prove settlement finality or downstream business success."));
-  return gaps;
+function perCustomerBypassScaffoldGateResult(input) {
+  const gate = input.gates.perCustomerBypassScaffold;
+  const dogfoodReady = gate?.firstPartyDogfoodCustomerId === "handshake-internal-dogfood" && gate.customerOnboardingRef !== null && gate.customerOnboardingRef.length > 0;
+  return productCompletionGateResult({
+    gateId: "per_customer_bypass_scaffold",
+    title: "Per-customer service-workflow-admission bypass scaffold (first-party dogfood only)",
+    completed: false,
+    hardBlocked: !dogfoodReady && gate?.customerOnboardingRef === null,
+    blockers: dogfoodReady ? [] : ["per_customer_bypass_scaffold_incomplete", "customer_onboarding_ref_absent"],
+    evidenceRefs: gate?.evidenceRefs ?? ["evidence:phase-04:D-25-scaffold"]
+  });
 }
 function productCompletionGateResult(input) {
   const status = input.completed ? "completed" : input.hardBlocked ? "hard_blocked" : "incomplete";
@@ -22309,144 +23174,183 @@ function productCompletionOverclaimViolations(input) {
     violations.push("quality_gate_not_passing");
   return violations.sort();
 }
-function gap(reasonCode, nonClaim) {
-  return { reasonCode, nonClaim };
+// src/surfaces/service-workflow-admission/index.ts
+var sha256DigestSchema = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var serviceWorkflowAdmissionSchemaVersion = "handshake.service-workflow-admission.v0.1";
+var principalAgentLinkSchemaVersion = "handshake.principal-agent-link.v0.1";
+var serviceWorkflowClaimStatuses = ["accepted", "refused", "stale", "proof_gap", "quarantined"];
+var serviceWorkflowNextActionRequirements = [
+  "fresh_action_contract_required",
+  "reload_evidence_required",
+  "replace_evidence_required",
+  "keep_blocked",
+  "stop_and_isolate"
+];
+var ServiceWorkflowAuthorityBoundarySchema = exports_external.strictObject({
+  createsAuthority: exports_external.literal(false),
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  permitsMutation: exports_external.literal(false),
+  exportsReceipt: exports_external.literal(false),
+  mintsTerminalCertificate: exports_external.literal(false),
+  containsCredentialMaterial: exports_external.literal(false),
+  containsPaymentMaterial: exports_external.literal(false),
+  widensOperatingEnvelope: exports_external.literal(false),
+  isReusableAuth: exports_external.literal(false),
+  isGatewayBinding: exports_external.literal(false),
+  freshActionContractRequired: exports_external.literal(true)
+});
+var serviceWorkflowAuthorityBoundary = {
+  createsAuthority: false,
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  permitsMutation: false,
+  exportsReceipt: false,
+  mintsTerminalCertificate: false,
+  containsCredentialMaterial: false,
+  containsPaymentMaterial: false,
+  widensOperatingEnvelope: false,
+  isReusableAuth: false,
+  isGatewayBinding: false,
+  freshActionContractRequired: true
+};
+var ServiceWorkflowContextRefsSchema = exports_external.strictObject({
+  passportPackageDigest: sha256DigestSchema,
+  passportPresentationId: exports_external.string().min(1),
+  admissionId: exports_external.string().min(1),
+  serviceWorkflowHandleId: exports_external.string().min(1),
+  serviceWorkflowHandleDigest: sha256DigestSchema
+});
+var PrincipalAgentLinkSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(principalAgentLinkSchemaVersion),
+  principalAgentLinkId: exports_external.string().min(1),
+  principalAgentLinkDigest: sha256DigestSchema,
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  projectId: exports_external.string().min(1).nullable(),
+  workspaceId: exports_external.string().min(1).nullable(),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  principalSubjectDigest: sha256DigestSchema,
+  agentSubjectDigest: sha256DigestSchema,
+  authProviderRef: exports_external.string().min(1),
+  linkEvidenceRefs: exports_external.array(exports_external.string().min(1)),
+  scopeRefs: exports_external.array(exports_external.string().min(1)),
+  issuedAt: exports_external.string().datetime({ offset: true }),
+  expiresAt: exports_external.string().datetime({ offset: true }).nullable(),
+  revokedAt: exports_external.string().datetime({ offset: true }).nullable(),
+  authorityBoundary: ServiceWorkflowAuthorityBoundarySchema,
+  createsAuthority: exports_external.literal(false),
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  permitsMutation: exports_external.literal(false),
+  exportsReceipt: exports_external.literal(false),
+  mintsTerminalCertificate: exports_external.literal(false),
+  containsCredentialMaterial: exports_external.literal(false),
+  containsPaymentMaterial: exports_external.literal(false),
+  widensOperatingEnvelope: exports_external.literal(false),
+  isReusableAuth: exports_external.literal(false),
+  isGatewayBinding: exports_external.literal(false),
+  freshActionContractRequired: exports_external.literal(true),
+  allowedUse: exports_external.literal("scoped_evidence_for_envelope_setup_and_readback_only")
+});
+var ServiceWorkflowClaimResultSchema = exports_external.strictObject({
+  claimRef: exports_external.string().min(1),
+  claimDigest: sha256DigestSchema.nullable(),
+  status: exports_external.enum(serviceWorkflowClaimStatuses),
+  reasonCodes: exports_external.array(exports_external.string().min(2)),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)),
+  proofGapRefs: exports_external.array(exports_external.string().min(1))
+});
+var ServiceWorkflowRuntimePostureSchema = exports_external.strictObject({
+  runtimeRef: exports_external.string().min(1),
+  hostProfileEvidenceRef: exports_external.string().min(1).nullable(),
+  rawSiblingBypassPostureRef: exports_external.string().min(1).nullable(),
+  nativeContainmentClaimed: exports_external.literal(false),
+  proofGapRefs: exports_external.array(exports_external.string().min(1))
+});
+var ServiceWorkflowHandleSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(serviceWorkflowAdmissionSchemaVersion),
+  passportPackageDigest: sha256DigestSchema,
+  passportPresentationId: exports_external.string().min(1),
+  admissionId: exports_external.string().min(1),
+  serviceWorkflowHandleId: exports_external.string().min(1),
+  serviceWorkflowHandleDigest: sha256DigestSchema,
+  issuedAt: exports_external.string().datetime({ offset: true }),
+  expiresAt: exports_external.string().datetime({ offset: true }).nullable(),
+  workflowBoundsDigest: sha256DigestSchema,
+  sourceAdmissionDigest: sha256DigestSchema,
+  runtimePostureDigest: sha256DigestSchema.nullable(),
+  authorityBoundary: ServiceWorkflowAuthorityBoundarySchema,
+  nextProtectedActionRequirement: exports_external.literal("fresh_action_contract_required"),
+  allowedUse: exports_external.literal("correlation_and_readback_context_only")
+});
+var ServiceWorkflowAdmissionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(serviceWorkflowAdmissionSchemaVersion),
+  passportPackageDigest: sha256DigestSchema,
+  passportPresentationId: exports_external.string().min(1),
+  admissionId: exports_external.string().min(1),
+  admissionDigest: sha256DigestSchema,
+  serviceRef: exports_external.string().min(1),
+  presentedAt: exports_external.string().datetime({ offset: true }),
+  evaluatedAt: exports_external.string().datetime({ offset: true }),
+  claimResults: exports_external.array(ServiceWorkflowClaimResultSchema),
+  runtimePosture: exports_external.array(ServiceWorkflowRuntimePostureSchema),
+  serviceWorkflowHandle: ServiceWorkflowHandleSchema,
+  authorityBoundary: ServiceWorkflowAuthorityBoundarySchema,
+  nextActionRequirement: exports_external.enum(serviceWorkflowNextActionRequirements),
+  clearanceBoundary: exports_external.literal("fresh_action_contract_required_for_each_protected_action"),
+  readbackBoundary: exports_external.literal("admission_readback_is_not_receipt_evidence")
+});
+function serviceWorkflowNonAuthorityBoundary() {
+  return ServiceWorkflowAuthorityBoundarySchema.parse(serviceWorkflowAuthorityBoundary);
 }
-function parseTomlSections(configText) {
-  const sections = [];
-  let current = null;
-  for (const line of configText.split(/\r?\n/u)) {
-    const header = parseTomlHeader(line);
-    if (header) {
-      if (current)
-        sections.push(current);
-      current = {
-        name: header.name,
-        kind: header.kind,
-        body: []
-      };
-      continue;
-    }
-    if (current)
-      current.body.push(line);
-  }
-  if (current)
-    sections.push(current);
-  return sections;
-}
-function parseTomlHeader(line) {
-  const trimmed = line.trim();
-  const mcpServer = /^\[mcp_servers\.([^\].\n]+)\]$/u.exec(trimmed);
-  if (mcpServer?.[1])
-    return { name: mcpServer[1], kind: "mcp_server" };
-  const mcpServerEnv = /^\[mcp_servers\.([^\].\n]+)\.env\]$/u.exec(trimmed);
-  if (mcpServerEnv?.[1])
-    return { name: mcpServerEnv[1], kind: "mcp_server_env" };
-  if (/^\[.+\]$/u.test(trimmed))
-    return { name: trimmed, kind: "other" };
-  return null;
-}
-function parseCodexMcpServerEnvKeys(sections, serverName) {
-  return sections.filter((section) => section.kind === "mcp_server_env" && section.name === serverName).flatMap((section) => section.body.flatMap((line) => {
-    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/u.exec(line);
-    return match?.[1] ? [match[1]] : [];
-  })).sort();
-}
-function parseTomlStringField(lines, key) {
-  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(".*")\\s*$`, "u");
-  for (const line of lines) {
-    const match = pattern.exec(line);
-    if (!match?.[1])
-      continue;
-    try {
-      const value = JSON.parse(match[1]);
-      return typeof value === "string" ? value : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-function parseTomlStringArrayField(lines, key) {
-  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(\\[.*\\])\\s*$`, "u");
-  for (const line of lines) {
-    const match = pattern.exec(line);
-    if (!match?.[1])
-      continue;
-    try {
-      const value = JSON.parse(match[1]);
-      return Array.isArray(value) && value.every((entry) => typeof entry === "string") ? value : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-function parseTomlNumberField(lines, key) {
-  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*([0-9]+)\\s*$`, "u");
-  for (const line of lines) {
-    const match = pattern.exec(line);
-    if (!match?.[1])
-      continue;
-    const value = Number.parseInt(match[1], 10);
-    return Number.isFinite(value) ? value : null;
-  }
-  return null;
-}
-function lastMcpSectionEndIndex(lines) {
-  let lastMcpHeaderIndex = -1;
-  lines.forEach((line, index2) => {
-    const header = parseTomlHeader(line);
-    if (header?.kind === "mcp_server" || header?.kind === "mcp_server_env")
-      lastMcpHeaderIndex = index2;
+function serviceWorkflowContextRefFromHandle(handle) {
+  return ServiceWorkflowContextRefsSchema.parse({
+    passportPackageDigest: handle.passportPackageDigest,
+    passportPresentationId: handle.passportPresentationId,
+    admissionId: handle.admissionId,
+    serviceWorkflowHandleId: handle.serviceWorkflowHandleId,
+    serviceWorkflowHandleDigest: handle.serviceWorkflowHandleDigest
   });
-  if (lastMcpHeaderIndex === -1) {
-    const firstSectionIndex = lines.findIndex((line) => parseTomlHeader(line) !== null);
-    return firstSectionIndex === -1 ? lines.length : firstSectionIndex;
-  }
-  let index = lastMcpHeaderIndex + 1;
-  while (index < lines.length && !parseTomlHeader(lines[index] ?? ""))
-    index += 1;
-  return index;
 }
-function isCodexMcpServerHeader(header, serverName) {
-  return (header.kind === "mcp_server" || header.kind === "mcp_server_env") && header.name === serverName;
+function serviceWorkflowContextEvidenceRefs(contextRefs) {
+  const parsed = ServiceWorkflowContextRefsSchema.parse(contextRefs);
+  return [
+    `service-workflow-context:passport-package:${parsed.passportPackageDigest}`,
+    `service-workflow-context:presentation:${parsed.passportPresentationId}`,
+    `service-workflow-context:admission:${parsed.admissionId}`,
+    `service-workflow-context:handle:${parsed.serviceWorkflowHandleId}`,
+    `service-workflow-context:handle-digest:${parsed.serviceWorkflowHandleDigest}`
+  ];
 }
-function trimTrailingBlankLines(lines) {
-  const output = [...lines];
-  while (output.length > 0 && output.at(-1)?.trim() === "")
-    output.pop();
-  return output;
+function serviceWorkflowContextCorrelationRef(contextRefs) {
+  return `service-workflow-context:${ServiceWorkflowContextRefsSchema.parse(contextRefs).serviceWorkflowHandleId}`;
 }
-function trimLeadingBlankLines(lines) {
-  const output = [...lines];
-  while (output.length > 0 && output[0]?.trim() === "")
-    output.shift();
-  return output;
-}
-function tomlString(value) {
-  return JSON.stringify(value);
-}
-function arrayEquals(left, right) {
-  return left.length === right.length && left.every((entry, index) => entry === right[index]);
-}
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-function stableDigest(value) {
-  return `sha256:${sha256Text(stableStringify(value))}`;
-}
-function sha256Text(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-function stableStringify(value) {
-  if (Array.isArray(value))
-    return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    const record2 = value;
-    return `{${Object.keys(record2).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record2[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
+
+// src/surfaces/proof-packets/per-customer-bypass-scaffold/index.ts
+var firstPartyDogfoodAllowlist = new Set(["handshake-internal-dogfood"]);
+function projectPerCustomerBypassScaffoldReadback(input) {
+  const proofGaps = input.customerOnboardingRef === null ? [gap("customer_onboarding_ref_absent", "Per-customer bypass evidence is absent for this customer.")] : [];
+  const dogfoodReady = input.firstPartyDogfoodCustomerId !== null && firstPartyDogfoodAllowlist.has(input.firstPartyDogfoodCustomerId) && input.customerOnboardingRef !== null;
+  const status = dogfoodReady ? "observed_scaffold_only" : "blocked";
+  return {
+    proofKind: "per_customer_bypass_scaffold",
+    proofVersion: PROOF_PACKET_VERSION,
+    generatedAt: input.generatedAt,
+    status,
+    customerOnboardingRef: input.customerOnboardingRef,
+    proofGaps,
+    commandRefs: input.commandRefs,
+    authorityBoundary: {
+      ...nonAuthorityBoundary,
+      ...serviceWorkflowAuthorityBoundary
+    },
+    nextMechanism: status === "observed_scaffold_only" ? "Capture named first-party dogfood bypass packet before claiming per-customer containment." : "Provide customer onboarding ref for per-customer bypass scaffold; integrators stay incomplete."
+  };
 }
 // src/surfaces/release-proof.ts
 var PackageReleaseStateSchema = exports_external.enum([
@@ -22637,6 +23541,991 @@ function dedupeProofGaps(proofGaps) {
   for (const proofGap of proofGaps)
     byReasonCode.set(proofGap.reasonCode, proofGap);
   return [...byReasonCode.values()].sort((left, right) => left.reasonCode.localeCompare(right.reasonCode));
+}
+// src/protocol/navigation/index.ts
+var integratorParityTransitionIds = [
+  "registerToolCapability",
+  "registerActionType",
+  "registerGatewayRegistryEntry",
+  "registerOperatingEnvelope",
+  "registerInstallProposalCompiledRecords",
+  "registerDelegatedAuthorityRef",
+  "compileIntent",
+  "proposeActionContract",
+  "evaluatePolicy",
+  "gatewayCheck",
+  "reconcileSurfaceOperation"
+];
+var integratorParityIds = new Set(integratorParityTransitionIds);
+var protocolNavigation = [
+  catalogEntry("registerToolCapability", "tool_capability"),
+  catalogEntry("registerActionType", "action_type"),
+  catalogEntry("registerGatewayRegistryEntry", "gateway_registry_entry"),
+  catalogEntry("registerOperatingEnvelope", "operating_envelope"),
+  {
+    integratorParity: true,
+    transitionId: "registerInstallProposalCompiledRecords",
+    kernelMethod: "registerInstallProposalCompiledRecords",
+    phase: "install_setup",
+    outcomeClasses: ["recorded", "refusal", "conflict"],
+    recordsWritten: [
+      "tool_capability",
+      "action_type",
+      "gateway_registry_entry",
+      "operating_envelope",
+      "refusal",
+      "contract_stream_event"
+    ],
+    eventsEmitted: ["install_setup_recorded", "install_setup_refused"],
+    authorityBoundary: "install setup evidence only",
+    evidenceObligation: "atomically register compiled setup records or refusal without issuing policy, greenlight, gate, credential, mutation, receipt, or certificate authority"
+  },
+  {
+    integratorParity: true,
+    transitionId: "compileIntent",
+    kernelMethod: "compileIntent",
+    phase: "intent_compilation",
+    outcomeClasses: ["recorded", "refusal"],
+    recordsWritten: ["intent_compilation", "contract_stream_event"],
+    eventsEmitted: ["intent_compiled"],
+    authorityBoundary: "candidate evidence only",
+    evidenceObligation: "record uncertainty or compiler refusal before any ActionContract exists"
+  },
+  {
+    transitionId: "createGeneratedExecutionGraph",
+    kernelMethod: "createGeneratedExecutionGraph",
+    phase: "generated_execution_graph",
+    outcomeClasses: ["recorded", "refusal"],
+    recordsWritten: ["generated_execution_graph", "contract_stream_event"],
+    eventsEmitted: ["generated_execution_graph_recorded"],
+    authorityBoundary: "generated graph evidence only",
+    evidenceObligation: "record block coverage, redaction posture, terminal reasons, and graph issuer custody"
+  },
+  {
+    transitionId: "createRuntimeExecution",
+    kernelMethod: "createRuntimeExecution",
+    phase: "runtime_evidence",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["runtime_execution", "contract_stream_event"],
+    eventsEmitted: ["runtime_execution_recorded"],
+    authorityBoundary: "runtime evidence only",
+    evidenceObligation: "record execution-block shape without issuing policy, greenlight, gate, or mutation authority"
+  },
+  {
+    transitionId: "registerGatewayCredentialRef",
+    kernelMethod: "registerGatewayCredentialRef",
+    phase: "credential_custody",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["gateway_credential_ref", "contract_stream_event"],
+    eventsEmitted: ["gateway_credential_ref_registered"],
+    authorityBoundary: "gateway credential custody evidence only",
+    evidenceObligation: "record opaque gateway credential ref without exposing secret material or minting authority"
+  },
+  {
+    integratorParity: true,
+    transitionId: "registerDelegatedAuthorityRef",
+    kernelMethod: "registerDelegatedAuthorityRef",
+    phase: "delegated_authority",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["delegated_authority_ref", "contract_stream_event"],
+    eventsEmitted: ["delegated_authority_ref_registered"],
+    authorityBoundary: "delegated authority evidence only",
+    evidenceObligation: "record principal-scoped attempt authority bounds without issuing policy, greenlight, gate, or mutation authority"
+  },
+  {
+    transitionId: "transitionDelegatedAuthorityStatus",
+    kernelMethod: "transitionDelegatedAuthorityStatus",
+    phase: "delegated_authority",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["delegated_authority_status_transition", "isolation_state", "contract_stream_event"],
+    eventsEmitted: ["delegated_authority_status_changed", "isolation_changed"],
+    authorityBoundary: "future authority reduction only",
+    evidenceObligation: "record terminal delegated authority status and authority-ref isolation without minting mutation authority"
+  },
+  {
+    transitionId: "recordGatewayCustodyProofPacket",
+    kernelMethod: "recordGatewayCustodyProofPacket",
+    phase: "credential_custody",
+    outcomeClasses: ["recorded", "refusal", "proof_gap"],
+    recordsWritten: ["gateway_custody_proof_packet", "contract_stream_event"],
+    eventsEmitted: ["gateway_custody_proof_packet_recorded"],
+    authorityBoundary: "redacted gateway custody proof evidence only",
+    evidenceObligation: "bind credential ref, protected-path posture, bypass probes, drift, and redaction posture without issuing policy, greenlight, gate, or mutation authority"
+  },
+  {
+    transitionId: "recordCredentialResolutionEvidence",
+    kernelMethod: "recordCredentialResolutionEvidence",
+    phase: "credential_custody",
+    outcomeClasses: ["recorded", "refusal", "proof_gap"],
+    recordsWritten: ["credential_resolution_evidence", "contract_stream_event"],
+    eventsEmitted: ["credential_resolution_recorded"],
+    authorityBoundary: "post-gate credential resolution evidence only",
+    evidenceObligation: "bind credential resolution/use evidence to exact contract, greenlight, and passed gateway check without exposing secret material"
+  },
+  {
+    transitionId: "createBypassProbe",
+    kernelMethod: "createBypassProbe",
+    phase: "protected_path_posture",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["bypass_probe", "contract_stream_event"],
+    eventsEmitted: ["bypass_probe_recorded"],
+    authorityBoundary: "bypass probe evidence only",
+    evidenceObligation: "record protected-path probe outcome without issuing posture, policy, greenlight, or mutation authority"
+  },
+  {
+    transitionId: "createToolCallDraft",
+    kernelMethod: "createToolCallDraft",
+    phase: "intent_compilation",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["tool_call_draft", "contract_stream_event"],
+    eventsEmitted: ["tool_call_draft_recorded"],
+    authorityBoundary: "tool call draft evidence only",
+    evidenceObligation: "open generated tool-call input state without issuing candidate or execution authority"
+  },
+  {
+    transitionId: "transitionToolCallDraft",
+    kernelMethod: "transitionToolCallDraft",
+    phase: "intent_compilation",
+    outcomeClasses: ["recorded", "refusal"],
+    recordsWritten: ["tool_call_draft", "contract_stream_event"],
+    eventsEmitted: ["tool_call_draft_recorded"],
+    authorityBoundary: "tool call draft evidence only",
+    evidenceObligation: "transition generated tool-call input state monotonically without issuing candidate or execution authority"
+  },
+  {
+    transitionId: "createProtectedPathPosture",
+    kernelMethod: "createProtectedPathPosture",
+    phase: "protected_path_posture",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["protected_path_posture", "contract_stream_event"],
+    eventsEmitted: ["protected_path_posture_recorded"],
+    authorityBoundary: "protected path posture evidence only",
+    evidenceObligation: "record current posture consulted later by policy and gateway checks"
+  },
+  {
+    integratorParity: true,
+    transitionId: "proposeActionContract",
+    kernelMethod: "proposeActionContract",
+    phase: "action_contract",
+    outcomeClasses: ["recorded", "refusal", "conflict"],
+    recordsWritten: [
+      "action_contract",
+      "recovery_recommendation_status_transition",
+      "proof_gap",
+      "contract_stream_event"
+    ],
+    eventsEmitted: ["action_proposed", "recovery_status_changed", "proof_gap_recorded"],
+    authorityBoundary: "proposed exact action only",
+    evidenceObligation: "bind a contractable candidate or record refusal/proof-gap evidence"
+  },
+  {
+    transitionId: "recordNegotiationSession",
+    kernelMethod: "recordNegotiationSession",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["negotiation_session", "contract_stream_event"],
+    eventsEmitted: ["negotiation_session_recorded"],
+    authorityBoundary: "negotiation context evidence only",
+    evidenceObligation: "record parties, runtime posture, assumptions, uncertainty, and imported protocol evidence without issuing policy, greenlight, gate, mutation, receipt, or certificate authority"
+  },
+  {
+    transitionId: "recordNegotiationOffer",
+    kernelMethod: "recordNegotiationOffer",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["negotiation_offer", "contract_stream_event"],
+    eventsEmitted: ["negotiation_offer_recorded"],
+    authorityBoundary: "offer evidence only",
+    evidenceObligation: "record a specific offer version and reconstruction refs without turning accepted terms into protected-action authority"
+  },
+  {
+    transitionId: "recordNegotiationDecision",
+    kernelMethod: "recordNegotiationDecision",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["negotiation_decision", "contract_stream_event"],
+    eventsEmitted: ["negotiation_decision_recorded"],
+    authorityBoundary: "decision evidence only",
+    evidenceObligation: "record accept, reject, counter, withdraw, or expire against one current offer version without issuing an action contract or greenlight"
+  },
+  {
+    transitionId: "recordLinkedAgreement",
+    kernelMethod: "recordLinkedAgreement",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["linked_agreement", "contract_stream_event"],
+    eventsEmitted: ["linked_agreement_recorded"],
+    authorityBoundary: "accepted agreement evidence only",
+    evidenceObligation: "bind the accepted decision, offer digest, accepting party, and counterparty ref without authorizing any mutation"
+  },
+  {
+    transitionId: "recordAgreementObligationBinding",
+    kernelMethod: "recordAgreementObligationBinding",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["agreement_obligation_binding", "contract_stream_event"],
+    eventsEmitted: ["agreement_obligation_binding_recorded"],
+    authorityBoundary: "obligation-to-contract evidence only",
+    evidenceObligation: "bind one active agreement obligation to one exact action contract digest, params digest, action type, resource, and counterparty before policy may consider it"
+  },
+  {
+    transitionId: "transitionAgreementStatus",
+    kernelMethod: "transitionAgreementStatus",
+    phase: "negotiation",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["agreement_status_transition", "contract_stream_event"],
+    eventsEmitted: ["agreement_status_transition_recorded"],
+    authorityBoundary: "agreement lifecycle evidence only",
+    evidenceObligation: "record withdrawal, dispute, expiry, supersession, or resolution so future policy can refuse stale agreement-backed contracts"
+  },
+  {
+    transitionId: "createAuthorityCertificate",
+    kernelMethod: "createAuthorityCertificate",
+    phase: "authority_certificate",
+    outcomeClasses: ["exported"],
+    recordsWritten: ["authority_certificate", "contract_stream_event"],
+    eventsEmitted: ["authority_certificate_emitted"],
+    authorityBoundary: "terminal signed evidence only",
+    evidenceObligation: "sign canonical terminal evidence after receipt, durable refusal, proof-gap, or replay-refusal terminalization"
+  },
+  {
+    integratorParity: true,
+    transitionId: "evaluatePolicy",
+    kernelMethod: "evaluatePolicy",
+    phase: "policy",
+    outcomeClasses: ["greenlight", "refusal", "review_required", "proof_gap", "conflict"],
+    recordsWritten: [
+      "policy_decision",
+      "greenlight",
+      "refusal",
+      "proof_gap",
+      "idempotency_ledger_entry",
+      "contract_stream_event"
+    ],
+    eventsEmitted: [
+      "policy_decision_recorded",
+      "action_greenlit",
+      "action_refused",
+      "review_required",
+      "proof_gap_recorded",
+      "idempotency_ledger_recorded"
+    ],
+    authorityBoundary: "policy decision and optional one-use greenlight",
+    evidenceObligation: "bind exact contract, envelope, isolation, sequence, protected-path, credential, readiness, policy-version, and idempotency evidence"
+  },
+  {
+    transitionId: "createReviewArtifact",
+    kernelMethod: "createReviewArtifact",
+    phase: "review",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["review_artifact", "contract_stream_event"],
+    eventsEmitted: ["review_artifact_recorded"],
+    authorityBoundary: "review rendering evidence only",
+    evidenceObligation: "bind rendered artifact to exact contract and policy input digests"
+  },
+  {
+    transitionId: "createReviewDecision",
+    kernelMethod: "createReviewDecision",
+    phase: "review",
+    outcomeClasses: ["recorded", "refusal"],
+    recordsWritten: ["review_decision", "contract_stream_event"],
+    eventsEmitted: ["review_decision_recorded"],
+    authorityBoundary: "review decision evidence only",
+    evidenceObligation: "bind decision to the exact review artifact and policy input"
+  },
+  {
+    integratorParity: true,
+    transitionId: "gatewayCheck",
+    kernelMethod: "gatewayCheck",
+    phase: "gateway",
+    outcomeClasses: ["recorded", "proof_gap", "replay_refusal", "conflict"],
+    recordsWritten: [
+      "gateway_check_attempt",
+      "mutation_attempt",
+      "protected_surface_operation_claim",
+      "receipt",
+      "proof_gap",
+      "contract_stream_event"
+    ],
+    eventsEmitted: [
+      "gateway_checked",
+      "gateway_refused",
+      "mutation_attempted",
+      "protected_surface_operation_claimed",
+      "receipt_emitted",
+      "proof_gap_recorded"
+    ],
+    authorityBoundary: "one exact gateway-checked mutation attempt",
+    evidenceObligation: "reload contract, greenlight, posture, isolation, sequence, and gateway policy before mutation"
+  },
+  {
+    integratorParity: true,
+    transitionId: "reconcileSurfaceOperation",
+    kernelMethod: "reconcileSurfaceOperation",
+    phase: "operation_lifecycle",
+    outcomeClasses: ["recorded", "proof_gap", "recovery"],
+    recordsWritten: ["surface_operation_reconciliation", "proof_gap", "contract_stream_event"],
+    eventsEmitted: [
+      "surface_operation_reconciled",
+      "protected_surface_operation_released",
+      "proof_gap_recorded",
+      "proof_gap_resolved"
+    ],
+    authorityBoundary: "downstream observation only",
+    evidenceObligation: "observe finality or record proof gap without authorizing retry mutation"
+  },
+  {
+    transitionId: "createIsolationState",
+    kernelMethod: "createIsolationState",
+    phase: "isolation",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["isolation_state", "contract_stream_event"],
+    eventsEmitted: ["isolation_changed"],
+    authorityBoundary: "future authority reduction only",
+    evidenceObligation: "record isolation state that later policy and gateway checks must consult"
+  },
+  {
+    transitionId: "createBreakerDecision",
+    kernelMethod: "createBreakerDecision",
+    phase: "isolation",
+    outcomeClasses: ["recorded"],
+    recordsWritten: ["breaker_decision", "isolation_state", "contract_stream_event"],
+    eventsEmitted: ["breaker_decision_recorded", "isolation_changed"],
+    authorityBoundary: "watermark-bound halt/quarantine decision",
+    evidenceObligation: "record observed stream watermark and resulting isolation state atomically"
+  },
+  {
+    transitionId: "createReceiptExport",
+    kernelMethod: "createReceiptExport",
+    phase: "receipt_export",
+    outcomeClasses: ["exported", "refusal"],
+    recordsWritten: ["receipt_export", "contract_stream_event"],
+    eventsEmitted: ["receipt_exported"],
+    authorityBoundary: "existing receipt packaging only",
+    evidenceObligation: "bind stored receipt digest without creating execution proof"
+  },
+  {
+    transitionId: "createRecoveryRecommendation",
+    kernelMethod: "createRecoveryRecommendation",
+    phase: "recovery",
+    outcomeClasses: ["recovery", "refusal"],
+    recordsWritten: ["recovery_recommendation", "contract_stream_event"],
+    eventsEmitted: ["recovery_recommended"],
+    authorityBoundary: "recovery recommendation only",
+    evidenceObligation: "derive narrower future path from refusal or proof-gap evidence without inheriting greenlight"
+  },
+  {
+    transitionId: "transitionRecoveryRecommendationStatus",
+    kernelMethod: "transitionRecoveryRecommendationStatus",
+    phase: "recovery",
+    outcomeClasses: ["recorded", "conflict"],
+    recordsWritten: ["recovery_recommendation_status_transition", "proof_gap", "contract_stream_event"],
+    eventsEmitted: ["recovery_status_changed", "proof_gap_recorded"],
+    authorityBoundary: "recovery status evidence only",
+    evidenceObligation: "record terminal status races as proof gaps instead of silently choosing a winner"
+  },
+  {
+    transitionId: "resolveRecoveryTerminalConflictProofGap",
+    kernelMethod: "resolveRecoveryTerminalConflictProofGap",
+    phase: "recovery",
+    outcomeClasses: ["recovery"],
+    recordsWritten: [
+      "proof_gap",
+      "recovery_recommendation_status_transition",
+      "recovery_recommendation",
+      "contract_stream_event"
+    ],
+    eventsEmitted: ["proof_gap_resolved"],
+    authorityBoundary: "proof-gap resolution only",
+    evidenceObligation: "bind terminal-conflict proof gap to observed winning terminal evidence"
+  }
+];
+var protocolNavigationByTransitionId = Object.fromEntries(protocolNavigation.map((entry) => [entry.transitionId, entry]));
+function catalogEntry(transitionId, objectType2) {
+  return {
+    integratorParity: integratorParityIds.has(transitionId),
+    transitionId,
+    kernelMethod: "putCatalogObject",
+    phase: "catalog",
+    outcomeClasses: ["recorded", "idempotent", "conflict"],
+    recordsWritten: [objectType2],
+    eventsEmitted: [],
+    authorityBoundary: "catalog availability only",
+    evidenceObligation: "same-id replacement must have the same canonical digest"
+  };
+}
+// src/protocol/areas/action-attempt-lifecycle/matrix.ts
+var catalogRecorded = {
+  phase: "observation",
+  state: "catalog_registered",
+  authorityEffect: "evidence_only",
+  terminalOutcome: "evidence_only"
+};
+var negotiationRecorded = {
+  phase: "negotiation",
+  state: "negotiation_recorded",
+  authorityEffect: "evidence_only",
+  terminalOutcome: "open"
+};
+var negotiationConflict = {
+  phase: "negotiation",
+  state: "negotiation_conflict",
+  authorityEffect: "none",
+  terminalOutcome: "proof_gap"
+};
+var actionAttemptHostileTraceMatrix = {
+  unknown_consequential_tool: entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "unknown consequential tool evidence must refuse before candidate contractability"),
+  raw_sibling_mutation_path: entry({
+    phase: "observation",
+    state: "bypass_risk_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "raw shell, browser, package, network, filesystem, or MCP sibling paths remain bypass-risk evidence only"),
+  dynamic_tool_or_params: entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "dynamic tool names or dynamically constructed consequential params must refuse before contract proposal"),
+  stale_or_abandoned_draft: entry({
+    phase: "drafting",
+    state: "draft_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "stale or abandoned drafts cannot compile into authority"),
+  hidden_lifecycle_side_effect: entry({
+    phase: "downstream",
+    state: "downstream_proof_gap",
+    authorityEffect: "downstream_evidence",
+    terminalOutcome: "terminal_unknown"
+  }, "hidden lifecycle side effects remain terminal-unknown evidence until recovery resolves them"),
+  changed_payment_requirements: entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "changed payment requirements must refuse before the exact contract can be proposed"),
+  missing_downstream_response: entry({
+    phase: "downstream",
+    state: "downstream_proof_gap",
+    authorityEffect: "downstream_evidence",
+    terminalOutcome: "proof_gap"
+  }, "missing downstream response records proof gap instead of downstream success"),
+  params_mismatch: entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "parameter mismatches stop as refusal before the mismatched consequence can execute")
+};
+var actionAttemptLifecycleMatrix = {
+  "registerToolCapability:recorded": entry(catalogRecorded, "catalog entry was registered as proposal shape evidence"),
+  "registerToolCapability:idempotent": entry(catalogRecorded, "existing catalog entry was reused without new authority"),
+  "registerToolCapability:conflict": entry({ ...catalogRecorded, state: "catalog_conflict", terminalOutcome: "refusal" }, "catalog conflict blocks proposal-shape registration"),
+  "registerActionType:recorded": entry(catalogRecorded, "action type was registered as proposal shape evidence"),
+  "registerActionType:idempotent": entry(catalogRecorded, "existing action type was reused without new authority"),
+  "registerActionType:conflict": entry({ ...catalogRecorded, state: "catalog_conflict", terminalOutcome: "refusal" }, "action type conflict blocks proposal-shape registration"),
+  "registerGatewayRegistryEntry:recorded": entry(catalogRecorded, "gateway registry entry was registered as protected-surface evidence"),
+  "registerGatewayRegistryEntry:idempotent": entry(catalogRecorded, "existing gateway registry entry was reused without new authority"),
+  "registerGatewayRegistryEntry:conflict": entry({ ...catalogRecorded, state: "catalog_conflict", terminalOutcome: "refusal" }, "gateway registry conflict blocks proposal-shape registration"),
+  "registerOperatingEnvelope:recorded": entry(catalogRecorded, "operating envelope was registered as bounds evidence"),
+  "registerOperatingEnvelope:idempotent": entry(catalogRecorded, "existing operating envelope was reused without new authority"),
+  "registerOperatingEnvelope:conflict": entry({ ...catalogRecorded, state: "catalog_conflict", terminalOutcome: "refusal" }, "operating envelope conflict blocks bounds registration"),
+  "registerInstallProposalCompiledRecords:recorded": entry(catalogRecorded, "compiled install proposal records were atomically registered as setup evidence"),
+  "registerInstallProposalCompiledRecords:refusal": entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "refused install proposals record refusal evidence without partial catalog writes"),
+  "registerInstallProposalCompiledRecords:conflict": entry({ ...catalogRecorded, state: "catalog_conflict", terminalOutcome: "refusal" }, "same-id different-digest install records block the entire setup commit"),
+  "createRuntimeExecution:recorded": entry({
+    phase: "observation",
+    state: "runtime_observed",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "runtime evidence records observed execution shape only"),
+  "createGeneratedExecutionGraph:recorded": entry({
+    phase: "observation",
+    state: "generated_graph_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "generated graph records code/spec evidence only"),
+  "createGeneratedExecutionGraph:refusal": entry({
+    phase: "observation",
+    state: "bypass_risk_recorded",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "unsafe generated graph evidence terminates as refusal or proof gap before contract"),
+  "registerGatewayCredentialRef:recorded": entry({
+    phase: "observation",
+    state: "credential_custody_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "gateway credential ref records custody evidence only and cannot expose credential material"),
+  "registerDelegatedAuthorityRef:recorded": entry({
+    phase: "observation",
+    state: "authority_scope_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "delegated authority ref records principal-scoped attempt bounds without minting greenlight or mutation authority"),
+  "recordGatewayCustodyProofPacket:recorded": entry({
+    phase: "observation",
+    state: "credential_custody_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "gateway custody proof packet records redacted custody posture evidence without minting authority"),
+  "recordGatewayCustodyProofPacket:refusal": entry({
+    phase: "observation",
+    state: "credential_custody_recorded",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "gateway custody proof packet failures refuse weak custody evidence before policy or gateway authority"),
+  "recordGatewayCustodyProofPacket:proof_gap": entry({
+    phase: "observation",
+    state: "credential_custody_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "proof_gap"
+  }, "gateway custody proof packet uncertainty remains evidence instead of permission"),
+  "recordCredentialResolutionEvidence:recorded": entry({
+    phase: "gateway",
+    state: "credential_custody_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "credential resolution evidence binds to a passed gateway check without minting new authority"),
+  "recordCredentialResolutionEvidence:refusal": entry({
+    phase: "gateway",
+    state: "gateway_conflict",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "credential resolution evidence that cannot bind to the exact passed gate is refused"),
+  "recordCredentialResolutionEvidence:proof_gap": entry({
+    phase: "gateway",
+    state: "gateway_proof_gap",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "proof_gap"
+  }, "credential resolution uncertainty remains proof-gap evidence instead of execution proof"),
+  "createBypassProbe:recorded": entry({
+    phase: "observation",
+    state: "bypass_risk_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "bypass probe records protected-path posture evidence only"),
+  "createToolCallDraft:recorded": entry({
+    phase: "drafting",
+    state: "draft_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "tool-call draft records generated parameter state only"),
+  "transitionToolCallDraft:recorded": entry({
+    phase: "drafting",
+    state: "draft_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "draft transition remains proposal evidence until later candidate validation"),
+  "transitionToolCallDraft:refusal": entry({
+    phase: "drafting",
+    state: "draft_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "stale, invalid, or abandoned draft cannot compile into authority"),
+  "createProtectedPathPosture:recorded": entry({
+    phase: "observation",
+    state: "protected_path_posture_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "protected-path posture is consulted later but does not authorize by itself"),
+  "compileIntent:recorded": entry({
+    phase: "compilation",
+    state: "candidate_compiled",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "compiled candidate is validated proposal evidence only"),
+  "compileIntent:refusal": entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "invalid or overreaching candidate stops before contract"),
+  "proposeActionContract:recorded": entry({
+    phase: "contract",
+    state: "contract_proposed",
+    authorityEffect: "proposed_commitment",
+    terminalOutcome: "contract"
+  }, "action contract is exact proposed commitment, not execution authority"),
+  "proposeActionContract:refusal": entry({
+    phase: "contract",
+    state: "contract_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "contract proposal refusal stops before policy authority"),
+  "proposeActionContract:conflict": entry({
+    phase: "contract",
+    state: "contract_conflict",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "contract conflict records proof gap instead of choosing hidden authority"),
+  "recordNegotiationSession:recorded": entry(negotiationRecorded, "negotiation session records context evidence only and cannot create protected-action authority"),
+  "recordNegotiationSession:conflict": entry(negotiationConflict, "negotiation session conflicts block evidence recording without selecting hidden authority"),
+  "recordNegotiationOffer:recorded": entry(negotiationRecorded, "negotiation offer records one specific offer version as evidence only"),
+  "recordNegotiationOffer:conflict": entry(negotiationConflict, "negotiation offer conflicts block stale or ambiguous offer evidence before authority"),
+  "recordNegotiationDecision:recorded": entry(negotiationRecorded, "negotiation decision records acceptance or refusal evidence without minting an action contract"),
+  "recordNegotiationDecision:conflict": entry(negotiationConflict, "negotiation decision conflicts block stale decisions before authority"),
+  "recordLinkedAgreement:recorded": entry(negotiationRecorded, "linked agreement records accepted-offer evidence without policy, greenlight, gateway, or mutation authority"),
+  "recordLinkedAgreement:conflict": entry(negotiationConflict, "linked agreement conflicts block mismatched accepted-offer evidence"),
+  "recordAgreementObligationBinding:recorded": entry(negotiationRecorded, "agreement obligation binding records one active obligation to one exact action contract before policy may evaluate it"),
+  "recordAgreementObligationBinding:conflict": entry(negotiationConflict, "agreement obligation binding conflicts block stale or mismatched contract evidence before greenlight"),
+  "transitionAgreementStatus:recorded": entry(negotiationRecorded, "agreement status transition records lifecycle evidence that future policy checks must consult"),
+  "transitionAgreementStatus:conflict": entry(negotiationConflict, "agreement status conflicts block stale lifecycle evidence without smoothing it over"),
+  "createAuthorityCertificate:exported": entry({
+    phase: "projection",
+    state: "authority_certificate_exported",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "projection"
+  }, "authority certificate signs existing terminal evidence only and cannot create execution authority"),
+  "evaluatePolicy:greenlight": entry({
+    phase: "policy",
+    state: "policy_greenlit",
+    authorityEffect: "one_use_authority",
+    terminalOutcome: "open"
+  }, "policy greenlight creates one-use authority that still requires gateway admission"),
+  "evaluatePolicy:refusal": entry({
+    phase: "policy",
+    state: "policy_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "policy refusal is durable terminal evidence"),
+  "evaluatePolicy:review_required": entry({
+    phase: "policy",
+    state: "review_required",
+    authorityEffect: "none",
+    terminalOutcome: "open"
+  }, "review requirement pauses authority until exact review binding resolves"),
+  "evaluatePolicy:proof_gap": entry({
+    phase: "policy",
+    state: "policy_proof_gap",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "policy evidence gaps record explicit non-authority instead of issuing a greenlight"),
+  "evaluatePolicy:conflict": entry({
+    phase: "policy",
+    state: "policy_conflict",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "policy conflict records uncertainty instead of issuing authority"),
+  "createReviewArtifact:recorded": entry({
+    phase: "review",
+    state: "review_artifact_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "rendered review artifact is bound evidence only"),
+  "createReviewDecision:recorded": entry({
+    phase: "review",
+    state: "review_decision_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "open"
+  }, "review decision records exact human decision evidence only"),
+  "createReviewDecision:refusal": entry({
+    phase: "review",
+    state: "review_decision_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "stale or mismatched review decision cannot authorize"),
+  "gatewayCheck:recorded": entry({
+    phase: "gateway",
+    state: "gateway_admitted",
+    authorityEffect: "gateway_admission",
+    terminalOutcome: "receipt"
+  }, "gateway admission is the mutation boundary for one exact attempt"),
+  "gatewayCheck:proof_gap": entry({
+    phase: "gateway",
+    state: "gateway_proof_gap",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "gateway uncertainty records proof gap rather than silently admitting"),
+  "gatewayCheck:replay_refusal": entry({
+    phase: "gateway",
+    state: "gateway_replayed",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "greenlight replay is refused without mutation"),
+  "gatewayCheck:conflict": entry({
+    phase: "gateway",
+    state: "gateway_conflict",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "gateway commit conflict blocks admission or records uncertainty"),
+  "reconcileSurfaceOperation:recorded": entry({
+    phase: "downstream",
+    state: "operation_reconciled",
+    authorityEffect: "downstream_evidence",
+    terminalOutcome: "closed"
+  }, "downstream reconciliation observes outcome without authorizing retry mutation"),
+  "reconcileSurfaceOperation:proof_gap": entry({
+    phase: "downstream",
+    state: "downstream_proof_gap",
+    authorityEffect: "downstream_evidence",
+    terminalOutcome: "proof_gap"
+  }, "unknown downstream outcome remains explicit proof gap"),
+  "reconcileSurfaceOperation:recovery": entry({
+    phase: "downstream",
+    state: "downstream_recovery_available",
+    authorityEffect: "downstream_evidence",
+    terminalOutcome: "recovery"
+  }, "reconciliation may recommend recovery without inheriting greenlight"),
+  "createIsolationState:recorded": entry({
+    phase: "isolation",
+    state: "isolation_recorded",
+    authorityEffect: "future_authority_reduction",
+    terminalOutcome: "isolation"
+  }, "isolation state reduces future authority only"),
+  "transitionDelegatedAuthorityStatus:recorded": entry({
+    phase: "isolation",
+    state: "authority_status_recorded",
+    authorityEffect: "future_authority_reduction",
+    terminalOutcome: "isolation"
+  }, "terminal delegated authority status creates authority-ref isolation for future checks"),
+  "createBreakerDecision:recorded": entry({
+    phase: "isolation",
+    state: "breaker_recorded",
+    authorityEffect: "future_authority_reduction",
+    terminalOutcome: "isolation"
+  }, "breaker decision records halt/quarantine evidence for future checks"),
+  "createReceiptExport:exported": entry({
+    phase: "projection",
+    state: "receipt_exported",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "projection"
+  }, "receipt export packages existing evidence only"),
+  "createReceiptExport:refusal": entry({
+    phase: "projection",
+    state: "receipt_export_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "receipt export refusal cannot create execution proof"),
+  "createRecoveryRecommendation:recovery": entry({
+    phase: "recovery",
+    state: "recovery_recommended",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "recovery"
+  }, "recovery recommendation derives a future path without inheriting authority"),
+  "createRecoveryRecommendation:refusal": entry({
+    phase: "recovery",
+    state: "recovery_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "invalid recovery request refuses before any future action"),
+  "transitionRecoveryRecommendationStatus:recorded": entry({
+    phase: "recovery",
+    state: "recovery_status_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "closed"
+  }, "recovery status transition is evidence only"),
+  "transitionRecoveryRecommendationStatus:conflict": entry({
+    phase: "recovery",
+    state: "recovery_conflict",
+    authorityEffect: "none",
+    terminalOutcome: "proof_gap"
+  }, "recovery terminal conflict records proof gap"),
+  "resolveRecoveryTerminalConflictProofGap:recovery": entry({
+    phase: "recovery",
+    state: "proof_gap_resolved",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "recovery"
+  }, "proof-gap resolution records observed recovery evidence only")
+};
+function actionAttemptLifecycleKey(transitionId, outcomeClass) {
+  return `${transitionId}:${outcomeClass}`;
+}
+function actionAttemptLifecycleEntry(transitionId, outcomeClass) {
+  const key = actionAttemptLifecycleKey(transitionId, outcomeClass);
+  const lifecycleEntry = actionAttemptLifecycleMatrix[key];
+  if (!lifecycleEntry)
+    throw new Error(`Missing ActionAttemptLifecycle entry for ${key}.`);
+  return { transitionId, outcomeClass, ...lifecycleEntry };
+}
+function entry(value, evidenceObligation) {
+  return ActionAttemptLifecycleEntrySchema.parse({ ...value, evidenceObligation });
+}
+// src/surfaces/service-workflow-lifecycle-projections/index.ts
+var serviceWorkflowCorrelationFieldNames = [
+  "passportPackageDigest",
+  "passportPresentationId",
+  "admissionId",
+  "serviceWorkflowHandleId",
+  "serviceWorkflowHandleDigest"
+];
+var serviceWorkflowCorrelationFieldBoundaries = [
+  {
+    fieldName: "passportPackageDigest",
+    allowedUse: "content-addressed correlation with the evidence bundle the agent presented",
+    forbiddenInterpretation: "identity, trust, permission, or reusable auth",
+    createsAuthority: false
+  },
+  {
+    fieldName: "passportPresentationId",
+    allowedUse: "unique correlation for one service intake or presentation event",
+    forbiddenInterpretation: "principal approval, spend approval, or gateway admission",
+    createsAuthority: false
+  },
+  {
+    fieldName: "admissionId",
+    allowedUse: "service-side readback reference for accepted, refused, stale, proof-gap, or quarantined intake",
+    forbiddenInterpretation: "policy decision, greenlight, gateway check, receipt, or mutation permission",
+    createsAuthority: false
+  },
+  {
+    fieldName: "serviceWorkflowHandleId",
+    allowedUse: "workflow context correlation for later proposal/readback",
+    forbiddenInterpretation: "bearer token, tool permission, retry permission, credential, or payment approval",
+    createsAuthority: false
+  },
+  {
+    fieldName: "serviceWorkflowHandleDigest",
+    allowedUse: "content-addressed reconstruction reference for the non-authority handle",
+    forbiddenInterpretation: "proof of authorization, proof of gateway acceptance, or proof of execution",
+    createsAuthority: false
+  }
+];
+var serviceWorkflowProjectionKinds = [
+  "passport",
+  "service_workflow_admission",
+  "service_workflow_handle",
+  "clearance",
+  "outcome",
+  "authority_certificate"
+];
+var noLifecycleKeys = [];
+var serviceWorkflowLifecycleProjections = [
+  {
+    projectionKind: "passport",
+    productNoun: "Passport",
+    sourceAuthorityStage: "pre_contract_evidence_context",
+    allowedUse: "present an evidence package for service intake and reconstruction",
+    forbiddenInterpretations: ["identity", "trust", "permission", "spend approval", "signer access", "reusable auth"],
+    createsAuthority: false,
+    lifecycleKeys: noLifecycleKeys,
+    preContractContextRefs: [
+      "participant_identity_binding:evidence_only",
+      "gateway_custody_packet:evidence_only",
+      "protected_path_posture:evidence_only"
+    ]
+  },
+  {
+    projectionKind: "service_workflow_admission",
+    productNoun: "ServiceWorkflowAdmission",
+    sourceAuthorityStage: "pre_contract_evidence_context",
+    allowedUse: "record service-side accepted, refused, stale, proof-gap, or quarantined intake readback",
+    forbiddenInterpretations: [
+      "policy decision",
+      "greenlight",
+      "gateway check",
+      "receipt",
+      "certificate",
+      "mutation permission"
+    ],
+    createsAuthority: false,
+    lifecycleKeys: noLifecycleKeys,
+    preContractContextRefs: ["passportPackageDigest", "passportPresentationId", "admissionId"]
+  },
+  {
+    projectionKind: "service_workflow_handle",
+    productNoun: "ServiceWorkflowHandle",
+    sourceAuthorityStage: "pre_contract_evidence_context",
+    allowedUse: "carry correlation and readback context into later fresh proposals",
+    forbiddenInterpretations: [
+      "badge-as-bearer-token",
+      "tool permission",
+      "retry permission",
+      "x402 payment approval",
+      "auth.md credential",
+      "gateway pass"
+    ],
+    createsAuthority: false,
+    lifecycleKeys: noLifecycleKeys,
+    preContractContextRefs: ["serviceWorkflowHandleId", "serviceWorkflowHandleDigest"]
+  },
+  {
+    projectionKind: "clearance",
+    productNoun: "Clearance",
+    sourceAuthorityStage: "fresh_protected_action_path",
+    allowedUse: "name the fresh exact protected-action path for one event",
+    forbiddenInterpretations: ["workflow-level permission", "reusable auth", "aggregate spend approval"],
+    createsAuthority: false,
+    lifecycleKeys: [
+      "proposeActionContract:recorded",
+      "proposeActionContract:refusal",
+      "proposeActionContract:conflict",
+      "evaluatePolicy:greenlight",
+      "evaluatePolicy:refusal",
+      "evaluatePolicy:review_required",
+      "evaluatePolicy:proof_gap",
+      "evaluatePolicy:conflict",
+      "gatewayCheck:recorded",
+      "gatewayCheck:proof_gap",
+      "gatewayCheck:replay_refusal",
+      "gatewayCheck:conflict"
+    ],
+    preContractContextRefs: []
+  },
+  {
+    projectionKind: "outcome",
+    productNoun: "Outcome",
+    sourceAuthorityStage: "terminal_readback",
+    allowedUse: "read receipt, refusal, replay refusal, proof gap, downstream uncertainty, or recovery posture",
+    forbiddenInterpretations: [
+      "downstream business success",
+      "future permission",
+      "new greenlight",
+      "receipt substitute"
+    ],
+    createsAuthority: false,
+    lifecycleKeys: [
+      "evaluatePolicy:refusal",
+      "evaluatePolicy:proof_gap",
+      "gatewayCheck:recorded",
+      "gatewayCheck:proof_gap",
+      "gatewayCheck:replay_refusal",
+      "gatewayCheck:conflict",
+      "reconcileSurfaceOperation:recorded",
+      "reconcileSurfaceOperation:proof_gap",
+      "reconcileSurfaceOperation:recovery",
+      "createReceiptExport:exported",
+      "createReceiptExport:refusal",
+      "createRecoveryRecommendation:recovery",
+      "createRecoveryRecommendation:refusal"
+    ],
+    preContractContextRefs: []
+  },
+  {
+    projectionKind: "authority_certificate",
+    productNoun: "AuthorityCertificate",
+    sourceAuthorityStage: "terminal_evidence_projection",
+    allowedUse: "sign existing terminal evidence for one event",
+    forbiddenInterpretations: ["permission", "identity", "settlement", "hosted trust", "reusable auth"],
+    createsAuthority: false,
+    lifecycleKeys: ["createAuthorityCertificate:exported"],
+    preContractContextRefs: []
+  }
+];
+var forbiddenServiceWorkflowAuthorityNouns = ["Badge"];
+function serviceWorkflowProjectionByKind(projectionKind) {
+  const projection = serviceWorkflowLifecycleProjections.find((entry2) => entry2.projectionKind === projectionKind);
+  if (!projection)
+    throw new Error(`Unknown service workflow projection kind: ${projectionKind}`);
+  return projection;
+}
+function serviceWorkflowLifecycleEntriesFor(projectionKind) {
+  return serviceWorkflowProjectionByKind(projectionKind).lifecycleKeys.map(actionAttemptLifecycleEntryForKey);
+}
+function actionAttemptLifecycleEntryForKey(key) {
+  const [transitionId, outcomeClass] = key.split(":");
+  return actionAttemptLifecycleEntry(transitionId, outcomeClass);
 }
 // src/surfaces/x402-protected-tool-acceptance.ts
 var X402_PROTECTED_TOOL_ACCEPTANCE_VERSION = "handshake.product.x402-protected-tool-acceptance.v1";
@@ -22921,7 +24810,23 @@ export {
   surfaceBoundaryManifestVersion,
   surfaceBoundaryManifest,
   surfaceAuthorityPostures,
+  stableDigest,
+  serviceWorkflowProjectionKinds,
+  serviceWorkflowProjectionByKind,
+  serviceWorkflowNonAuthorityBoundary,
+  serviceWorkflowNextActionRequirements,
+  serviceWorkflowLifecycleProjections,
+  serviceWorkflowLifecycleEntriesFor,
+  serviceWorkflowCorrelationFieldNames,
+  serviceWorkflowCorrelationFieldBoundaries,
+  serviceWorkflowContextRefFromHandle,
+  serviceWorkflowContextEvidenceRefs,
+  serviceWorkflowContextCorrelationRef,
+  serviceWorkflowClaimStatuses,
+  serviceWorkflowAuthorityBoundary,
+  serviceWorkflowAdmissionSchemaVersion,
   projectProductCompletionReadback,
+  projectPerCustomerBypassScaffoldReadback,
   projectPackageReleaseProof,
   projectLiveX402RequirementReadback,
   projectDistributionProvenanceReadback,
@@ -22930,16 +24835,28 @@ export {
   projectActivationGateReport,
   productLaunchGateResolutions,
   productLaunchGateResolutionFor,
+  principalAgentLinkSchemaVersion,
   parseCodexMcpServerRecords,
   parseCodexMcpServerNames,
   packageReleaseAuthorityBoundary,
   nonContractSurfaceOutcomeKinds,
   nonAuthorityBoundary,
+  gap,
+  forbiddenServiceWorkflowAuthorityNouns,
+  escapeRegExp,
   buildCodexMcpServerTomlBlock,
+  assertProductCompletionGateIds,
+  arrayEquals,
   activationGateAuthorityBoundary,
   X402_PROTECTED_TOOL_ACCEPTANCE_VERSION,
   SurfaceOutcomeSchema,
   SurfaceOutcomeCommonSchema,
+  ServiceWorkflowRuntimePostureSchema,
+  ServiceWorkflowHandleSchema,
+  ServiceWorkflowContextRefsSchema,
+  ServiceWorkflowClaimResultSchema,
+  ServiceWorkflowAuthorityBoundarySchema,
+  ServiceWorkflowAdmissionSchema,
   RuntimeSmokeProofSchema,
   RegistryDiscoverabilityProofSchema,
   PublishOperationProofSchema,
@@ -22947,6 +24864,7 @@ export {
   ProductLaunchGateResolutionStatusSchema,
   ProductLaunchGateResolutionSchema,
   ProductLaunchGateIdSchema,
+  PrincipalAgentLinkSchema,
   PackageShapeProofSchema,
   PackageReleaseStateSchema,
   PackageReleaseProofSchema,
@@ -22954,6 +24872,10 @@ export {
   PackageReleaseProofGapSchema,
   PackageReleaseAuthorityBoundarySchema,
   PROOF_PACKET_VERSION,
+  PRODUCT_COMPLETION_STATUSES,
+  PRODUCT_COMPLETION_READBACK_KIND,
+  PRODUCT_COMPLETION_PACK_CHECK_EXPECT_STATUS,
+  PRODUCT_COMPLETION_GATE_IDS,
   NonContractOutcomeSchema,
   ActivationGateVerdictSchema,
   ActivationGateSuccessCriterionSchema,

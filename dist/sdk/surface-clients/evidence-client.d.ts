@@ -1,4 +1,4 @@
-import type { AgentTransactionEnvelopeProjection, ContractEvidenceProjection, GeneratedGraphEvidenceProjection, IdempotencyRecoveryProjection, ProtectedPathInstallHealthProjection, ReceiptTimelineProjection } from "../../protocol/public/schemas";
+import type { AgentTransactionEnvelopeProjection, ContractEvidenceProjection, GeneratedGraphEvidenceProjection, IdempotencyRecoveryProjection, OperationCorrelationIndex, OperationReadbackProjection, ProtectedPathInstallHealthProjection, ReceiptTimelineProjection } from "../../protocol/public/schemas";
 import { type VerifyAuthorityCertificateResult } from "../../protocol/areas/authority-certificate/verify";
 import type { TransitionCallerRole } from "../../http/admission/caller-auth";
 import type { HandshakeFetch } from "../client";
@@ -12,9 +12,12 @@ export declare class EvidenceClient {
     constructor(baseUrl: string, options: EvidenceClientOptions, fetchImpl?: HandshakeFetch);
     getGeneratedGraphEvidenceProjection(generatedExecutionGraphId: string): Promise<GeneratedGraphEvidenceProjection>;
     getContractEvidenceProjection(actionContractId: string): Promise<ContractEvidenceProjection>;
+    getOperationReadbackProjection(actionContractId: string): Promise<OperationReadbackProjection>;
+    getOperationCorrelationIndex(actionContractId: string): Promise<OperationCorrelationIndex>;
     getAgentTransactionEnvelopeProjection(actionContractId: string): Promise<AgentTransactionEnvelopeProjection>;
     getIdempotencyRecoveryProjection(actionContractId: string): Promise<IdempotencyRecoveryProjection>;
     getReceiptTimelineProjection(receiptId: string): Promise<ReceiptTimelineProjection>;
     getProtectedPathInstallHealthProjection(actionContractId: string): Promise<ProtectedPathInstallHealthProjection>;
     verifyAuthorityCertificate(certificate: unknown, trustMaterial: unknown): Promise<VerifyAuthorityCertificateResult>;
 }
+export declare function fetchOperationReadbackProjection(client: EvidenceClient, actionContractId: string): Promise<OperationReadbackProjection>;

@@ -1,6 +1,6 @@
 {
   "name": "handshake-protocol-kernel",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Protected action infrastructure for automated decision making: protocol kernel, CLI evidence views, and local MCP proposal/evidence server.",
   "license": "Apache-2.0",
   "mcpName": "io.github.CreasyBear/handshake-protocol-kernel",
@@ -48,6 +48,11 @@
       "types": "./dist/sdk/surface-clients/index.d.ts",
       "import": "./dist/sdk/surface-clients/index.mjs",
       "default": "./dist/sdk/surface-clients/index.mjs"
+    },
+    "./surfaces/a2a-negotiation-readback": {
+      "types": "./dist/surfaces/a2a-negotiation-readback/index.d.ts",
+      "import": "./dist/surfaces/a2a-negotiation-readback/index.mjs",
+      "default": "./dist/surfaces/a2a-negotiation-readback/index.mjs"
     },
     "./cli": {
       "types": "./dist/cli/index.d.ts",

@@ -36,6 +36,12 @@ export declare const ContractStreamEventSchema: z.ZodObject<{
         idempotency_ledger_recorded: "idempotency_ledger_recorded";
         bypass_probe_recorded: "bypass_probe_recorded";
         tool_call_draft_recorded: "tool_call_draft_recorded";
+        negotiation_session_recorded: "negotiation_session_recorded";
+        negotiation_offer_recorded: "negotiation_offer_recorded";
+        negotiation_decision_recorded: "negotiation_decision_recorded";
+        linked_agreement_recorded: "linked_agreement_recorded";
+        agreement_obligation_binding_recorded: "agreement_obligation_binding_recorded";
+        agreement_status_transition_recorded: "agreement_status_transition_recorded";
         action_proposed: "action_proposed";
         policy_decision_recorded: "policy_decision_recorded";
         action_greenlit: "action_greenlit";

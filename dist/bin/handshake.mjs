@@ -12,7 +12,7 @@ var __export = (target, all) => {
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // src/cli/main.ts
-import { readFile as readFile2 } from "node:fs/promises";
+import { readFile as readFile3 } from "node:fs/promises";
 
 // node_modules/zod/v4/classic/external.js
 var exports_external = {};
@@ -14301,7 +14301,8 @@ var cliNonClaims = [
   "broad MCP/CLI/browser/shell/network control",
   "marketplace certification",
   "clearing-house readiness",
-  "cross-org AuthorityCertificate trust"
+  "cross-org AuthorityCertificate trust",
+  "service workflow admission or handle authority"
 ];
 function cliOutput(input) {
   return {
@@ -14445,6 +14446,7 @@ var ActionAttemptLifecyclePhaseSchema = exports_external.enum([
   "drafting",
   "compilation",
   "contract",
+  "negotiation",
   "policy",
   "review",
   "gateway",
@@ -14471,6 +14473,8 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "contract_proposed",
   "contract_refused",
   "contract_conflict",
+  "negotiation_recorded",
+  "negotiation_conflict",
   "policy_greenlit",
   "policy_refused",
   "policy_proof_gap",
@@ -15127,6 +15131,21 @@ var GeneratedGraphEvidenceProjectionSchema = exports_external.strictObject({
   redactionPosture: GraphRedactionStatusSchema,
   graphDigest: DigestSchema
 });
+// src/protocol/foundation/transition-guards.ts
+function ok() {
+  return { ok: true };
+}
+function fail(code, message) {
+  return { ok: false, code, message, status: 409 };
+}
+
+// src/protocol/areas/catalog-envelope/guards.ts
+function guardCatalogRegistration(record2) {
+  if (record2.objectType === "tool_capability" || record2.objectType === "action_type" || record2.objectType === "gateway_registry_entry" || record2.objectType === "operating_envelope") {
+    return ok();
+  }
+  return fail("invalid_transition_direct_protocol_write", `Direct writes are not allowed for protocol object type ${record2.objectType}. Use the protocol lifecycle method instead.`);
+}
 // src/protocol/areas/protected-path-posture/schemas.ts
 var ProtectedPathStateSchema = exports_external.enum(["gateway_checked", "advisory", "bypass_risk", "blind", "fixture_only"]);
 var RawSiblingToolStatusSchema = exports_external.enum(["absent", "blocked", "present", "unknown"]);
@@ -15220,6 +15239,7 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   expiresAt: exports_external.string().datetime({ offset: true })
 });
 // src/protocol/foundation/canonical.ts
+var CANONICALIZER_VERSION = "handshake-jcs-lite-0.2";
 function canonicalize(value) {
   if (value === null)
     return "null";
@@ -15243,6 +15263,19 @@ async function digestCanonical(value) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return `sha256:${toHex(digest)}`;
 }
+async function protectedActionParamsDigest(input) {
+  const material = {
+    parameters: JSON.parse(JSON.stringify(input.parameters)),
+    secretRefs: input.secretRefs ?? {}
+  };
+  if (input.gatewayCredentialRefs && input.gatewayCredentialRefs.length > 0) {
+    material.gatewayCredentialRefs = JSON.parse(JSON.stringify(input.gatewayCredentialRefs));
+  }
+  if (input.delegatedAuthorityRefs && input.delegatedAuthorityRefs.length > 0) {
+    material.delegatedAuthorityRefs = JSON.parse(JSON.stringify(input.delegatedAuthorityRefs));
+  }
+  return digestCanonical(material);
+}
 async function signCanonicalHmac(value, secret) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(canonicalize(value)));
@@ -15250,6 +15283,22 @@ async function signCanonicalHmac(value, secret) {
 }
 function toHex(buffer) {
   return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
+function createId(prefix) {
+  const id = protocolIdSourceStorage.getStore()?.createId?.(prefix);
+  if (id)
+    return id;
+  return `${prefix}_${crypto.randomUUID()}`;
+}
+function nowIso() {
+  const now = protocolIdSourceStorage.getStore()?.nowIso?.();
+  if (now)
+    return now;
+  return new Date().toISOString();
 }
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
@@ -15270,6 +15319,48 @@ var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
   observedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/areas/protected-path-posture/scope.ts
+function protectedPathPostureScopeKeyForContract(contract) {
+  return protectedPathPostureScopeKey({
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    runtimeAdapterId: contract.runtimeAdapterId,
+    gatewayId: contract.gatewayId,
+    actionClass: contract.actionClass,
+    resourceRef: contract.resourceRef
+  });
+}
+function protectedPathPostureScopeKey(input) {
+  return [
+    `tenant:${input.tenantId}`,
+    `org:${input.organizationId}`,
+    `runtime:${input.runtimeAdapterId}`,
+    `gateway:${input.gatewayId}`,
+    `action:${input.actionClass}`,
+    `resource:${input.resourceRef}`
+  ].join("|");
+}
+// src/protocol/foundation/errors.ts
+class HandshakeProtocolError extends Error {
+  code;
+  status;
+  metadata;
+  constructor(code, message, status = 400, metadata = {}) {
+    super(message);
+    this.code = code;
+    this.status = status;
+    this.metadata = metadata;
+  }
+}
+
+class HandshakeAmbiguousCommitError extends HandshakeProtocolError {
+  constructor(message = "Transition commit result is ambiguous.") {
+    super("ambiguous_commit", message, 503, {
+      retryability: "ambiguous",
+      commitState: "unknown"
+    });
+  }
+}
 // src/protocol/areas/credential-custody/inputs.ts
 var RegisterGatewayCredentialRefInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -15343,6 +15434,795 @@ var RecordGatewayCustodyProofPacketInputSchema = exports_external.strictObject({
   recordedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/areas/credential-custody/custody-posture.ts
+function credentialCustodyCanSatisfyGatewayChecked(credentialCustodyStatus) {
+  return ["gateway_held", "fixture_gateway_held", "gateway_resolved_from_vault", "provider_gateway_held"].includes(credentialCustodyStatus);
+}
+// src/protocol/areas/credential-custody/transitions.ts
+async function registerGatewayCredentialRef(recorder, inputValue) {
+  const input = RegisterGatewayCredentialRefInputSchema.parse(inputValue);
+  const record2 = await buildGatewayCredentialRef(input);
+  await recorder.commitRecordsWithEvents(gatewayCredentialRefRecords(record2), gatewayCredentialRefEvents(record2));
+  return record2;
+}
+async function recordCredentialResolutionEvidence(recorder, inputValue) {
+  const input = RecordCredentialResolutionEvidenceInputSchema.parse(inputValue);
+  const context = await loadResolutionEvidenceContext(recorder, input);
+  assertResolutionEvidenceContext(context);
+  const evidence = await buildCredentialResolutionEvidence(context);
+  await recorder.commitRecordsWithEvents(credentialResolutionEvidenceRecords(evidence), [
+    credentialResolutionEvidenceEvent(evidence)
+  ]);
+  return evidence;
+}
+async function recordGatewayCustodyProofPacket(recorder, inputValue) {
+  const input = RecordGatewayCustodyProofPacketInputSchema.parse(inputValue);
+  const context = await loadCustodyProofPacketContext(recorder, input);
+  assertCustodyProofPacketContext(context);
+  const packet = await buildGatewayCustodyProofPacket(context);
+  await recorder.commitRecordsWithEvents(gatewayCustodyProofPacketRecords(packet), [
+    gatewayCustodyProofPacketEvent(packet)
+  ]);
+  return packet;
+}
+async function evaluateGatewayCredentialBindings(store, contract, now) {
+  const records = [];
+  const policyInput = [];
+  for (const binding of contract.gatewayCredentialRefs) {
+    const record2 = await store.getRecord("gateway_credential_ref", binding.gatewayCredentialRefId);
+    const ref = record2?.payload ?? null;
+    if (record2)
+      records.push(record2);
+    policyInput.push(credentialBindingPolicyInput(binding, ref, now));
+    const failure = evaluateGatewayCredentialBinding(contract, binding, ref, now);
+    if (failure)
+      return { ok: false, records, policyInput, ...failure };
+  }
+  return { ok: true, records, policyInput };
+}
+function evaluateGatewayCredentialBinding(contract, binding, ref, now) {
+  if (!ref) {
+    return {
+      reasonCode: "gateway_credential_ref_missing",
+      reason: "Action contract references a gateway credential ref that is not stored."
+    };
+  }
+  if (ref.gatewayCredentialRefDigest !== binding.gatewayCredentialRefDigest) {
+    return {
+      reasonCode: "gateway_credential_ref_digest_mismatch",
+      reason: "Stored gateway credential ref digest does not match the contract binding."
+    };
+  }
+  if (ref.tenantId !== contract.tenantId || ref.organizationId !== contract.organizationId) {
+    return {
+      reasonCode: "gateway_credential_ref_scope_mismatch",
+      reason: "Gateway credential ref tenant or organization does not match the action contract."
+    };
+  }
+  if (ref.gatewayId !== contract.gatewayId || ref.gatewayRegistryEntryId !== contract.gatewayRegistryEntryId || ref.protectedSurfaceKind !== contract.protectedSurfaceKind || !ref.actionClasses.includes(contract.actionClass) || !ref.resourceRefs.includes("*") && !ref.resourceRefs.includes(contract.resourceRef) || ref.principalId !== null && ref.principalId !== contract.principalId) {
+    return {
+      reasonCode: "gateway_credential_ref_scope_mismatch",
+      reason: "Gateway credential ref does not bind to the same gateway, action class, principal, or resource."
+    };
+  }
+  if (ref.providerRegistryRef !== binding.providerRegistryRef) {
+    return {
+      reasonCode: "gateway_credential_ref_provider_drift",
+      reason: "Gateway credential ref provider registry ref drifted from the contract binding."
+    };
+  }
+  if (binding.providerRegistryDigest !== null && ref.providerRegistryDigest !== null && binding.providerRegistryDigest !== ref.providerRegistryDigest) {
+    return {
+      reasonCode: "gateway_credential_ref_provider_drift",
+      reason: "Gateway credential ref provider registry digest drifted from the contract binding."
+    };
+  }
+  if (ref.expiresAt !== null && Date.parse(ref.expiresAt) <= Date.parse(now)) {
+    return {
+      reasonCode: "gateway_credential_ref_stale",
+      reason: "Gateway credential ref is stale."
+    };
+  }
+  if (ref.custodyStatus !== binding.requiredCredentialCustodyStatus || !credentialCustodyCanSatisfyGatewayChecked(ref.custodyStatus)) {
+    return {
+      reasonCode: "gateway_credential_ref_unsafe_custody",
+      reason: "Gateway credential ref custody posture cannot satisfy gateway-side mutation custody."
+    };
+  }
+  return null;
+}
+function credentialBindingPolicyInput(binding, ref, now) {
+  return {
+    credentialUseName: binding.credentialUseName,
+    gatewayCredentialRefId: binding.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: binding.gatewayCredentialRefDigest,
+    providerRegistryRef: binding.providerRegistryRef,
+    providerRegistryDigest: binding.providerRegistryDigest,
+    custodyStatus: ref?.custodyStatus ?? null,
+    requiredCredentialCustodyStatus: binding.requiredCredentialCustodyStatus,
+    freshness: credentialRefFreshness(ref, now)
+  };
+}
+function credentialRefFreshness(ref, now) {
+  if (!ref)
+    return "missing";
+  if (ref.expiresAt === null)
+    return "not_expiring";
+  return Date.parse(ref.expiresAt) > Date.parse(now) ? "fresh" : "stale";
+}
+async function buildGatewayCredentialRef(input) {
+  const createdAt = nowIso();
+  const issuedAt = input.issuedAt ?? createdAt;
+  const gatewayCredentialRefId = input.gatewayCredentialRefId ?? createId("gcr");
+  const gatewayCredentialRefDigest = await digestCanonical(gatewayCredentialRefDigestMaterial(input, gatewayCredentialRefId, issuedAt));
+  return GatewayCredentialRefSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    gatewayCredentialRefId,
+    gatewayCredentialRefDigest,
+    principalId: input.principalId,
+    gatewayId: input.gatewayId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    actionClasses: input.actionClasses,
+    resourceRefs: input.resourceRefs,
+    resourceNamespaceRef: input.resourceNamespaceRef,
+    credentialKind: input.credentialKind,
+    custodyStatus: input.custodyStatus,
+    providerClass: input.providerClass,
+    providerRegistryRef: input.providerRegistryRef,
+    providerRegistryDigest: input.providerRegistryDigest,
+    resolverRef: input.resolverRef,
+    resolverVersion: input.resolverVersion,
+    evidenceExpectationRefs: input.evidenceExpectationRefs,
+    redactionProfileRef: "gateway-credential-ref:v0.2-redacted",
+    secretMaterialIncluded: false,
+    issuedAt,
+    expiresAt: input.expiresAt
+  });
+}
+function gatewayCredentialRefDigestMaterial(input, gatewayCredentialRefId, issuedAt) {
+  return {
+    gatewayCredentialRefId,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    principalId: input.principalId,
+    gatewayId: input.gatewayId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    actionClasses: input.actionClasses,
+    resourceRefs: input.resourceRefs,
+    resourceNamespaceRef: input.resourceNamespaceRef,
+    credentialKind: input.credentialKind,
+    custodyStatus: input.custodyStatus,
+    providerClass: input.providerClass,
+    providerRegistryRef: input.providerRegistryRef,
+    providerRegistryDigest: input.providerRegistryDigest,
+    resolverRef: input.resolverRef,
+    resolverVersion: input.resolverVersion,
+    evidenceExpectationRefs: input.evidenceExpectationRefs,
+    issuedAt,
+    expiresAt: input.expiresAt
+  };
+}
+function gatewayCredentialRefRecords(record2) {
+  return [{ objectType: "gateway_credential_ref", payload: record2 }];
+}
+function gatewayCredentialRefEvents(record2) {
+  return [
+    {
+      source: record2,
+      eventType: "gateway_credential_ref_registered",
+      objectRefs: [record2.gatewayCredentialRefId, record2.gatewayCredentialRefDigest, record2.gatewayId],
+      payload: {
+        gatewayId: record2.gatewayId,
+        providerRegistryRef: record2.providerRegistryRef,
+        custodyStatus: record2.custodyStatus
+      }
+    }
+  ];
+}
+async function loadResolutionEvidenceContext(recorder, input) {
+  const [contractRecord, greenlightRecord, gateAttemptRecord, gatewayCredentialRefRecord] = await Promise.all([
+    recorder.requiredRecord("action_contract", input.actionContractId, "contract_missing"),
+    recorder.requiredRecord("greenlight", input.greenlightId, "greenlight_missing"),
+    recorder.requiredRecord("gateway_check_attempt", input.gateAttemptId, "credential_resolution_before_gateway_check"),
+    recorder.requiredRecord("gateway_credential_ref", input.gatewayCredentialRefId, "gateway_credential_ref_missing")
+  ]);
+  return { input, contractRecord, greenlightRecord, gateAttemptRecord, gatewayCredentialRefRecord, now: nowIso() };
+}
+async function loadCustodyProofPacketContext(recorder, input) {
+  const [gatewayCredentialRefRecord, protectedPathPostureRecord] = await Promise.all([
+    recorder.requiredRecord("gateway_credential_ref", input.gatewayCredentialRefId, "gateway_credential_ref_missing"),
+    recorder.requiredRecord("protected_path_posture", input.protectedPathPostureId, "protected_path_posture_missing")
+  ]);
+  return { input, gatewayCredentialRefRecord, protectedPathPostureRecord, now: nowIso() };
+}
+function assertCustodyProofPacketContext(context) {
+  const { input, gatewayCredentialRefRecord, protectedPathPostureRecord, now } = context;
+  const credentialRef = gatewayCredentialRefRecord.payload;
+  const posture = protectedPathPostureRecord.payload;
+  if (credentialRef.tenantId !== input.tenantId || credentialRef.organizationId !== input.organizationId || posture.tenantId !== input.tenantId || posture.organizationId !== input.organizationId) {
+    throw new HandshakeProtocolError("gateway_custody_proof_scope_mismatch", "Gateway custody proof packet tenant or organization does not match its evidence records.", 409);
+  }
+  if (credentialRef.gatewayCredentialRefDigest !== input.gatewayCredentialRefDigest) {
+    throw new HandshakeProtocolError("gateway_credential_ref_digest_mismatch", "Gateway custody proof packet saw a gateway credential ref digest that does not match the durable ref.", 409);
+  }
+  if (posture.postureDigest !== input.protectedPathPostureDigest) {
+    throw new HandshakeProtocolError("protected_path_posture_digest_mismatch", "Gateway custody proof packet saw a protected-path posture digest that does not match the durable posture.", 409);
+  }
+  if (posture.gatewayId !== credentialRef.gatewayId || posture.protectedSurfaceKind !== credentialRef.protectedSurfaceKind || !credentialRef.actionClasses.includes(posture.actionClass) || !credentialRef.resourceRefs.includes("*") && !credentialRef.resourceRefs.includes(posture.resourceRef)) {
+    throw new HandshakeProtocolError("gateway_custody_proof_binding_mismatch", "Gateway custody proof packet must bind the same gateway, action class, protected surface, and resource.", 409);
+  }
+  if (posture.postureState !== "gateway_checked") {
+    throw new HandshakeProtocolError("gateway_custody_proof_posture_not_gateway_checked", "Gateway custody proof packet requires gateway-checked protected-path posture.", 409);
+  }
+  if (posture.sourceAuthority !== "gateway_probe") {
+    throw new HandshakeProtocolError("gateway_custody_proof_source_authority_weak", "Gateway custody proof packet requires gateway-owned protected-path posture evidence.", 409);
+  }
+  if (Date.parse(posture.expiresAt) <= Date.parse(now)) {
+    throw new HandshakeProtocolError("gateway_custody_proof_posture_stale", "Gateway custody proof packet cannot use stale protected-path posture.", 409);
+  }
+  if (!credentialCustodyCanSatisfyGatewayChecked(credentialRef.custodyStatus)) {
+    throw new HandshakeProtocolError("gateway_custody_proof_unsafe_custody", "Gateway custody proof packet cannot use unsafe credential custody.", 409);
+  }
+  if (posture.credentialCustodyStatus !== credentialRef.custodyStatus) {
+    throw new HandshakeProtocolError("gateway_custody_proof_custody_mismatch", "Gateway custody proof packet posture custody must match the gateway credential ref.", 409);
+  }
+  if (!sameStringSet(input.bypassProbeIds, posture.bypassProbeIds) || !sameStringSet(input.bypassProbeDigests, posture.bypassProbeDigests)) {
+    throw new HandshakeProtocolError("gateway_custody_proof_bypass_probe_mismatch", "Gateway custody proof packet bypass probe refs and digests must match the protected-path posture.", 409);
+  }
+  if (input.custodyClaimLevel !== "local_fixture" && input.externalVerificationStatus !== "verified_by_official_source") {
+    throw new HandshakeProtocolError("gateway_custody_proof_external_verification_required", "Customer/provider custody proof requires official external verification evidence.", 409);
+  }
+  if (input.custodyClaimLevel !== "local_fixture" && credentialRef.custodyStatus === "fixture_gateway_held") {
+    throw new HandshakeProtocolError("gateway_custody_proof_fixture_cannot_claim_customer_custody", "Fixture custody cannot satisfy customer or provider custody claims.", 409);
+  }
+  if (input.custodyClaimLevel !== "local_fixture" && (!input.leaseRef || !input.leaseVersion || !input.leaseIssuedAt || !input.leaseExpiresAt || input.attestationRefs.length === 0 || input.attestationDigests.length === 0)) {
+    throw new HandshakeProtocolError("gateway_custody_proof_customer_evidence_missing", "Customer/provider custody proof requires current lease and attestation evidence.", 409);
+  }
+  if (input.custodyDriftStatus !== "current" || input.resolverDriftStatus !== "current") {
+    throw new HandshakeProtocolError("gateway_custody_proof_drifted", "Gateway custody proof packet cannot be recorded as current when custody or resolver drift is present.", 409);
+  }
+  if (input.redactionStatus === "redaction_failed") {
+    throw new HandshakeProtocolError("gateway_custody_proof_redaction_failed", "Gateway custody proof packet cannot expose failed redaction as usable evidence.", 409);
+  }
+}
+function assertResolutionEvidenceContext(context) {
+  const { input, contractRecord, greenlightRecord, gateAttemptRecord, gatewayCredentialRefRecord, now } = context;
+  const contract = contractRecord.payload;
+  const greenlight = greenlightRecord.payload;
+  const gate = gateAttemptRecord.payload;
+  const credentialRef = gatewayCredentialRefRecord.payload;
+  if (greenlight.actionContractId !== contract.actionContractId || gate.actionContractId !== contract.actionContractId || gate.greenlightId !== greenlight.greenlightId) {
+    throw new HandshakeProtocolError("credential_resolution_ref_mismatch", "Credential resolution evidence must bind to the same contract, greenlight, and gateway check.", 409);
+  }
+  if (gate.gateDecision !== "passed") {
+    throw new HandshakeProtocolError("credential_resolution_gate_not_passed", "Credential resolution evidence can only be recorded after a passed gateway check.", 409);
+  }
+  if (credentialRef.gatewayCredentialRefDigest !== input.gatewayCredentialRefDigest) {
+    throw new HandshakeProtocolError("gateway_credential_ref_digest_mismatch", "Credential resolution evidence saw a gateway credential ref digest that does not match the durable ref.", 409);
+  }
+  const binding = contract.gatewayCredentialRefs.find((candidate) => candidate.gatewayCredentialRefId === credentialRef.gatewayCredentialRefId);
+  if (!binding || binding.gatewayCredentialRefDigest !== credentialRef.gatewayCredentialRefDigest) {
+    throw new HandshakeProtocolError("credential_resolution_ref_mismatch", "Credential resolution evidence must reference a credential ref bound into the exact action contract.", 409);
+  }
+  const failure = evaluateGatewayCredentialBinding(contract, binding, credentialRef, now);
+  if (failure)
+    throw new HandshakeProtocolError(failure.reasonCode, failure.reason, 409);
+}
+async function buildCredentialResolutionEvidence(context) {
+  const { input, contractRecord, gateAttemptRecord, gatewayCredentialRefRecord, now } = context;
+  const contract = contractRecord.payload;
+  const gate = gateAttemptRecord.payload;
+  const credentialRef = gatewayCredentialRefRecord.payload;
+  const recordedAt = input.recordedAt ?? now;
+  const credentialResolutionEvidenceId = createId("cre");
+  const evidenceSeed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    credentialResolutionEvidenceId,
+    gatewayCredentialRefId: credentialRef.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: credentialRef.gatewayCredentialRefDigest,
+    actionContractId: contract.actionContractId,
+    greenlightId: input.greenlightId,
+    gateAttemptId: gate.gateAttemptId,
+    mutationAttemptId: gate.mutationAttemptId,
+    gatewayId: contract.gatewayId,
+    providerClass: credentialRef.providerClass,
+    providerRegistryRef: credentialRef.providerRegistryRef,
+    providerRegistryDigest: credentialRef.providerRegistryDigest,
+    resolverRef: credentialRef.resolverRef,
+    resolverVersion: credentialRef.resolverVersion,
+    requestDigest: input.requestDigest,
+    resultClass: input.resultClass,
+    resultReasonCode: input.resultReasonCode,
+    redactionStatus: input.redactionStatus,
+    providerRequestRef: input.providerRequestRef,
+    providerOperationRef: input.providerOperationRef,
+    proofGapId: input.proofGapId,
+    refusalId: input.refusalId,
+    evidenceRefs: input.evidenceRefs,
+    redactionProfileRef: "credential-resolution-evidence:v0.2-redacted",
+    credentialMaterialIncluded: false,
+    recordedAt,
+    evidenceDigest: null
+  };
+  const evidenceDigest = await digestCanonical(evidenceSeed);
+  return CredentialResolutionEvidenceSchema.parse({ ...evidenceSeed, evidenceDigest });
+}
+async function buildGatewayCustodyProofPacket(context) {
+  const { input, gatewayCredentialRefRecord, protectedPathPostureRecord, now } = context;
+  const credentialRef = gatewayCredentialRefRecord.payload;
+  const posture = protectedPathPostureRecord.payload;
+  const recordedAt = input.recordedAt ?? now;
+  const gatewayCustodyProofPacketId = input.gatewayCustodyProofPacketId ?? createId("gcpp");
+  const packetSeed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: now,
+    gatewayCustodyProofPacketId,
+    gatewayCustodyProofPacketDigest: null,
+    gatewayCredentialRefId: credentialRef.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: credentialRef.gatewayCredentialRefDigest,
+    protectedPathPostureId: posture.protectedPathPostureId,
+    protectedPathPostureDigest: posture.postureDigest,
+    gatewayInstallEvidenceRefs: input.gatewayInstallEvidenceRefs,
+    gatewayInstallEvidenceDigests: input.gatewayInstallEvidenceDigests,
+    bypassProbeIds: input.bypassProbeIds,
+    bypassProbeDigests: input.bypassProbeDigests,
+    gatewayId: credentialRef.gatewayId,
+    gatewayRegistryEntryId: credentialRef.gatewayRegistryEntryId,
+    protectedSurfaceKind: credentialRef.protectedSurfaceKind,
+    actionClasses: credentialRef.actionClasses,
+    resourceRefs: credentialRef.resourceRefs,
+    custodyProviderClass: input.custodyProviderClass,
+    custodyProviderRegistryRef: input.custodyProviderRegistryRef,
+    custodyProviderRegistryDigest: input.custodyProviderRegistryDigest,
+    opaqueKeyHandleRef: input.opaqueKeyHandleRef,
+    opaqueKeyHandleDigest: input.opaqueKeyHandleDigest,
+    credentialKind: credentialRef.credentialKind,
+    credentialCustodyStatus: credentialRef.custodyStatus,
+    custodyClaimLevel: input.custodyClaimLevel,
+    resolverRef: credentialRef.resolverRef,
+    resolverVersion: credentialRef.resolverVersion,
+    leaseRef: input.leaseRef,
+    leaseVersion: input.leaseVersion,
+    leaseIssuedAt: input.leaseIssuedAt,
+    leaseExpiresAt: input.leaseExpiresAt,
+    attestationRefs: input.attestationRefs,
+    attestationDigests: input.attestationDigests,
+    redactedAuditRefs: input.redactedAuditRefs,
+    redactedAuditDigest: input.redactedAuditDigest,
+    custodyDriftStatus: input.custodyDriftStatus,
+    resolverDriftStatus: input.resolverDriftStatus,
+    redactionStatus: input.redactionStatus,
+    externalVerificationStatus: input.externalVerificationStatus,
+    redactionProfileRef: "gateway-custody-proof-packet:v0.2-redacted",
+    secretMaterialIncluded: false,
+    authorityCreated: false,
+    recordedAt,
+    expiresAt: input.expiresAt
+  };
+  const gatewayCustodyProofPacketDigest = await digestCanonical(packetSeed);
+  return GatewayCustodyProofPacketSchema.parse({ ...packetSeed, gatewayCustodyProofPacketDigest });
+}
+function credentialResolutionEvidenceRecords(record2) {
+  return [{ objectType: "credential_resolution_evidence", payload: record2 }];
+}
+function gatewayCustodyProofPacketRecords(record2) {
+  return [{ objectType: "gateway_custody_proof_packet", payload: record2 }];
+}
+function credentialResolutionEvidenceEvent(record2) {
+  return {
+    source: record2,
+    eventType: "credential_resolution_recorded",
+    objectRefs: [
+      record2.credentialResolutionEvidenceId,
+      record2.gatewayCredentialRefId,
+      record2.actionContractId,
+      record2.gateAttemptId
+    ],
+    payload: {
+      gatewayCredentialRefDigest: record2.gatewayCredentialRefDigest,
+      resultClass: record2.resultClass,
+      resultReasonCode: record2.resultReasonCode,
+      redactionStatus: record2.redactionStatus
+    }
+  };
+}
+function gatewayCustodyProofPacketEvent(record2) {
+  return {
+    source: record2,
+    eventType: "gateway_custody_proof_packet_recorded",
+    objectRefs: [
+      record2.gatewayCustodyProofPacketId,
+      record2.gatewayCredentialRefId,
+      record2.protectedPathPostureId,
+      record2.gatewayCustodyProofPacketDigest
+    ],
+    payload: {
+      gatewayId: record2.gatewayId,
+      custodyClaimLevel: record2.custodyClaimLevel,
+      custodyDriftStatus: record2.custodyDriftStatus,
+      redactionStatus: record2.redactionStatus,
+      authorityCreated: record2.authorityCreated
+    }
+  };
+}
+function sameStringSet(left, right) {
+  if (left.length !== right.length)
+    return false;
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+// src/protocol/areas/protected-path-posture/transitions.ts
+var requiredGatewayCheckedBypassProbeKinds2 = [
+  "credential_custody",
+  "raw_sibling_blocking",
+  "mcp_direct_call_blocking",
+  "token_passthrough_blocking",
+  "wrapper_drift",
+  "failure_closed"
+];
+async function createProtectedPathPosture(recorder, inputValue) {
+  const input = CreateProtectedPathPostureInputSchema.parse(inputValue);
+  const context = buildProtectedPathPostureContext(input);
+  const bypassProbes = await loadBypassProbes(recorder, context);
+  const record2 = await buildProtectedPathPosture(context, bypassProbes);
+  await commitProtectedPathPosture(recorder, context, record2);
+  return record2;
+}
+function buildProtectedPathPostureContext(input) {
+  const createdAt = nowIso();
+  const observedAt = input.observedAt ?? createdAt;
+  const protectedPathPostureId = createId("ppp");
+  const postureScopeKey = protectedPathPostureScopeKey({
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    gatewayId: input.gatewayId,
+    actionClass: input.actionClass,
+    resourceRef: input.resourceRef
+  });
+  return {
+    input,
+    createdAt,
+    observedAt,
+    protectedPathPostureId,
+    postureScopeKey
+  };
+}
+async function buildProtectedPathPosture(context, bypassProbes) {
+  const { input, createdAt, observedAt, protectedPathPostureId, postureScopeKey } = context;
+  const bypassProbeCoverage = bypassProbes.map((probe) => ({
+    bypassProbeId: probe.bypassProbeId,
+    probeKind: probe.probeKind,
+    probeOutcome: probe.probeOutcome,
+    sourceAuthority: probe.sourceAuthority,
+    probeDigest: probe.probeDigest
+  }));
+  const bypassProbeIds = bypassProbeCoverage.map((probe) => probe.bypassProbeId);
+  const bypassProbeDigests = bypassProbeCoverage.map((probe) => probe.probeDigest);
+  const postureDigest = await digestCanonical(protectedPathPostureDigestMaterial(context, bypassProbeIds, bypassProbeDigests));
+  return ProtectedPathPostureSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    protectedPathPostureId,
+    postureScopeKey,
+    runtimeAdapterId: input.runtimeAdapterId,
+    gatewayId: input.gatewayId,
+    actionClass: input.actionClass,
+    resourceRef: input.resourceRef,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    postureState: input.postureState,
+    credentialCustodyStatus: input.credentialCustodyStatus,
+    rawSiblingToolStatus: input.rawSiblingToolStatus,
+    sourceAuthority: input.sourceAuthority,
+    reasonCodes: input.reasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    bypassProbeIds,
+    bypassProbeDigests,
+    bypassProbeCoverage,
+    observedAt,
+    expiresAt: input.expiresAt,
+    postureDigest
+  });
+}
+async function loadBypassProbes(recorder, context) {
+  const probes = [];
+  for (const bypassProbeId of context.input.bypassProbeIds) {
+    const record2 = await recorder.requiredRecord("bypass_probe", bypassProbeId, "protected_path_probe_missing");
+    const probe = record2.payload;
+    if (probe.postureScopeKey !== context.postureScopeKey) {
+      throw new HandshakeProtocolError("protected_path_probe_scope_mismatch", "Bypass probe scope does not match the protected path posture scope.", 409);
+    }
+    if (Date.parse(probe.expiresAt) <= Date.parse(context.createdAt)) {
+      throw new HandshakeProtocolError("protected_path_probe_stale", "Bypass probe is stale.", 409);
+    }
+    probes.push(probe);
+  }
+  return probes;
+}
+function protectedPathPostureDigestMaterial(context, bypassProbeIds, bypassProbeDigests) {
+  const { input, observedAt, postureScopeKey } = context;
+  const digestMaterial = {
+    postureScopeKey,
+    runtimeAdapterId: input.runtimeAdapterId,
+    gatewayId: input.gatewayId,
+    actionClass: input.actionClass,
+    resourceRef: input.resourceRef,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    postureState: input.postureState,
+    credentialCustodyStatus: input.credentialCustodyStatus,
+    rawSiblingToolStatus: input.rawSiblingToolStatus,
+    sourceAuthority: input.sourceAuthority,
+    reasonCodes: input.reasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    bypassProbeIds,
+    bypassProbeDigests,
+    observedAt,
+    expiresAt: input.expiresAt
+  };
+  return digestMaterial;
+}
+async function commitProtectedPathPosture(recorder, context, record2) {
+  await recorder.commitRecordsWithEvents(protectedPathPostureRecords(record2), protectedPathPostureEvents(record2), {
+    protectedPathPostureIndexEntries: [
+      {
+        postureScopeKey: record2.postureScopeKey,
+        protectedPathPostureId: record2.protectedPathPostureId,
+        tenantId: record2.tenantId,
+        organizationId: record2.organizationId,
+        updatedAt: context.createdAt
+      }
+    ]
+  });
+}
+function protectedPathPostureRecords(record2) {
+  return [{ objectType: "protected_path_posture", payload: record2 }];
+}
+function protectedPathPostureEvents(record2) {
+  return [
+    {
+      source: record2,
+      eventType: "protected_path_posture_recorded",
+      objectRefs: [record2.protectedPathPostureId, record2.postureScopeKey, record2.postureDigest],
+      payload: {
+        postureScopeKey: record2.postureScopeKey,
+        postureState: record2.postureState,
+        credentialCustodyStatus: record2.credentialCustodyStatus,
+        rawSiblingToolStatus: record2.rawSiblingToolStatus
+      }
+    }
+  ];
+}
+async function loadCurrentPostureForContract(store, contract) {
+  return store.getCurrentProtectedPathPosture(protectedPathPostureScopeKeyForContract(contract));
+}
+function evaluateRequiredProtectedPathPosture(input) {
+  const { contract, gateway, posture, now } = input;
+  if (contract.requiredProtectedPathState === "not_required")
+    return { ok: true, posture };
+  if (!gatewayCanSatisfyGatewayChecked(gateway)) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "gateway_registry_not_enforcing",
+      reason: "Gateway registry metadata cannot satisfy required gateway_checked posture."
+    };
+  }
+  if (!posture) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_posture_missing",
+      reason: "Required protected path posture is missing for this runtime, gateway, action, and resource."
+    };
+  }
+  const current = posture.payload;
+  if (current.tenantId !== contract.tenantId || current.organizationId !== contract.organizationId) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_posture_scope_mismatch",
+      reason: "Current protected path posture scope does not match the action contract."
+    };
+  }
+  if (current.gatewayId !== contract.gatewayId || current.actionClass !== contract.actionClass || current.protectedSurfaceKind !== contract.protectedSurfaceKind || current.resourceRef !== contract.resourceRef) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_posture_binding_mismatch",
+      reason: "Current protected path posture does not bind to the same gateway, protected surface, action class, and resource."
+    };
+  }
+  if (Date.parse(current.expiresAt) <= Date.parse(now)) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_posture_stale",
+      reason: "Current protected path posture is stale."
+    };
+  }
+  if (current.postureState !== "gateway_checked") {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_posture_not_gateway_checked",
+      reason: "Current protected path posture is not gateway_checked."
+    };
+  }
+  if (!sourceAuthorityCanSatisfyGatewayChecked(current.sourceAuthority)) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_source_authority_weak",
+      reason: "Current protected path posture source authority cannot satisfy required gateway_checked posture."
+    };
+  }
+  if (!credentialCustodyCanSatisfyGatewayChecked(current.credentialCustodyStatus)) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_credential_custody_unsafe",
+      reason: "Current protected path posture says mutation credentials are not held by the gateway boundary."
+    };
+  }
+  if (!["absent", "blocked"].includes(current.rawSiblingToolStatus)) {
+    return {
+      ok: false,
+      posture,
+      reasonCode: "protected_path_raw_sibling_tool_present",
+      reason: "Current protected path posture leaves a raw sibling mutation tool present or unknown."
+    };
+  }
+  const probeCoverage = evaluateGatewayCheckedProbeCoverage(current);
+  if (!probeCoverage.ok)
+    return { ok: false, posture, reasonCode: probeCoverage.reasonCode, reason: probeCoverage.reason };
+  return { ok: true, posture };
+}
+function protectedPathPolicyInput(posture, now) {
+  if (!posture)
+    return { protectedPathPostureId: null, protectedPathPostureDigest: null, postureState: null, freshness: "missing" };
+  const freshness = Date.parse(posture.payload.expiresAt) > Date.parse(now) ? "fresh" : "stale";
+  return {
+    protectedPathPostureId: posture.payload.protectedPathPostureId,
+    protectedPathPostureDigest: posture.payload.postureDigest,
+    postureState: posture.payload.postureState,
+    bypassProbeIds: posture.payload.bypassProbeIds,
+    bypassProbeDigests: posture.payload.bypassProbeDigests,
+    freshness
+  };
+}
+function evaluateGatewayCheckedProbeCoverage(posture) {
+  const coverageByKind = new Map(posture.bypassProbeCoverage.map((probe) => [probe.probeKind, probe]));
+  for (const probeKind of requiredGatewayCheckedBypassProbeKinds2) {
+    const coverage = coverageByKind.get(probeKind);
+    if (!coverage) {
+      return {
+        ok: false,
+        reasonCode: "protected_path_probe_missing",
+        reason: `Current gateway_checked posture is missing required ${probeKind} bypass probe evidence.`
+      };
+    }
+    if (coverage.probeOutcome !== "passed") {
+      return {
+        ok: false,
+        reasonCode: "protected_path_probe_failed",
+        reason: `Current gateway_checked posture has non-passing ${probeKind} bypass probe evidence.`
+      };
+    }
+    if (!sourceAuthorityCanSatisfyGatewayChecked(coverage.sourceAuthority)) {
+      return {
+        ok: false,
+        reasonCode: "protected_path_probe_source_authority_weak",
+        reason: `Current gateway_checked posture has ${probeKind} bypass probe evidence from a weak source authority.`
+      };
+    }
+  }
+  return { ok: true };
+}
+function gatewayCanSatisfyGatewayChecked(gateway) {
+  return credentialCustodyCanSatisfyGatewayChecked(gateway.credentialCustodyStatus) && ["reference_fixture", "customer_gateway_adapter", "provider_gateway"].includes(gateway.enforcementMode);
+}
+function sourceAuthorityCanSatisfyGatewayChecked(sourceAuthority) {
+  return ["gateway_probe", "hosted_monitor"].includes(sourceAuthority);
+}
+// src/protocol/areas/bypass-probe/transitions.ts
+async function createBypassProbe(recorder, inputValue) {
+  const input = CreateBypassProbeInputSchema.parse(inputValue);
+  const context = buildBypassProbeContext(input);
+  const probe = await buildBypassProbe(context);
+  await recorder.commitRecordsWithEvents(bypassProbeRecords(probe), bypassProbeEvents(probe));
+  return probe;
+}
+function buildBypassProbeContext(input) {
+  const createdAt = nowIso();
+  const observedAt = input.observedAt ?? createdAt;
+  return {
+    input,
+    createdAt,
+    observedAt,
+    bypassProbeId: createId("probe"),
+    postureScopeKey: protectedPathPostureScopeKey({
+      tenantId: input.tenantId,
+      organizationId: input.organizationId,
+      runtimeAdapterId: input.runtimeAdapterId,
+      gatewayId: input.gatewayId,
+      actionClass: input.actionClass,
+      resourceRef: input.resourceRef
+    })
+  };
+}
+async function buildBypassProbe(context) {
+  const { input, createdAt, observedAt, postureScopeKey, bypassProbeId } = context;
+  const probeDigest = await digestCanonical(bypassProbeDigestMaterial(context));
+  return BypassProbeSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    bypassProbeId,
+    postureScopeKey,
+    runtimeAdapterId: input.runtimeAdapterId,
+    gatewayId: input.gatewayId,
+    actionClass: input.actionClass,
+    resourceRef: input.resourceRef,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    probeKind: input.probeKind,
+    probeOutcome: input.probeOutcome,
+    sourceAuthority: input.sourceAuthority,
+    reasonCodes: input.reasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    observedAt,
+    expiresAt: input.expiresAt,
+    probeDigest
+  });
+}
+function bypassProbeDigestMaterial(context) {
+  const { input, observedAt, postureScopeKey } = context;
+  return {
+    postureScopeKey,
+    runtimeAdapterId: input.runtimeAdapterId,
+    gatewayId: input.gatewayId,
+    actionClass: input.actionClass,
+    resourceRef: input.resourceRef,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    probeKind: input.probeKind,
+    probeOutcome: input.probeOutcome,
+    sourceAuthority: input.sourceAuthority,
+    reasonCodes: input.reasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    observedAt,
+    expiresAt: input.expiresAt
+  };
+}
+function bypassProbeRecords(probe) {
+  return [{ objectType: "bypass_probe", payload: probe }];
+}
+function bypassProbeEvents(probe) {
+  return [
+    {
+      source: probe,
+      eventType: "bypass_probe_recorded",
+      objectRefs: [probe.bypassProbeId, probe.postureScopeKey, probe.probeDigest],
+      payload: {
+        postureScopeKey: probe.postureScopeKey,
+        probeKind: probe.probeKind,
+        probeOutcome: probe.probeOutcome,
+        sourceAuthority: probe.sourceAuthority
+      }
+    }
+  ];
+}
 // src/install/install-proposal/index.ts
 var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
   probeKind: BypassProbeKindSchema,
@@ -15352,9 +16232,15 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
+function requireInstallProposalGatewayRegistryEntry(gatewayRegistryEntry) {
+  if (gatewayRegistryEntry === null) {
+    throw new HandshakeProtocolError("install_orphan_catalog_missing_gateway", "Install proposal compiled records require gateway registry entry.", 422);
+  }
+  return gatewayRegistryEntry;
+}
 var InstallProposalSchema = exports_external.strictObject({
   installProposalId: IdSchema,
   schemaVersion: exports_external.literal(PROTOCOL_VERSION),
@@ -15766,6 +16652,12 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
     "protected_path_posture_recorded",
+    "negotiation_session_recorded",
+    "negotiation_offer_recorded",
+    "negotiation_decision_recorded",
+    "linked_agreement_recorded",
+    "agreement_obligation_binding_recorded",
+    "agreement_status_transition_recorded",
     "action_proposed",
     "policy_decision_recorded",
     "action_greenlit",
@@ -15976,6 +16868,168 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   redactionProfileRef: exports_external.literal("agent-transaction-envelope:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
   envelopeDigest: DigestSchema
+});
+var OperationReadbackAgreementObligationPolicySchema = exports_external.strictObject({
+  sourceAuthority: exports_external.literal("policy_decision_snapshot"),
+  evaluationStatus: exports_external.enum(["greenlight", "refuse", "proof_gap"]),
+  ok: exports_external.boolean(),
+  reasonCode: ReasonCodeSchema.nullable(),
+  reason: exports_external.string().min(1).max(1000).nullable(),
+  policyInput: exports_external.strictObject({
+    posture: exports_external.enum(["not_applicable", "bound", "proof_gap", "refused"]),
+    obligationRef: ResourceRefSchema.nullable(),
+    linkedAgreementId: IdSchema.nullable(),
+    acceptedNegotiationResolutionId: IdSchema.nullable()
+  })
+});
+var OperationReadbackStatusSchema = exports_external.enum([
+  "policy_refused",
+  "review_required",
+  "halted",
+  "quarantined",
+  "policy_proof_gap",
+  "greenlight_available",
+  "gateway_admitted",
+  "gateway_refused",
+  "gateway_proof_gap",
+  "replay_refused",
+  "downstream_pending",
+  "downstream_succeeded",
+  "downstream_refused",
+  "downstream_failed",
+  "downstream_unknown",
+  "recovery_required",
+  "isolated"
+]);
+var OperationReadbackStageSchema = exports_external.enum([
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+]);
+var OperationCorrelationIndexSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-correlation.v0.1"),
+  actionContractRef: IdSchema,
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  authorityCreatedByProjection: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  intentCompilationRef: IdSchema.nullable(),
+  candidateActionRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  redactionProfileRef: exports_external.literal("operation-correlation:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var OperationReadbackNextMechanismSchema = exports_external.enum([
+  "read_evidence",
+  "use_greenlight_at_gateway",
+  "request_review",
+  "recraft_request",
+  "create_new_contract",
+  "recover_terminal_unknown",
+  "stop",
+  "wait_for_downstream"
+]);
+var OperationReadbackSupportSeveritySchema = exports_external.enum(["none", "info", "warning", "urgent"]);
+var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
+  "none",
+  "available_for_one_gateway_check",
+  "consumed",
+  "replayed_or_unusable",
+  "unknown"
+]);
+var OperationSupportContextSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
+  supportContextRef: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  surface: exports_external.literal("operation_readback"),
+  actionContractRef: IdSchema,
+  requestIdentity: exports_external.string().min(1).nullable(),
+  operationStatus: OperationReadbackStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  supportSeverity: OperationReadbackSupportSeveritySchema,
+  docsUrl: exports_external.string().url().nullable(),
+  nextCommand: exports_external.string().min(1).nullable(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted")
+});
+var OperationReadbackProjectionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback.v0.1"),
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  operationStatus: OperationReadbackStatusSchema,
+  latestAuthoritativeStage: OperationReadbackStageSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  agreementObligationPolicy: OperationReadbackAgreementObligationPolicySchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  greenlightUsePosture: OperationReadbackGreenlightUsePostureSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  authorityCreatedByReadback: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  receiptExportCreatedByReadback: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  paymentMaterialIncluded: exports_external.literal(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  supportContext: OperationSupportContextSchema
 });
 var ProtectedPathInstallHealthStatusSchema = exports_external.enum([
   "not_required",
@@ -16724,6 +17778,235 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/areas/negotiation/schemas.ts
+var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
+  "self_attested",
+  "host_verified_ref",
+  "proof_gap_recorded"
+]);
+var NegotiationPartyBindingSchema = exports_external.strictObject({
+  partyId: IdSchema,
+  partyRole: exports_external.enum(["initiator", "counterparty", "observer"]),
+  agentRef: ResourceRefSchema,
+  organizationRef: ResourceRefSchema.nullable().default(null),
+  runtimeRef: ResourceRefSchema.nullable().default(null),
+  endpointRef: ResourceRefSchema.nullable().default(null),
+  identityProofPosture: NegotiationPartyIdentityProofPostureSchema,
+  identityEvidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  identityProofDigest: DigestSchema.nullable().default(null),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+}).superRefine((value, ctx) => {
+  if (value.identityProofPosture === "host_verified_ref" && value.identityEvidenceRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "host verified parties require local identity evidence refs",
+      path: ["identityEvidenceRefs"]
+    });
+  }
+  if (value.identityProofPosture === "proof_gap_recorded" && value.proofGapRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "proof-gap parties require proof gap refs",
+      path: ["proofGapRefs"]
+    });
+  }
+});
+var ExternalProtocolEvidenceRefSchema = exports_external.strictObject({
+  protocol: exports_external.enum(["a2a", "acp", "anp", "ap2", "mcp", "runtime_handoff", "other"]),
+  protocolVersion: exports_external.string().min(1).max(80),
+  objectKind: exports_external.string().min(1).max(120),
+  objectRef: ResourceRefSchema,
+  objectDigest: DigestSchema,
+  evidencePosture: exports_external.literal("imported_evidence_only"),
+  evidenceUse: exports_external.enum([
+    "conversation_context",
+    "descriptor_context",
+    "runtime_context",
+    "mandate_context_evidence",
+    "tool_context",
+    "handoff_context",
+    "other_context"
+  ]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var forbiddenOfferVersionAliases = ["latest", "current", "unspecified"];
+var OfferVersionRefSchema = IdSchema.refine((value) => {
+  const normalized = value.toLowerCase();
+  return !forbiddenOfferVersionAliases.some((alias) => normalized.includes(alias));
+}, {
+  message: "offer version refs must bind to a specific offer version"
+});
+var disallowedObligationRefPattern = new RegExp([
+  "greenlight",
+  "gateway[_:-]?check",
+  "gate[_:-]?attempt",
+  "mutation[_:-]?attempt",
+  "policy[_:-]?decision",
+  "receipt",
+  "authority[_:-]?certificate",
+  "settlement",
+  "payment",
+  "signer",
+  "reusable[_:-]?authority"
+].join("|"), "i");
+var EvidenceRefSchema = exports_external.strictObject({
+  refKind: exports_external.enum(["candidate_action", "action_contract", "intent_compilation", "generated_execution_graph"]),
+  ref: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation evidence ref cannot point at a control or terminal artifact"
+  }),
+  digest: DigestSchema.nullable().default(null)
+});
+var NonAuthorityContextRefSchema = ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+  message: "negotiation context ref cannot point at a control or terminal artifact"
+});
+var NegotiationSessionSchema = ProtocolBaseSchema.extend({
+  negotiationSessionId: IdSchema,
+  negotiationSessionDigest: DigestSchema,
+  subjectResourceRef: ResourceRefSchema,
+  subjectProtectedActionContextRefs: exports_external.array(NonAuthorityContextRefSchema).default([]),
+  runtimePosture: exports_external.enum(["declared_runtime_context", "observed_runtime_evidence", "proof_gap_recorded"]),
+  parties: exports_external.array(NegotiationPartyBindingSchema).min(2),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (!value.parties.some((party) => party.partyRole === "initiator")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require an initiator party",
+      path: ["parties"]
+    });
+  }
+  if (!value.parties.some((party) => party.partyRole === "counterparty")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require a counterparty party",
+      path: ["parties"]
+    });
+  }
+});
+var NegotiationOfferSchema = ProtocolBaseSchema.extend({
+  negotiationOfferId: IdSchema,
+  negotiationSessionId: IdSchema,
+  offerVersionId: OfferVersionRefSchema,
+  offerSequence: exports_external.number().int().positive(),
+  offeredByPartyId: IdSchema,
+  previousOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  supersedesOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  offerContentDigest: DigestSchema,
+  offerObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  offerContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("offer"));
+var NegotiationDecisionSchema = ProtocolBaseSchema.extend({
+  negotiationDecisionId: IdSchema,
+  negotiationSessionId: IdSchema,
+  decidedOfferVersionId: OfferVersionRefSchema,
+  decidedOfferSequence: exports_external.number().int().positive(),
+  decidedByPartyId: IdSchema,
+  decision: exports_external.enum(["accept", "reject", "counter", "withdraw", "expire"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  counterOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  decisionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.decision === "counter" && value.counterOfferVersionId === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "counter decisions require a specific counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+  if (value.decision !== "counter" && value.counterOfferVersionId !== null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "only counter decisions may reference a counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+});
+var LinkedAgreementSchema = ProtocolBaseSchema.extend({
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  acceptedNegotiationDecisionId: IdSchema,
+  acceptedOfferVersionId: OfferVersionRefSchema,
+  acceptedOfferSequence: exports_external.number().int().positive(),
+  acceptedOfferContentDigest: DigestSchema,
+  acceptedByPartyId: IdSchema,
+  counterpartyRef: ResourceRefSchema,
+  agreementDigest: DigestSchema,
+  agreementObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementEvidencePosture: exports_external.literal("local_evidence_only"),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("agreement"));
+var AgreementObligationBindingSchema = ProtocolBaseSchema.extend({
+  agreementObligationBindingId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  obligationRef: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation ref cannot point at a control or terminal artifact"
+  }),
+  obligationDigest: DigestSchema.nullable().default(null),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  paramsDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  counterpartyRef: ResourceRefSchema,
+  maxUses: exports_external.literal(1).default(1),
+  bindingPosture: exports_external.literal("local_evidence_only"),
+  localProtectedActionEvidenceRefs: exports_external.array(EvidenceRefSchema).min(1),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var AgreementStatusTransitionSchema = ProtocolBaseSchema.extend({
+  agreementStatusTransitionId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  fromStatus: exports_external.enum(["proposed", "active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  toStatus: exports_external.enum(["active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  transitionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.fromStatus === value.toStatus) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreement status transitions must change status",
+      path: ["toStatus"]
+    });
+  }
+});
+function requireReconstructionRefs(kind) {
+  return (value, ctx) => {
+    const objectRefs = kind === "offer" ? value.offerObjectRefs : value.agreementObjectRefs;
+    const contentRefs = kind === "offer" ? value.offerContentRefs : value.agreementContentRefs;
+    if (objectRefs.length > 0 || contentRefs.length > 0 || value.proofGapRefs.length > 0)
+      return;
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `${kind} digest requires object refs, content refs, or proof gap refs`,
+      path: kind === "offer" ? ["offerObjectRefs"] : ["agreementObjectRefs"]
+    });
+  };
+}
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -16743,6 +18026,12 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "negotiation_session",
+  "negotiation_offer",
+  "negotiation_decision",
+  "linked_agreement",
+  "agreement_obligation_binding",
+  "agreement_status_transition",
   "action_contract",
   "authority_certificate",
   "policy_decision",
@@ -16790,6 +18079,18 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("linked_agreement"), payload: LinkedAgreementSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_obligation_binding"),
+    payload: AgreementObligationBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_status_transition"),
+    payload: AgreementStatusTransitionSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("action_contract"), payload: ActionContractSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("authority_certificate"), payload: AuthorityCertificateSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("policy_decision"), payload: PolicyDecisionSchema }),
@@ -16865,6 +18166,26 @@ function buildAuthorityCertificateSigningInput(certificate) {
 async function authorityCertificateSigningInputDigest(certificate) {
   return digestCanonical(buildAuthorityCertificateSigningInput(certificate));
 }
+async function signAuthorityCertificateSigningInput(signingInput, signedOver, signer) {
+  if (signer.algorithm === "hmac-sha256") {
+    return AuthorityCertificateSignatureEntrySchema.parse({
+      signerRole: signer.signerRole,
+      keyIdentityRef: signer.keyIdentityRef,
+      algorithm: signer.algorithm,
+      signedOver,
+      signature: await signCanonicalHmac(signingInput, signer.hmacSecret)
+    });
+  }
+  const privateKey = await crypto.subtle.importKey("pkcs8", base64UrlToArrayBuffer(signer.privateKeyPkcs8), ED25519_ALGORITHM, false, ["sign"]);
+  const signature = await crypto.subtle.sign(ED25519_ALGORITHM, privateKey, new TextEncoder().encode(canonicalize(signingInput)));
+  return AuthorityCertificateSignatureEntrySchema.parse({
+    signerRole: signer.signerRole,
+    keyIdentityRef: signer.keyIdentityRef,
+    algorithm: signer.algorithm,
+    signedOver,
+    signature: `ed25519:${bytesToBase64Url(new Uint8Array(signature))}`
+  });
+}
 async function verifyAuthorityCertificateSignature(input) {
   if (input.signature.algorithm === "hmac-sha256") {
     if (!input.hmacSecret)
@@ -16878,6 +18199,12 @@ async function verifyAuthorityCertificateSignature(input) {
 }
 function signatureBytes(signature) {
   return base64UrlToArrayBuffer(signature.slice("ed25519:".length));
+}
+function bytesToBase64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes)
+    binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
 }
 function base64UrlToArrayBuffer(value) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -17137,6 +18464,52 @@ function checkStatus(failures, codes) {
     return "passed";
   return matching.some((candidate) => candidate.code === "trust_status_unavailable") ? "proof_gap" : "failed";
 }
+function projectAuthorityCertificateVerifierKeySet(trustMaterialValue) {
+  const trustMaterial = AuthorityCertificateTrustMaterialSchema.parse(trustMaterialValue);
+  const publicKeys = trustMaterial.keys.filter((key) => key.algorithm === "ed25519" && key.publicKeyEd25519 !== null);
+  return AuthorityCertificateVerifierKeySetProjectionSchema.parse({
+    projectionKind: "authority_certificate_verifier_key_set",
+    trustDecision: "caller_pinned_trust_material_only",
+    authorityCreated: false,
+    redactionProfileRef: "authority-certificate-verifier-key-set:v1-redacted",
+    issuers: trustMaterial.issuers,
+    keys: publicKeys.map((key) => ({
+      keyIdentityRef: key.keyIdentityRef,
+      issuerRef: key.issuerRef,
+      keyVersion: key.keyVersion,
+      signerRole: key.signerRole,
+      algorithm: key.algorithm,
+      publicKeyEd25519: key.publicKeyEd25519,
+      status: key.status,
+      validFrom: key.validFrom,
+      validUntil: key.validUntil,
+      privateMaterialIncluded: false,
+      authorityCreated: false
+    })),
+    omittedPrivateKeyCount: trustMaterial.keys.length - publicKeys.length
+  });
+}
+function projectAuthorityCertificateJwks(trustMaterialValue) {
+  const keySet = projectAuthorityCertificateVerifierKeySet(trustMaterialValue);
+  return AuthorityCertificateJwksProjectionSchema.parse({
+    projectionKind: "authority_certificate_jwks_projection",
+    trustDecision: "jwks_projection_only",
+    authorityCreated: false,
+    redactionProfileRef: "authority-certificate-jwks:v1-public",
+    jwks: {
+      keys: keySet.keys.map((key) => ({
+        kty: "OKP",
+        crv: "Ed25519",
+        kid: key.keyIdentityRef,
+        alg: "EdDSA",
+        use: "sig",
+        key_ops: ["verify"],
+        x: key.publicKeyEd25519
+      }))
+    },
+    omittedPrivateKeyCount: keySet.omittedPrivateKeyCount
+  });
+}
 
 // src/cli/certificate.ts
 async function verifyCertificateCommand(input) {
@@ -17171,13 +18544,15 @@ async function verifyCertificateCommand(input) {
 }
 
 // src/cli/command-manifest.ts
+var cliServiceWorkflowPosture = "CLI surface only: local setup, readiness, and evidence readback; does not create ServiceWorkflowAdmission, ServiceWorkflowHandle, clearance, policy decision, greenlight, gateway check, mutation, receipt export, or certificate.";
 var sharedNonGoals = [
   "policy evaluation",
   "gateway check",
   "protected mutation",
   "credential custody",
   "raw record access",
-  "process startup"
+  "process startup",
+  "workflow handle authority"
 ];
 var cliCommandManifest = [
   {
@@ -17233,6 +18608,24 @@ var cliCommandManifest = [
     custodyRole: "review_custody",
     routeFamilies: [],
     filesystemReads: ["explicit aps report json path"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: true,
+    redactionPosture: "redacted_projection_only",
+    nonGoals: sharedNonGoals
+  },
+  {
+    id: "evidence.fetch",
+    aliases: ["evidence fetch"],
+    status: "active",
+    plane: "evidence",
+    custodyRole: "review_custody",
+    routeFamilies: ["evidence_projection_read"],
+    filesystemReads: [
+      "optional local .handshake/evidence/operations readback json when --cwd is set",
+      "HANDSHAKE_BASE_URL or --base-url HTTP evidence readback"
+    ],
     filesystemWrites: [],
     childProcessEnvInheritance: "none",
     outputSchema: CLI_SCHEMA_VERSION,
@@ -17372,6 +18765,77 @@ var cliCommandManifest = [
     nonGoals: sharedNonGoals
   },
   {
+    id: "host.doctor",
+    aliases: ["host doctor"],
+    status: "active",
+    plane: "operator",
+    custodyRole: "none",
+    routeFamilies: [],
+    filesystemReads: [".handshake/project.json", "external role credential profile"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: true,
+    redactionPosture: "manifest_only",
+    nonGoals: [...sharedNonGoals, "parallel identity system", "gateway readiness certification"]
+  },
+  {
+    id: "quickstart.x402",
+    aliases: ["quickstart x402"],
+    status: "active",
+    plane: "operator",
+    custodyRole: "none",
+    routeFamilies: [],
+    filesystemReads: [".handshake/project.json", "optional x402 install input json path"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: false,
+    redactionPosture: "redacted_projection_only",
+    nonGoals: [...sharedNonGoals, "live control-plane registration", "signer use"]
+  },
+  {
+    id: "quickstart.agent-spine",
+    aliases: ["quickstart agent-spine"],
+    status: "active",
+    plane: "operator",
+    custodyRole: "none",
+    routeFamilies: [],
+    filesystemReads: [".handshake/project.json"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: false,
+    redactionPosture: "redacted_projection_only",
+    nonGoals: [
+      ...sharedNonGoals,
+      "bundled execute API",
+      "greenlight reuse",
+      "authority creation",
+      "live x402 operation beyond quickstart scope"
+    ]
+  },
+  {
+    id: "simulate.x402-payment",
+    aliases: ["simulate x402-payment"],
+    status: "active",
+    plane: "operator",
+    custodyRole: "none",
+    routeFamilies: [],
+    filesystemReads: [".handshake/project.json"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: true,
+    redactionPosture: "redacted_projection_only",
+    nonGoals: [
+      ...sharedNonGoals,
+      "live wallet operation",
+      "bundled execute API",
+      "greenlight reuse"
+    ]
+  },
+  {
     id: "conformance.x402-payment",
     aliases: ["conformance x402-payment"],
     status: "active",
@@ -17385,6 +18849,27 @@ var cliCommandManifest = [
     agentSafe: true,
     redactionPosture: "redacted_projection_only",
     nonGoals: [...sharedNonGoals, "broad x402 compatibility"]
+  },
+  {
+    id: "service.bootstrap",
+    aliases: ["service bootstrap"],
+    status: "active",
+    plane: "operator",
+    custodyRole: "none",
+    routeFamilies: ["install_health_read"],
+    filesystemReads: [".handshake/project.json", "optional x402 install input json path"],
+    filesystemWrites: [],
+    childProcessEnvInheritance: "none",
+    outputSchema: CLI_SCHEMA_VERSION,
+    agentSafe: false,
+    redactionPosture: "redacted_projection_only",
+    nonGoals: [
+      ...sharedNonGoals,
+      "live wallet mutation",
+      "second action-family install",
+      "orphan catalog without compiled-records transition",
+      "signer use"
+    ]
   }
 ];
 function cliSchemaOutput() {
@@ -17396,7 +18881,9 @@ function cliSchemaOutput() {
     custodyRole: command.custodyRole,
     outputSchema: command.outputSchema,
     agentSafe: command.agentSafe,
-    redactionPosture: command.redactionPosture
+    redactionPosture: command.redactionPosture,
+    nonGoals: command.nonGoals,
+    workflowPosture: cliServiceWorkflowPosture
   }));
 }
 
@@ -18020,6 +19507,1142 @@ async function doctorCommand(input) {
   });
 }
 
+// src/cli/evidence/fetch.ts
+import { readFile as readFile2 } from "node:fs/promises";
+import { join as join2 } from "node:path";
+
+// src/protocol/foundation/reason-code-remediation/index.ts
+var remediationEntries = [
+  {
+    code: "caller_auth_required",
+    docsUrl: "https://handshake.dev/docs/http/caller-auth"
+  },
+  {
+    code: "caller_auth_forbidden",
+    docsUrl: "https://handshake.dev/docs/http/caller-auth"
+  },
+  {
+    code: "hosted_caller_auth_required",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission"
+  },
+  {
+    code: "hosted_caller_identity_stale",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission",
+    requiresNewContract: true
+  },
+  {
+    code: "hosted_caller_identity_expired",
+    docsUrl: "https://handshake.dev/docs/http/hosted-admission",
+    requiresNewContract: true
+  },
+  {
+    code: "recovery_terminal_conflict",
+    docsUrl: "https://handshake.dev/problems/recovery_terminal_conflict",
+    requiresNewContract: true
+  },
+  {
+    code: "credential_resolution_replay_refused",
+    docsUrl: "https://handshake.dev/problems/credential_resolution_replay_refused",
+    requiresNewContract: true
+  },
+  {
+    code: "idempotency_duplicate_authority",
+    docsUrl: "https://handshake.dev/problems/idempotency_duplicate_authority",
+    requiresNewContract: true
+  },
+  {
+    code: "agreement_missing",
+    docsUrl: "https://handshake.dev/problems/agreement_missing"
+  }
+];
+var remediationByCode = new Map(remediationEntries.map((entry) => [entry.code, entry]));
+function reasonCodeRemediationForCode(code) {
+  return remediationByCode.get(code) ?? null;
+}
+function problemTypeUriForCode(code) {
+  const remediation = reasonCodeRemediationForCode(code);
+  if (remediation) {
+    return `${remediation.docsUrl}#${code}`;
+  }
+  if (code.startsWith("caller_auth_") || code.startsWith("hosted_") || code.includes("refusal") || code.includes("replay") || code.startsWith("protected_action_") || code.includes("proof_gap")) {
+    return `https://handshake.dev/problems/${code}`;
+  }
+  return null;
+}
+
+// src/http/errors/codes.ts
+var httpTransitionErrorCodes = [
+  code("caller_auth_not_configured", "auth", "terminal", "not_started", true),
+  code("caller_auth_required", "auth", "terminal", "not_started", true),
+  code("caller_auth_forbidden", "auth", "terminal", "not_started", true),
+  code("hosted_admission_config_not_configured", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_admission_config_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_verifier_not_configured", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_auth_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_expired", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_stale", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_identity_revoked", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_role_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_scope_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_provider_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_active_org_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_active_org_mismatch", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_membership_not_current", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_transition_role_not_admitted", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_read_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_readiness_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_entitlement_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_unavailable", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_purpose_required", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_raw_read_window_invalid", "hosted_admission", "terminal", "not_started", true),
+  code("protocol_version_required", "request_context", "terminal", "not_started", true),
+  code("protocol_version_unsupported", "request_context", "terminal", "not_started", true),
+  code("request_identity_required", "request_context", "terminal", "not_started", true),
+  code("request_identity_invalid", "request_context", "terminal", "not_started", true),
+  code("originating_identity_invalid", "request_context", "terminal", "not_started", true),
+  code("transition_request_body_too_large", "request_body", "terminal", "not_started", true),
+  code("transition_scope_unavailable", "scope_resolution", "terminal", "not_started", true),
+  code("transition_scope_reference_invalid", "scope_resolution", "terminal", "not_started", true),
+  code("intent_compilation_missing", "scope_resolution", "terminal", "not_started", true),
+  code("contract_missing", "scope_resolution", "terminal", "not_started", true),
+  code("policy_decision_missing", "scope_resolution", "terminal", "not_started", true),
+  code("mutation_attempt_missing", "scope_resolution", "terminal", "not_started", true),
+  code("receipt_missing", "scope_resolution", "terminal", "not_started", true),
+  code("recovery_recommendation_missing", "scope_resolution", "terminal", "not_started", true),
+  code("proof_gap_missing", "scope_resolution", "terminal", "not_started", true),
+  code("invalid_protocol_object_type", "record_read", "terminal", "not_applicable", true),
+  code("record_not_found", "record_read", "terminal", "not_applicable", true),
+  code("action_contract_missing", "record_read", "terminal", "not_applicable", true),
+  code("durable_store_unavailable", "store_resolution", "retryable", "unknown", true),
+  code("invalid_request", "error_envelope", "terminal", "not_started", true),
+  code("internal_error", "error_envelope", "retryable", "unknown", false),
+  code("http_error", "client", "ambiguous", "unknown", true)
+];
+var httpTransitionErrorCodeValues = httpTransitionErrorCodes.map((entry) => entry.code);
+var httpTransitionErrorCodeValueSet = new Set(httpTransitionErrorCodeValues);
+function isRegisteredHttpTransitionErrorCode(candidate) {
+  return httpTransitionErrorCodeValueSet.has(candidate);
+}
+function code(value, phase, retryability, commitState, publicSafe) {
+  return {
+    code: value,
+    phase,
+    retryability,
+    commitState,
+    publicSafe
+  };
+}
+
+// src/protocol/foundation/reason-codes.ts
+var protocolReasonCodes = [
+  code2("bootstrap_record_digest_conflict", "transition_error", "catalog"),
+  code2("install_orphan_catalog_missing_gateway", "transition_error", "catalog", {
+    classifiedFailure: "proof_gap"
+  }),
+  code2("invalid_transition_greenlight_already_issued", "transition_error", "policy"),
+  code2("greenlight_issuance_refusal_commit_conflict", "transition_error", "policy"),
+  code2("idempotency_ledger_conflict", "transition_error", "policy"),
+  code2("idempotency_refusal_commit_conflict", "transition_error", "policy"),
+  code2("stream_append_conflict", "transition_error", "gateway"),
+  code2("ambiguous_commit", "transition_error", "gateway", false),
+  code2("secret_bearing_param_in_non_secret_params", "transition_error", "intent_compilation"),
+  code2("undeclared_secret_ref", "transition_error", "intent_compilation"),
+  code2("unwrapped_consequential_tool", "refusal", "intent_compilation"),
+  code2("runtime_unwrapped_consequential_tool", "refusal", "intent_compilation"),
+  code2("generated_execution_block_sibling_refused", "refusal", "intent_compilation"),
+  code2("generated_execution_graph_missing", "refusal", "intent_compilation"),
+  code2("generated_execution_graph_not_contractable", "refusal", "intent_compilation"),
+  code2("generated_execution_node_not_contractable", "refusal", "intent_compilation"),
+  code2("tool_call_draft_missing", "refusal", "intent_compilation"),
+  code2("tool_call_draft_not_finalized", "refusal", "intent_compilation"),
+  code2("tool_call_draft_stale", "refusal", "intent_compilation"),
+  code2("tool_call_draft_binding_mismatch", "refusal", "intent_compilation"),
+  code2("tool_call_draft_params_digest_mismatch", "refusal", "intent_compilation"),
+  code2("tool_call_draft_terminal_state", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_transition_invalid", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_finalize_params_missing", "transition_error", "intent_compilation"),
+  code2("tool_call_draft_invalid_reason_missing", "transition_error", "intent_compilation"),
+  code2("x402_amount_exceeds_call_bound", "refusal", "intent_compilation"),
+  code2("x402_official_payment_required_evidence_incomplete", "refusal", "intent_compilation"),
+  code2("x402_provider_environment_not_sandboxed", "refusal", "intent_compilation"),
+  code2("x402_request_body_digest_missing", "refusal", "intent_compilation"),
+  code2("x402_request_body_posture_mismatch", "refusal", "intent_compilation"),
+  code2("x402_request_body_posture_unsupported", "refusal", "intent_compilation"),
+  code2("protected_x402_gateway_offline", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_credential_custody_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_custody_proof_unverified", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("protected_x402_install_not_ready", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_metadata_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_policy_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_readiness_proof_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_readiness_binding_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_x402_trusted_readiness_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("mcp_candidate_not_contractable", "refusal", "intent_compilation"),
+  code2("candidate_params_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_action_mismatch", "transition_error", "action_contract"),
+  code2("intent_compilation_not_contractable", "transition_error", "action_contract"),
+  code2("candidate_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_digest_missing", "transition_error", "action_contract"),
+  code2("candidate_catalog_digest_drift", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_runtime_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_not_contractable", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_graph_status_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_missing", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_digest_mismatch", "transition_error", "action_contract"),
+  code2("candidate_generated_execution_node_gateway_binding_mismatch", "transition_error", "action_contract"),
+  code2("mcp_candidate_digest_missing", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_missing", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_digest_mismatch", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_scope_mismatch", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_stale", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_unsafe_custody", "transition_error", "action_contract"),
+  code2("gateway_credential_ref_provider_drift", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_missing", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_digest_mismatch", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_scope_mismatch", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_policy_drift", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_not_active", "transition_error", "action_contract"),
+  code2("delegated_authority_ref_stale", "transition_error", "action_contract"),
+  code2("delegated_authority_amount_missing", "transition_error", "action_contract"),
+  code2("delegated_authority_amount_exceeds_action_bound", "transition_error", "action_contract"),
+  code2("delegated_authority_already_terminal", "transition_error", "delegated_authority"),
+  code2("delegated_authority_not_expired", "transition_error", "delegated_authority"),
+  code2("followup_action_contract_proposed", "recovery", "action_contract"),
+  code2("negotiation_session_missing", "transition_error", "negotiation"),
+  code2("negotiation_party_missing", "transition_error", "negotiation"),
+  code2("negotiation_offer_missing", "transition_error", "negotiation"),
+  code2("negotiation_offer_sequence_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_offer_version_conflict", "transition_error", "negotiation"),
+  code2("negotiation_offer_stale", "transition_error", "negotiation"),
+  code2("negotiation_offer_expired", "transition_error", "negotiation"),
+  code2("negotiation_counter_offer_stale", "transition_error", "negotiation"),
+  code2("negotiation_decision_missing", "transition_error", "negotiation"),
+  code2("negotiation_decision_not_accept", "transition_error", "negotiation"),
+  code2("negotiation_decision_session_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_scope_mismatch", "transition_error", "negotiation"),
+  code2("negotiation_session_expired", "transition_error", "negotiation"),
+  code2("linked_agreement_missing", "transition_error", "negotiation"),
+  code2("linked_agreement_offer_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_digest_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_party_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_counterparty_mismatch", "transition_error", "negotiation"),
+  code2("linked_agreement_duplicate", "transition_error", "negotiation"),
+  code2("linked_agreement_session_mismatch", "transition_error", "negotiation"),
+  code2("agreement_status_stale", "transition_error", "negotiation"),
+  code2("agreement_status_transition_invalid", "transition_error", "negotiation"),
+  code2("agreement_not_active", "policy_decision", "policy"),
+  code2("agreement_missing", "proof_gap", "policy"),
+  code2("agreement_expired", "policy_decision", "policy"),
+  code2("agreement_withdrawn", "policy_decision", "policy"),
+  code2("agreement_disputed", "policy_decision", "policy"),
+  code2("agreement_superseded", "policy_decision", "policy"),
+  code2("agreement_obligation_binding_missing", "proof_gap", "policy"),
+  code2("agreement_obligation_binding_ambiguous", "proof_gap", "policy"),
+  code2("agreement_obligation_contract_missing", "transition_error", "negotiation"),
+  code2("agreement_obligation_contract_mismatch", "transition_error", "negotiation"),
+  code2("agreement_obligation_contract_scope_mismatch", "transition_error", "negotiation"),
+  code2("agreement_obligation_binding_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_counterparty_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_params_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_scope_mismatch", "policy_decision", "policy"),
+  code2("agreement_obligation_binding_duplicate", "transition_error", "negotiation"),
+  code2("agreement_obligation_reused", "transition_error", "negotiation"),
+  code2("a2a_lifecycle_assembly_failed", "proof_gap", "negotiation"),
+  code2("credential_resolution_before_gateway_check", "transition_error", "credential_custody"),
+  code2("credential_resolution_gate_not_passed", "transition_error", "credential_custody"),
+  code2("credential_resolution_ref_mismatch", "transition_error", "credential_custody"),
+  code2("credential_resolution_provider_unavailable", "proof_gap", "credential_custody"),
+  code2("credential_resolution_vault_auth_denied", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_provider_drift", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_redaction_failed", "proof_gap", "credential_custody"),
+  code2("credential_resolution_replay_refused", "gateway_decision", "credential_custody"),
+  code2("credential_resolution_isolation_blocked", "gateway_decision", "credential_custody"),
+  code2("protected_path_posture_digest_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_scope_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_binding_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_posture_not_gateway_checked", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_source_authority_weak", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_posture_stale", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_unsafe_custody", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_custody_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_bypass_probe_mismatch", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_external_verification_required", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_fixture_cannot_claim_customer_custody", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_customer_evidence_missing", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_drifted", "transition_error", "credential_custody"),
+  code2("gateway_custody_proof_redaction_failed", "transition_error", "credential_custody"),
+  code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("envelope_not_active", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("action_class_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("gateway_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("resource_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_missing", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_refused", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("prior_action_not_greenlit", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("review_approved", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("review_decision_invalid", "policy_decision", "policy"),
+  code2("idempotency_duplicate_authority", "policy_decision", "policy"),
+  code2("idempotency_key_params_mismatch", "policy_decision", "policy"),
+  code2("protected_action_policy_amount_exceeds_action_bound", "policy_decision", "policy"),
+  code2("protected_action_policy_amount_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_credential_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_delegated_authority_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_payment_requirement_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_selected_payment_requirement_index_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_selected_payment_requirement_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_readiness_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_readiness_binding_mismatch", "policy_decision", "policy"),
+  code2("protected_action_policy_version_binding_missing", "proof_gap", "policy"),
+  code2("protected_action_policy_version_binding_mismatch", "policy_decision", "policy"),
+  code2("idempotency_recovery_missing", "recovery", "recovery"),
+  code2("idempotency_result_reusable", "recovery", "recovery"),
+  code2("idempotency_terminal_unknown_recovery_required", "recovery", "recovery"),
+  code2("gateway_registry_not_enforcing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_scope_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_binding_mismatch", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_stale", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_posture_not_gateway_checked", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_source_authority_weak", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_credential_custody_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_raw_sibling_tool_present", "protected_path_posture", "protected_path_posture"),
+  code2("bypass_probe_passed", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_missing", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_failed", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_source_authority_weak", "protected_path_posture", "protected_path_posture"),
+  code2("protected_path_probe_scope_mismatch", "transition_error", "protected_path_posture"),
+  code2("protected_path_probe_stale", "transition_error", "protected_path_posture"),
+  code2("cli_gateway_posture_probe_failed", "protected_path_posture", "protected_path_posture"),
+  code2("cli_gateway_posture_stale", "protected_path_posture", "protected_path_posture"),
+  code2("cli_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("cli_install_not_configured", "protected_path_posture", "protected_path_posture"),
+  code2("cli_install_not_ready", "protected_path_posture", "protected_path_posture"),
+  code2("cli_project_config_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_role_credential_profile_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_role_token_refs_not_distinct", "protected_path_posture", "protected_path_posture"),
+  code2("cli_state_root_inside_workspace", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_inside_workspace", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_missing", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_permissions_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("cli_token_ref_symlink", "protected_path_posture", "protected_path_posture"),
+  code2("cli_trust_bundle_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_gateway_offline", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_gateway_posture_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_stale", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_unknown", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_install_unsafe", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_metadata_digest_stale", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_policy_version_binding_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_tools_list_changed", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_trusted_readiness_binding_missing", "protected_path_posture", "protected_path_posture"),
+  code2("mcp_trusted_spend_bound_missing", "protected_path_posture", "protected_path_posture"),
+  code2("host_bypass_proof_gap", "proof_gap", "protected_path_posture"),
+  code2("host_fixture_manifest_stale", "protected_path_posture", "protected_path_posture"),
+  code2("host_gateway_unbound", "protected_path_posture", "protected_path_posture"),
+  code2("host_probe_advisory_only", "protected_path_posture", "protected_path_posture"),
+  code2("host_raw_sibling_mutation_possible", "protected_path_posture", "protected_path_posture"),
+  code2("host_tool_digest_changed", "protected_path_posture", "protected_path_posture"),
+  code2("host_wrapper_drifted", "protected_path_posture", "protected_path_posture"),
+  code2("host_wrapper_missing", "protected_path_posture", "protected_path_posture"),
+  code2("contract_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_digest_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_registry_version_mismatch", "gateway_decision", "gateway"),
+  code2("gateway_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_version_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_policy_version_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_readiness_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_readiness_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_idempotency_key_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_idempotency_scope_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_credential_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_credential_ref_digest_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_delegated_authority_ref_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_delegated_authority_ref_digest_mismatch", "gateway_decision", "gateway"),
+  code2("action_class_mismatch", "gateway_decision", "gateway"),
+  code2("resource_mismatch", "gateway_decision", "gateway"),
+  code2("params_mismatch", "gateway_decision", "gateway"),
+  code2("contract_digest_mismatch", "gateway_decision", "gateway"),
+  code2("protected_path_requirement_mismatch", "gateway_decision", "gateway"),
+  code2("greenlight_not_active", "gateway_decision", "gateway"),
+  code2("greenlight_expired", "gateway_decision", "gateway"),
+  code2("already_consumed", "gateway_decision", "gateway"),
+  code2("gateway_policy_unknown", "gateway_decision", "gateway"),
+  code2("gateway_policy_drift", "gateway_decision", "gateway"),
+  code2("protected_surface_operation_in_progress", "gateway_decision", "gateway"),
+  code2("gate_passed", "gateway_decision", "gateway", { decisionPolarity: "pass" }),
+  code2("downstream_status_unknown", "proof_gap", "gateway"),
+  code2("lockfile_reconstruction_evidence_missing", "proof_gap", "gateway"),
+  code2("npm_provenance_not_verified", "proof_gap", "gateway"),
+  code2("npm_signature_not_verified", "proof_gap", "gateway"),
+  code2("package_lifecycle_scripts_require_separate_contract", "proof_gap", "gateway"),
+  code2("registry_integrity_not_verified", "proof_gap", "gateway"),
+  code2("invalid_transition_unknown_reconciliation_cannot_resolve_proof_gap", "transition_error", "operation_lifecycle"),
+  code2("orphan_mitigation_required", "proof_gap", "operation_lifecycle"),
+  code2("unneeded_retry", "proof_gap", "operation_lifecycle"),
+  code2("breaker_watermark_digest_missing", "transition_error", "isolation"),
+  code2("breaker_watermark_event_missing", "transition_error", "isolation"),
+  code2("breaker_watermark_digest_mismatch", "transition_error", "isolation"),
+  code2("breaker_trip", "isolation", "isolation"),
+  code2("foreign_tenant_breaker", "isolation", "isolation"),
+  code2("foreign_org_resource_breaker", "isolation", "isolation"),
+  code2("gateway_scope_only", "isolation", "isolation"),
+  code2("model_quarantine", "isolation", "isolation"),
+  code2("sequence_divergence", "isolation", "isolation"),
+  code2("review_artifact_policy_contract_mismatch", "transition_error", "review"),
+  code2("review_artifact_not_required", "transition_error", "review"),
+  code2("review_artifact_contract_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_policy_input_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_digest_mismatch", "transition_error", "review"),
+  code2("review_artifact_contract_mismatch", "transition_error", "review"),
+  code2("review_artifact_action_posture_unsafe", "transition_error", "review"),
+  code2("review_artifact_policy_input_mismatch", "transition_error", "review"),
+  code2("review_artifact_gateway_policy_mismatch", "transition_error", "review"),
+  code2("human_verified_exact_contract", "policy_decision", "review", { decisionPolarity: "pass" }),
+  code2("sensitive_action", "policy_decision", "review"),
+  code2("receipt_digest_missing", "transition_error", "receipt_export"),
+  code2("receipt_stream_offsets_missing", "transition_error", "receipt_export"),
+  code2("receipt_digest_mismatch", "transition_error", "receipt_export"),
+  code2("audit_chain_digest_mismatch", "transition_error", "receipt_export"),
+  code2("invalid_authority_certificate_terminal", "transition_error", "authority_certificate"),
+  code2("invalid_authority_certificate_terminal_ref", "transition_error", "authority_certificate"),
+  code2("proof_gap_already_resolved", "transition_error", "recovery"),
+  code2("invalid_transition_proof_gap_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict", "proof_gap", "recovery"),
+  code2("recovery_terminal_conflict_gap_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_scope_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_claim_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_conflict_evidence_mismatch", "transition_error", "recovery"),
+  code2("recovery_terminal_transition_not_current", "transition_error", "recovery"),
+  code2("recovery_source_not_recoverable", "transition_error", "recovery"),
+  code2("recovery_receipt_digest_missing", "transition_error", "recovery"),
+  code2("recovery_receipt_stream_offsets_missing", "transition_error", "recovery"),
+  code2("recovery_receipt_digest_mismatch", "transition_error", "recovery"),
+  code2("recovery_audit_chain_digest_mismatch", "transition_error", "recovery"),
+  code2("recovery_source_ref_mismatch", "transition_error", "recovery"),
+  code2("recovery_next_action_class_missing", "transition_error", "recovery"),
+  code2("recovery_halt_has_next_action_classes", "transition_error", "recovery"),
+  code2("recovery_recommendation_not_open", "transition_error", "recovery"),
+  code2("recovery_recommendation_expired", "transition_error", "recovery"),
+  code2("recovery_retry_not_before", "transition_error", "recovery"),
+  code2("recovery_followup_not_later", "transition_error", "recovery"),
+  code2("recovery_action_class_not_allowed", "transition_error", "recovery"),
+  code2("recovery_required_evidence_missing", "transition_error", "recovery"),
+  code2("recovery_followup_scope_mismatch", "transition_error", "recovery"),
+  code2("recovery_path_not_contractable", "transition_error", "recovery"),
+  code2("recovery_superseding_contract_missing", "transition_error", "recovery"),
+  code2("recovery_expired_has_superseding_contract", "transition_error", "recovery"),
+  code2("recovery_not_expired", "transition_error", "recovery"),
+  code2("recovery_superseding_contract_mismatch", "transition_error", "recovery"),
+  code2("recovery_expired", "recovery", "recovery"),
+  code2("generated_execution_graph_issuer_scope_mismatch", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_nonce_replay", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_duplicate_node_id", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_unknown_node_ref", "transition_error", "generated_execution_graph"),
+  code2("generated_execution_graph_empty", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_missing_entry_node", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_cycle_detected", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_node_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_edge_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_depth_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_byte_limit_exceeded", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_complete", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_truncated", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_over_limit", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_graph_truncation_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_kind_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_secret_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_argv_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_raw_stdin_material", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_bypass_risk", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_hidden_trigger", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_observer_only", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_unsupported", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_node_ambiguous", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_denied", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_warned", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_allowlist", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_allow_once", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_bypass_detected", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_fail_open", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_skipped", "generated_graph_terminal", "generated_execution_graph"),
+  code2("generated_execution_command_risk_unknown", "generated_graph_terminal", "generated_execution_graph"),
+  code2("mcp_runtime_bridge_error", "transition_error", "runtime_evidence")
+];
+var protocolReasonCodePrefixes = [
+  prefix("isolation_", "policy_decision", "policy"),
+  prefix("current_isolation_", "gateway_decision", "gateway"),
+  prefix("prior_action_", "policy_decision", "policy"),
+  prefix("runtime_", "refusal", "intent_compilation")
+];
+var protocolReasonCodeValues = protocolReasonCodes.map((entry) => entry.code);
+var protocolReasonCodeValueSet = new Set(protocolReasonCodeValues);
+function resolveProtocolReasonCodeMetadata(candidate) {
+  const exact = protocolReasonCodes.find((entry) => entry.code === candidate);
+  if (exact) {
+    return {
+      kind: exact.kind,
+      phase: exact.phase,
+      ...exact.decisionPolarity !== undefined ? { decisionPolarity: exact.decisionPolarity } : {},
+      ...exact.classifiedFailure !== undefined ? { classifiedFailure: exact.classifiedFailure } : {}
+    };
+  }
+  const prefix = protocolReasonCodePrefixes.find((entry) => candidate.startsWith(entry.prefix));
+  if (prefix) {
+    return { kind: prefix.kind, phase: prefix.phase };
+  }
+  return null;
+}
+function code2(value, kind, phase, publicSafeOrOptions = true) {
+  const options = typeof publicSafeOrOptions === "boolean" ? { publicSafe: publicSafeOrOptions } : publicSafeOrOptions;
+  return {
+    code: value,
+    kind,
+    phase,
+    publicSafe: options.publicSafe ?? true,
+    ...options.decisionPolarity ? { decisionPolarity: options.decisionPolarity } : {},
+    ...options.classifiedFailure ? { classifiedFailure: options.classifiedFailure } : {}
+  };
+}
+function prefix(value, kind, phase, publicSafe = true) {
+  return {
+    prefix: value,
+    kind,
+    phase,
+    publicSafe
+  };
+}
+
+// src/protocol/foundation/failure-class/index.ts
+var FailureClassSchema = exports_external.enum([
+  "auth",
+  "hosted_admission",
+  "protected_action_refusal",
+  "proof_gap",
+  "replay_refusal",
+  "stale_admission",
+  "internal"
+]);
+var internalMisconfigurationCodes = new Set([
+  "caller_auth_not_configured",
+  "hosted_admission_config_not_configured",
+  "hosted_admission_config_invalid",
+  "hosted_caller_verifier_not_configured",
+  "durable_store_unavailable"
+]);
+function isStaleHostedAdmissionCode(code3) {
+  return code3 === "hosted_caller_identity_stale";
+}
+function failureClassFromHttpStatus(status) {
+  if (status === 401)
+    return "auth";
+  if (status === 403 || status === 409)
+    return "protected_action_refusal";
+  if (status === 422)
+    return "proof_gap";
+  if (status >= 500)
+    return "internal";
+  if (status >= 400 && status < 500)
+    return "proof_gap";
+  return "internal";
+}
+function failureClassFromReasonCodeMetadata(code3, metadata, options = {}) {
+  if (metadata.classifiedFailure)
+    return metadata.classifiedFailure;
+  switch (metadata.kind) {
+    case "refusal":
+      return "protected_action_refusal";
+    case "proof_gap":
+      return "proof_gap";
+    case "gateway_decision":
+      if (metadata.decisionPolarity === "pass")
+        return "internal";
+      return code3.includes("replay") ? "replay_refusal" : "protected_action_refusal";
+    case "policy_decision":
+      if (metadata.decisionPolarity === "pass")
+        return "internal";
+      if (metadata.decisionPolarity === "proof_gap")
+        return "proof_gap";
+      return "protected_action_refusal";
+    case "isolation":
+      return "protected_action_refusal";
+    case "recovery":
+      return options.proofRef ? "proof_gap" : "protected_action_refusal";
+    case "protected_path_posture":
+      return code3.includes("stale") ? "stale_admission" : "proof_gap";
+    case "transition_error":
+      return "internal";
+    default:
+      return "internal";
+  }
+}
+function classifyFailureClassFromProtocolError(error51) {
+  const code3 = error51.code;
+  if (code3 === "recovery_terminal_conflict") {
+    return error51.metadata.proofRef ? "proof_gap" : "protected_action_refusal";
+  }
+  if (internalMisconfigurationCodes.has(code3))
+    return "internal";
+  if (code3.startsWith("caller_auth_"))
+    return "auth";
+  if (code3.startsWith("hosted_")) {
+    return isStaleHostedAdmissionCode(code3) ? "stale_admission" : "hosted_admission";
+  }
+  if (code3.includes("replay") || code3 === "idempotency_duplicate_authority" || code3 === "generated_execution_graph_nonce_replay") {
+    return "replay_refusal";
+  }
+  const metadata = resolveProtocolReasonCodeMetadata(code3);
+  if (metadata) {
+    const metadataOptions = error51.metadata.proofRef !== undefined ? { proofRef: error51.metadata.proofRef } : {};
+    return failureClassFromReasonCodeMetadata(code3, metadata, metadataOptions);
+  }
+  if (error51.metadata.refusalRef)
+    return "protected_action_refusal";
+  if (error51.metadata.proofRef)
+    return "proof_gap";
+  if (error51.status >= 500)
+    return "internal";
+  if (isRegisteredHttpTransitionErrorCode(code3))
+    return "internal";
+  if (error51.status >= 400 && error51.status < 500)
+    return "protected_action_refusal";
+  return "internal";
+}
+
+// src/http/errors/transition-error-envelope.ts
+var TransitionErrorRetryabilitySchema = exports_external.enum([
+  "retryable",
+  "terminal",
+  "recoverable",
+  "review_required",
+  "ambiguous"
+]);
+var TransitionCommitStateSchema = exports_external.enum([
+  "not_started",
+  "not_committed",
+  "committed",
+  "unknown",
+  "not_applicable"
+]);
+var TransitionFailureClassSchema = FailureClassSchema;
+var TransitionFailurePhaseSchema = exports_external.enum(["admission", "transition", "readback"]).nullable();
+var TransitionErrorEnvelopeSchema = exports_external.strictObject({
+  code: exports_external.string(),
+  message: exports_external.string(),
+  transitionName: exports_external.string().nullable(),
+  callerCustodyRole: exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"]).nullable(),
+  retryability: TransitionErrorRetryabilitySchema,
+  commitState: TransitionCommitStateSchema,
+  requestIdentity: exports_external.string().nullable(),
+  proofRef: exports_external.string().nullable(),
+  refusalRef: exports_external.string().nullable(),
+  failureClass: TransitionFailureClassSchema,
+  failurePhase: TransitionFailurePhaseSchema,
+  problemType: exports_external.string().url().nullable(),
+  issues: exports_external.array(JsonValueSchema).optional()
+});
+var TransitionErrorResponseSchema = exports_external.strictObject({
+  error: TransitionErrorEnvelopeSchema
+});
+function transitionErrorResult(error51, context = {}) {
+  const classification = classifyTransitionError(error51, context);
+  const body = TransitionErrorResponseSchema.parse({
+    error: {
+      code: classification.code,
+      message: classification.message,
+      transitionName: context.transitionName ?? null,
+      callerCustodyRole: context.callerCustodyRole ?? null,
+      retryability: classification.retryability,
+      commitState: classification.commitState,
+      requestIdentity: context.requestIdentity ?? null,
+      proofRef: classification.proofRef,
+      refusalRef: classification.refusalRef,
+      failureClass: classification.failureClass,
+      failurePhase: classification.failurePhase,
+      problemType: classification.problemType,
+      ...classification.issues ? { issues: classification.issues } : {}
+    }
+  });
+  return { body, status: classification.status };
+}
+function httpStatusForFailureClass(failureClass, preferredStatus) {
+  const preferred = preferredStatus && preferredStatus >= 400 && preferredStatus < 600 ? preferredStatus : undefined;
+  switch (failureClass) {
+    case "auth":
+      if (preferred === 401 || preferred === 403 || preferred === 503)
+        return preferred;
+      return 401;
+    case "hosted_admission":
+      if (preferred === 401 || preferred === 403 || preferred === 412 || preferred === 503)
+        return preferred;
+      return 403;
+    case "stale_admission":
+    case "protected_action_refusal":
+    case "replay_refusal":
+      return 409;
+    case "proof_gap":
+      return 422;
+    case "internal":
+      return preferred ?? 500;
+  }
+}
+function isStaleHostedAdmissionCode2(code3) {
+  return code3 === "hosted_caller_identity_stale";
+}
+function failureClassForProtocolError(error51) {
+  const httpAdmission = httpTransitionErrorCodes.find((entry) => entry.code === error51.code);
+  if (httpAdmission) {
+    if (httpAdmission.phase === "auth")
+      return "auth";
+    if (httpAdmission.phase === "hosted_admission") {
+      return isStaleHostedAdmissionCode2(error51.code) ? "stale_admission" : "hosted_admission";
+    }
+    return "internal";
+  }
+  return classifyFailureClassFromProtocolError(error51);
+}
+function failurePhaseForError(code3, context) {
+  if (context.failurePhase)
+    return context.failurePhase;
+  const httpAdmission = httpTransitionErrorCodes.find((entry) => entry.code === code3);
+  if (httpAdmission?.phase === "auth" || httpAdmission?.phase === "hosted_admission") {
+    return "admission";
+  }
+  if (code3.startsWith("caller_auth_") || code3.startsWith("hosted_"))
+    return "admission";
+  if (code3.includes("readiness") || code3.includes("read_entitlement"))
+    return "readback";
+  const metadata = resolveProtocolReasonCodeMetadata(code3);
+  if (metadata?.phase === "catalog")
+    return "readback";
+  return "transition";
+}
+function classifyTransitionError(error51, context) {
+  if (error51 instanceof exports_external.ZodError) {
+    return {
+      code: "invalid_request",
+      message: "Transition request body failed schema validation.",
+      status: 400,
+      retryability: "terminal",
+      commitState: "not_started",
+      proofRef: null,
+      refusalRef: null,
+      failureClass: "internal",
+      failurePhase: failurePhaseForError("invalid_request", context),
+      problemType: problemTypeUriForCode("invalid_request"),
+      issues: error51.issues.map((issue2) => ({
+        code: issue2.code,
+        message: issue2.message,
+        path: issue2.path.map(String)
+      }))
+    };
+  }
+  if (error51 instanceof HandshakeProtocolError) {
+    const failureClass = failureClassForProtocolError(error51);
+    const failurePhase = failurePhaseForError(error51.code, context);
+    return {
+      code: error51.code,
+      message: error51.message,
+      status: httpStatusForFailureClass(failureClass, error51.status),
+      retryability: error51.metadata.retryability ?? retryabilityForProtocolError(error51),
+      commitState: error51.metadata.commitState ?? commitStateForProtocolError(error51),
+      proofRef: error51.metadata.proofRef ?? null,
+      refusalRef: error51.metadata.refusalRef ?? null,
+      failureClass,
+      failurePhase,
+      problemType: problemTypeUriForCode(error51.code)
+    };
+  }
+  return {
+    code: "internal_error",
+    message: "Unexpected protocol error.",
+    status: 500,
+    retryability: "retryable",
+    commitState: "unknown",
+    proofRef: null,
+    refusalRef: null,
+    failureClass: "internal",
+    failurePhase: "transition",
+    problemType: null
+  };
+}
+function retryabilityForProtocolError(error51) {
+  if (error51 instanceof HandshakeAmbiguousCommitError)
+    return "ambiguous";
+  if (error51.code === "stream_append_conflict")
+    return "retryable";
+  if (error51.code === "recovery_terminal_conflict")
+    return "recoverable";
+  if (error51.code.includes("review_required"))
+    return "review_required";
+  if (error51.status >= 500)
+    return "retryable";
+  return "terminal";
+}
+function commitStateForProtocolError(error51) {
+  if (error51 instanceof HandshakeAmbiguousCommitError)
+    return "unknown";
+  if (error51.code === "stream_append_conflict")
+    return "not_committed";
+  if (error51.metadata.proofRef || error51.metadata.refusalRef)
+    return "committed";
+  if (error51.code === "recovery_terminal_conflict")
+    return "unknown";
+  if (error51.code === "protocol_version_required" || error51.code === "protocol_version_unsupported" || error51.code === "request_identity_required" || error51.code === "request_identity_invalid" || error51.code === "originating_identity_invalid") {
+    return "not_started";
+  }
+  if (error51.status >= 500)
+    return "unknown";
+  return "not_committed";
+}
+
+// src/protocol/context/request-contexts.ts
+function emptyTransitionRequestCallerEvidence() {
+  return {
+    callerIdentityRef: null,
+    callerSubjectDigest: null,
+    callerTenantId: null,
+    callerOrganizationId: null,
+    callerIdentityClaimsDigest: null,
+    authProviderRef: null,
+    authSessionDigest: null,
+    serviceCredentialDigest: null,
+    revocationEpochRef: null,
+    callerIdentityIssuedAt: null,
+    callerIdentityExpiresAt: null
+  };
+}
+async function buildTransitionRequestContext(draft, scope2) {
+  const seed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: scope2.tenantId,
+    organizationId: scope2.organizationId,
+    createdAt: draft.acceptedAt,
+    transitionRequestContextId: createId("trc"),
+    ...draft,
+    requestContextDigest: null
+  };
+  const requestContextDigest = await digestCanonical(seed);
+  return TransitionRequestContextSchema.parse({ ...seed, requestContextDigest });
+}
+function acceptedAtNow() {
+  return nowIso();
+}
+
+// src/http/admission/request-context.ts
+var HANDSHAKE_PROTOCOL_VERSION_HEADER = "x-handshake-protocol-version";
+var HANDSHAKE_REQUEST_IDENTITY_HEADER = "x-handshake-request-identity";
+var HANDSHAKE_ORIGINATING_IDENTITY_HEADER = "x-handshake-originating-identity";
+var MAX_REQUEST_IDENTITY_LENGTH = 200;
+var MAX_ORIGINATING_IDENTITY_LENGTH = 500;
+var REQUEST_IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var ORIGINATING_IDENTITY_REF_PATTERN = /^ref:[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
+async function transitionRequestHeaderContextFor(c, input) {
+  const protocolVersionSeen = normalizedHeader(c, HANDSHAKE_PROTOCOL_VERSION_HEADER);
+  if (!protocolVersionSeen) {
+    throw new HandshakeProtocolError("protocol_version_required", "Transition requests must include X-Handshake-Protocol-Version.", 400);
+  }
+  if (protocolVersionSeen !== PROTOCOL_VERSION) {
+    throw new HandshakeProtocolError("protocol_version_unsupported", `Protocol version ${protocolVersionSeen} is not supported by this kernel.`, 412);
+  }
+  const requestIdentity = normalizedHeader(c, HANDSHAKE_REQUEST_IDENTITY_HEADER);
+  if (!requestIdentity) {
+    throw new HandshakeProtocolError("request_identity_required", "Transition requests must include X-Handshake-Request-Identity.", 400);
+  }
+  if (requestIdentity.length > MAX_REQUEST_IDENTITY_LENGTH) {
+    throw new HandshakeProtocolError("request_identity_invalid", "X-Handshake-Request-Identity is too long.", 400);
+  }
+  if (!REQUEST_IDENTITY_PATTERN.test(requestIdentity)) {
+    throw new HandshakeProtocolError("request_identity_invalid", "X-Handshake-Request-Identity must be an opaque request token.", 400);
+  }
+  const originatingIdentity = normalizedHeader(c, HANDSHAKE_ORIGINATING_IDENTITY_HEADER);
+  const parsedOriginatingIdentity = await parseOriginatingIdentityHeader(originatingIdentity);
+  return {
+    method: "POST",
+    protocolVersionSeen,
+    requestIdentity,
+    originatingIdentityDigest: parsedOriginatingIdentity.originatingIdentityDigest,
+    originatingIdentityRef: parsedOriginatingIdentity.originatingIdentityRef,
+    callerCustodyRole: input.callerCustodyRole,
+    ...input.callerEvidence ?? emptyTransitionRequestCallerEvidence(),
+    transitionName: input.transitionName,
+    routePattern: input.routePattern,
+    acceptedAt: acceptedAtNow()
+  };
+}
+async function transitionRequestContextDraftFor(headerContext, parsedBody) {
+  return {
+    protocolVersionSeen: headerContext.protocolVersionSeen,
+    requestIdentity: headerContext.requestIdentity,
+    originatingIdentityDigest: headerContext.originatingIdentityDigest,
+    originatingIdentityRef: headerContext.originatingIdentityRef,
+    callerCustodyRole: headerContext.callerCustodyRole,
+    callerIdentityRef: headerContext.callerIdentityRef,
+    callerSubjectDigest: headerContext.callerSubjectDigest,
+    callerTenantId: headerContext.callerTenantId,
+    callerOrganizationId: headerContext.callerOrganizationId,
+    callerIdentityClaimsDigest: headerContext.callerIdentityClaimsDigest,
+    authProviderRef: headerContext.authProviderRef,
+    authSessionDigest: headerContext.authSessionDigest,
+    serviceCredentialDigest: headerContext.serviceCredentialDigest,
+    revocationEpochRef: headerContext.revocationEpochRef,
+    callerIdentityIssuedAt: headerContext.callerIdentityIssuedAt,
+    callerIdentityExpiresAt: headerContext.callerIdentityExpiresAt,
+    transitionName: headerContext.transitionName,
+    routePattern: headerContext.routePattern,
+    acceptedAt: headerContext.acceptedAt,
+    requestDigest: await digestCanonical({
+      method: headerContext.method,
+      routePattern: headerContext.routePattern,
+      transitionName: headerContext.transitionName,
+      body: parsedBody
+    })
+  };
+}
+function normalizedHeader(c, name) {
+  const value = c.req.header(name)?.trim();
+  return value ? value : null;
+}
+async function parseOriginatingIdentityHeader(originatingIdentity) {
+  if (!originatingIdentity) {
+    return { originatingIdentityDigest: null, originatingIdentityRef: null };
+  }
+  if (originatingIdentity.length > MAX_ORIGINATING_IDENTITY_LENGTH) {
+    throw new HandshakeProtocolError("originating_identity_invalid", "X-Handshake-Originating-Identity is too long.", 400);
+  }
+  if (DigestSchema.safeParse(originatingIdentity).success) {
+    return { originatingIdentityDigest: originatingIdentity, originatingIdentityRef: null };
+  }
+  if (ORIGINATING_IDENTITY_REF_PATTERN.test(originatingIdentity)) {
+    return {
+      originatingIdentityDigest: await digestCanonical({
+        originatingIdentityRef: originatingIdentity
+      }),
+      originatingIdentityRef: originatingIdentity
+    };
+  }
+  throw new HandshakeProtocolError("originating_identity_invalid", "X-Handshake-Originating-Identity must be a sha256 digest or opaque ref.", 400);
+}
+
+// src/sdk/client.ts
+class HandshakeClientError extends Error {
+  status;
+  envelope;
+  code;
+  transitionName;
+  callerCustodyRole;
+  retryability;
+  commitState;
+  requestIdentity;
+  proofRef;
+  refusalRef;
+  failureClass;
+  failurePhase;
+  problemType;
+  constructor(status, envelope) {
+    super(`Handshake ${envelope.transitionName ?? "request"} failed: ${envelope.code}`);
+    this.status = status;
+    this.envelope = envelope;
+    this.name = "HandshakeClientError";
+    this.code = envelope.code;
+    this.transitionName = envelope.transitionName;
+    this.callerCustodyRole = envelope.callerCustodyRole;
+    this.retryability = envelope.retryability;
+    this.commitState = envelope.commitState;
+    this.requestIdentity = envelope.requestIdentity;
+    this.proofRef = envelope.proofRef;
+    this.refusalRef = envelope.refusalRef;
+    this.failureClass = envelope.failureClass;
+    this.failurePhase = envelope.failurePhase;
+    this.problemType = envelope.problemType;
+  }
+}
+
+// src/sdk/surface-clients/transport.ts
+class RoleScopedTransport {
+  baseUrl;
+  options;
+  fetchImpl;
+  constructor(baseUrl, options, fetchImpl = fetch) {
+    this.baseUrl = baseUrl;
+    this.options = options;
+    this.fetchImpl = fetchImpl;
+  }
+  post(path, body) {
+    return this.request("POST", path, body);
+  }
+  get(path) {
+    return this.request("GET", path);
+  }
+  async request(method, path, body) {
+    const headers = {
+      [HANDSHAKE_PROTOCOL_VERSION_HEADER]: this.options.protocolVersion ?? PROTOCOL_VERSION,
+      [HANDSHAKE_REQUEST_IDENTITY_HEADER]: this.nextRequestIdentity(),
+      authorization: `Bearer ${this.options.roleCredential}`
+    };
+    if (method === "POST")
+      headers["content-type"] = "application/json";
+    if (this.options.originatingIdentity) {
+      headers[HANDSHAKE_ORIGINATING_IDENTITY_HEADER] = this.options.originatingIdentity;
+    }
+    const response = await this.fetchImpl(new URL(path, this.baseUrl), {
+      method,
+      headers,
+      ...method === "POST" ? { body: JSON.stringify(body) } : {}
+    });
+    if (!response.ok) {
+      throw new HandshakeClientError(response.status, await this.errorEnvelopeForResponse(response));
+    }
+    return await response.json();
+  }
+  nextRequestIdentity() {
+    return this.options.requestIdentityFactory?.() ?? crypto.randomUUID();
+  }
+  async errorEnvelopeForResponse(response) {
+    const parsedBody = await parseJsonBody(response);
+    const parsedError = TransitionErrorResponseSchema.safeParse(parsedBody);
+    if (parsedError.success)
+      return parsedError.data.error;
+    const failureClass = failureClassFromHttpStatus(response.status);
+    return {
+      code: "http_error",
+      message: `Handshake request failed with HTTP ${response.status}.`,
+      transitionName: null,
+      callerCustodyRole: this.options.role,
+      retryability: response.status >= 500 ? "retryable" : "terminal",
+      commitState: "unknown",
+      requestIdentity: response.headers.get(HANDSHAKE_REQUEST_IDENTITY_HEADER),
+      proofRef: null,
+      refusalRef: null,
+      failureClass,
+      failurePhase: null,
+      problemType: null
+    };
+  }
+}
+async function parseJsonBody(response) {
+  const text = await response.text();
+  if (!text.trim())
+    return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// src/sdk/surface-clients/evidence-client.ts
+class EvidenceClient {
+  transport;
+  constructor(baseUrl, options, fetchImpl) {
+    this.transport = new RoleScopedTransport(baseUrl, { ...options, role: options.readRole ?? "review_custody" }, fetchImpl);
+  }
+  getGeneratedGraphEvidenceProjection(generatedExecutionGraphId) {
+    return this.transport.get(`/v0.2/evidence/generated-execution-graphs/${encodeURIComponent(generatedExecutionGraphId)}`);
+  }
+  getContractEvidenceProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/contracts/${encodeURIComponent(actionContractId)}`);
+  }
+  getOperationReadbackProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/operations/${encodeURIComponent(actionContractId)}/readback`);
+  }
+  getOperationCorrelationIndex(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/operations/${encodeURIComponent(actionContractId)}/correlation`);
+  }
+  getAgentTransactionEnvelopeProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/agent-transactions/${encodeURIComponent(actionContractId)}`);
+  }
+  getIdempotencyRecoveryProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/idempotency-recovery/${encodeURIComponent(actionContractId)}`);
+  }
+  getReceiptTimelineProjection(receiptId) {
+    return this.transport.get(`/v0.2/evidence/receipts/${encodeURIComponent(receiptId)}/timeline`);
+  }
+  getProtectedPathInstallHealthProjection(actionContractId) {
+    return this.transport.get(`/v0.2/evidence/protected-path-install-health/${encodeURIComponent(actionContractId)}`);
+  }
+  verifyAuthorityCertificate(certificate, trustMaterial) {
+    return verifyAuthorityCertificate(certificate, trustMaterial);
+  }
+}
+
+// src/cli/evidence/operation-readback-view.ts
+var OPERATION_READBACK_STAGE_ORDER = [
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+];
+function evidenceOperationReadbackCliView(projection) {
+  return {
+    schemaVersion: "handshake.cli.operation-readback-view.v1",
+    viewBoundary: "redacted_cli_projection_view",
+    title: `Operation ${projection.actionContractRef}`,
+    status: projection.operationStatus,
+    stage: projection.latestAuthoritativeStage,
+    nextMechanism: projection.nextMechanism,
+    stageOrder: OPERATION_READBACK_STAGE_ORDER,
+    correlationSummary: {
+      policyDecisionRef: projection.policyDecisionRef,
+      greenlightRef: projection.greenlightRef,
+      gateAttemptRef: projection.gateAttemptRef,
+      receiptRef: projection.receiptRef
+    },
+    nonClaims: [
+      "Readback does not issue greenlights",
+      "Readback does not perform gateway checks",
+      "Compilation stages do not grant authority"
+    ]
+  };
+}
+
+// src/cli/evidence/fetch.ts
+var DEFAULT_BASE_URL = "http://127.0.0.1:8787";
+function evidenceOperationReadbackCommand(value) {
+  const projection = OperationReadbackProjectionSchema.parse(value);
+  const view = evidenceOperationReadbackCliView(projection);
+  return cliOutput({
+    command: "evidence operation-readback",
+    plane: "evidence",
+    custodyRole: "review_custody",
+    nextAction: "read_evidence",
+    redactionProfileRef: projection.redactionProfileRef,
+    evidenceRefs: projection.evidenceRefs,
+    result: { projection, view }
+  });
+}
+async function evidenceFetchCommand(input) {
+  const projection = await resolveOperationReadbackProjection(input);
+  return evidenceOperationReadbackCommand(projection);
+}
+async function resolveOperationReadbackProjection(input) {
+  if (input.cwd) {
+    const offlinePath = join2(input.cwd, ".handshake", "evidence", "operations", `${input.contractId}.readback.json`);
+    const raw = await readFile2(offlinePath, "utf8");
+    return OperationReadbackProjectionSchema.parse(JSON.parse(raw));
+  }
+  const baseUrl = input.baseUrl ?? process.env.HANDSHAKE_BASE_URL ?? DEFAULT_BASE_URL;
+  const roleCredential = input.roleCredential ?? process.env.HANDSHAKE_REVIEW_CUSTODY_TOKEN ?? "review-custody-dev";
+  const client = new EvidenceClient(baseUrl, { roleCredential, readRole: "review_custody" });
+  return client.getOperationReadbackProjection(input.contractId);
+}
+
 // src/cli/projection-evidence.ts
 function evidenceContractViewCommand(value) {
   const projection = ContractEvidenceProjectionSchema.parse(value);
@@ -18251,363 +20874,87 @@ function unique(value, index, values) {
   return values.indexOf(value) === index;
 }
 
-// src/cli/x402/index.ts
-import { mkdir as mkdir2, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname2, join as join2 } from "node:path";
-
-// src/adapters/x402-payment/conformance.ts
-var x402FirstWedgeUnsupportedSurfaces = [
-  "upto",
-  "batch-settlement",
-  "lifecycle-hooks",
-  "mcp-auto-pay",
-  "signed-offers",
-  "signed-receipts",
-  "seller-middleware",
-  "facilitator-operation",
-  "settlement-finality"
-];
-var X402FirstWedgeUnsupportedSurfaceSchema = exports_external.enum(x402FirstWedgeUnsupportedSurfaces);
-var X402FirstWedgeSurfaceSchema = exports_external.union([exports_external.literal("exact"), X402FirstWedgeUnsupportedSurfaceSchema]);
-var X402FirstWedgeEvidenceLabelSchema = exports_external.enum([
-  "local_gateway_check",
-  "gateway_credential_resolution",
-  "gateway_signer_invocation",
-  "payment_payload_created",
-  "downstream_reconciliation_recorded",
-  "payment_response_received",
-  "payment_response_missing",
-  "local_reference_downstream_fixture",
-  "facilitator_verify_attempted",
-  "facilitator_verify_succeeded",
-  "facilitator_verify_failed",
-  "facilitator_settle_attempted",
-  "settlement_succeeded",
-  "settlement_failed",
-  "settlement_unknown"
-]);
-var X402AuthorityCertificateEvidenceProfileSchema = exports_external.strictObject({
-  profileKind: exports_external.literal("authority_certificate_x402_exact_evidence_profile"),
-  authorityCreated: exports_external.literal(false),
-  verificationOutcome: exports_external.enum(["verified", "refused", "proof_gap"]),
-  evidenceProfile: exports_external.enum(["x402_exact_per_call", "unsupported_action_class", "unverified_certificate", "proof_gap"]),
-  actionClass: exports_external.string().min(1).nullable(),
-  actionContractRef: exports_external.string().min(1).nullable(),
-  gatewayAdmissionStatus: exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]).nullable(),
-  downstreamOutcomeStatus: exports_external.enum(["not_started", "pending", "succeeded", "refused", "failed", "unknown"]).nullable(),
-  exactPerCallProtectedAction: exports_external.boolean(),
-  gatewayCheckEvidenceRef: exports_external.string().min(1).nullable(),
-  receiptRef: exports_external.string().min(1).nullable(),
-  proofGapRefs: exports_external.array(exports_external.string().min(1)),
-  refusalRefs: exports_external.array(exports_external.string().min(1)),
-  evidenceRefs: exports_external.array(exports_external.string().min(1)),
-  provesPaymentSuccess: exports_external.literal(false),
-  provesSettlementFinality: exports_external.literal(false),
-  provesFacilitatorOperation: exports_external.literal(false),
-  provesProviderCustody: exports_external.literal(false),
-  managesPayment: exports_external.literal(false),
-  nonClaims: exports_external.array(exports_external.string().min(1))
-});
-var x402FirstWedgeEvidenceLabelClassifications = {
-  facilitator_settle_attempted: evidenceLabel("facilitator_settle_attempted", "facilitator_settlement", {
-    firstWedgeOperation: "unsupported_facilitator_operation",
-    settlementFinality: "settlement_unknown"
-  }),
-  facilitator_verify_attempted: evidenceLabel("facilitator_verify_attempted", "facilitator_verify"),
-  facilitator_verify_failed: evidenceLabel("facilitator_verify_failed", "facilitator_verify"),
-  facilitator_verify_succeeded: evidenceLabel("facilitator_verify_succeeded", "facilitator_verify"),
-  local_gateway_check: evidenceLabel("local_gateway_check", "gateway_check"),
-  gateway_credential_resolution: evidenceLabel("gateway_credential_resolution", "gateway_credential_resolution"),
-  gateway_signer_invocation: evidenceLabel("gateway_signer_invocation", "gateway_signer_invocation"),
-  local_reference_downstream_fixture: evidenceLabel("local_reference_downstream_fixture", "local_reference_fixture"),
-  downstream_reconciliation_recorded: evidenceLabel("downstream_reconciliation_recorded", "downstream_reconciliation"),
-  payment_payload_created: evidenceLabel("payment_payload_created", "gateway_held_payment_credential"),
-  payment_response_missing: evidenceLabel("payment_response_missing", "payment_response", {
-    settlementFinality: "settlement_unknown"
-  }),
-  payment_response_received: evidenceLabel("payment_response_received", "payment_response", {
-    settlementFinality: "settlement_unknown"
-  }),
-  settlement_failed: evidenceLabel("settlement_failed", "facilitator_settlement", {
-    firstWedgeOperation: "unsupported_facilitator_operation",
-    settlementFinality: "settlement_failed"
-  }),
-  settlement_succeeded: evidenceLabel("settlement_succeeded", "facilitator_settlement", {
-    firstWedgeOperation: "unsupported_facilitator_operation",
-    settlementFinality: "settlement_succeeded"
-  }),
-  settlement_unknown: evidenceLabel("settlement_unknown", "facilitator_settlement", {
-    firstWedgeOperation: "unsupported_facilitator_operation",
-    settlementFinality: "settlement_unknown"
-  })
-};
-var X402PaymentConformanceReason = {
-  browserSidePaymentNotBlocked: "x402_browser_side_payment_not_blocked",
-  directCoreSigningNotBlocked: "x402_direct_core_signing_not_blocked",
-  directX402ClientNotBlocked: "x402_direct_x402_client_not_blocked",
-  failureClosedProbeFailed: "x402_failure_closed_probe_failed",
-  mcpDirectPaymentNotBlocked: "x402_mcp_direct_payment_not_blocked",
-  packageScriptPaymentNotBlocked: "x402_package_script_payment_not_blocked",
-  paidAxiosClientNotBlocked: "x402_paid_axios_client_not_blocked",
-  paidFetchClientNotBlocked: "x402_paid_fetch_client_not_blocked",
-  rawNetworkPaymentNotBlocked: "x402_raw_network_payment_not_blocked",
-  rawPaymentSignatureHeaderNotBlocked: "x402_raw_payment_signature_header_not_blocked",
-  rawPaymentSignatureInjectionNotBlocked: "x402_raw_payment_signature_injection_not_blocked",
-  rawPrivateKeyEnvNotAbsent: "x402_raw_private_key_env_not_absent",
-  siblingWrapperNotBlocked: "x402_sibling_wrapper_not_blocked",
-  signerNotGatewayHeld: "x402_signer_not_gateway_held",
-  tokenPassthroughNotBlocked: "x402_token_passthrough_not_blocked",
-  unmanagedMcpServerNotBlocked: "x402_unmanaged_mcp_server_not_blocked",
-  unmanagedToolPacketNotBlocked: "x402_unmanaged_tool_packet_not_blocked",
-  wrapperDriftPresent: "x402_wrapper_drift_present"
-};
-var X402PaymentConformancePostureSchema = exports_external.strictObject({
-  signerCustodyStatus: exports_external.enum(["gateway_held", "fixture_gateway_held", "agent_exposed", "unknown"]),
-  rawPrivateKeyEnvStatus: exports_external.enum(["absent", "present", "unknown"]),
-  directCoreClientSigningStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  directX402ClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  paidFetchClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  paidAxiosClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  packageScriptPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  browserSidePaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  rawNetworkPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  rawPaymentSignatureHeaderStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  rawPaymentSignatureInjectionStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  siblingX402WrapperStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  mcpDirectPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  unmanagedMcpServerStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  unmanagedToolPacketStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
-  tokenPassthroughStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
-  wrapperDriftStatus: exports_external.enum(["absent", "present", "unknown"]),
-  failureClosedStatus: exports_external.enum(["passed", "failed", "unknown"])
-});
-function checkX402PaymentInstallConformance(postureValue) {
-  const posture = X402PaymentConformancePostureSchema.parse(postureValue);
-  const reasonCodes = [];
-  if (!["gateway_held", "fixture_gateway_held"].includes(posture.signerCustodyStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.signerNotGatewayHeld);
-  }
-  if (posture.rawPrivateKeyEnvStatus !== "absent") {
-    reasonCodes.push(X402PaymentConformanceReason.rawPrivateKeyEnvNotAbsent);
-  }
-  if (!["blocked", "absent"].includes(posture.directCoreClientSigningStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.directCoreSigningNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.directX402ClientStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.directX402ClientNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.paidFetchClientStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.paidFetchClientNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.paidAxiosClientStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.paidAxiosClientNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.packageScriptPaymentStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.packageScriptPaymentNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.browserSidePaymentStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.browserSidePaymentNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.rawNetworkPaymentStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.rawNetworkPaymentNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.rawPaymentSignatureHeaderStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.rawPaymentSignatureHeaderNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.rawPaymentSignatureInjectionStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.rawPaymentSignatureInjectionNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.siblingX402WrapperStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.siblingWrapperNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.mcpDirectPaymentStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.mcpDirectPaymentNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.unmanagedMcpServerStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.unmanagedMcpServerNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.unmanagedToolPacketStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.unmanagedToolPacketNotBlocked);
-  }
-  if (!["blocked", "absent"].includes(posture.tokenPassthroughStatus)) {
-    reasonCodes.push(X402PaymentConformanceReason.tokenPassthroughNotBlocked);
-  }
-  if (posture.wrapperDriftStatus !== "absent")
-    reasonCodes.push(X402PaymentConformanceReason.wrapperDriftPresent);
-  if (posture.failureClosedStatus !== "passed") {
-    reasonCodes.push(X402PaymentConformanceReason.failureClosedProbeFailed);
-  }
-  return {
-    adapterPackId: "adapter_pack_x402_payment_exact",
-    passed: reasonCodes.length === 0,
-    requiredProbeKinds: requiredGatewayCheckedBypassProbeKinds,
-    reasonCodes: reasonCodes.sort()
-  };
-}
-function evidenceLabel(label, evidenceRole, options = {}) {
-  return {
-    authorityCreated: false,
-    evidenceRole,
-    firstWedgeOperation: options.firstWedgeOperation ?? "supported_evidence_only",
-    label,
-    settlementFinality: options.settlementFinality ?? "not_settlement_finality"
-  };
+// src/cli/host/doctor.ts
+async function hostDoctorCommand(input) {
+  const local = await doctorLocalProject(input.cwd);
+  const attestationDigest = await digestCanonical({
+    status: local.status,
+    reasonCodes: local.reasonCodes,
+    configRef: local.configRef,
+    workspaceRef: local.workspaceRef
+  });
+  return cliOutput({
+    command: "host doctor",
+    plane: "operator",
+    ok: local.status === "ready",
+    reasonCodes: local.reasonCodes,
+    nextAction: local.status === "ready" ? "read_result" : "fix_install",
+    retryability: local.status === "ready" ? "not_retryable" : "retryable_after_fix",
+    redactionProfileRef: "cli-host-doctor:v1-redacted",
+    nonClaims: [
+      ...cliNonClaims,
+      "parallel identity system",
+      "hosted trust anchor",
+      "gateway readiness certification"
+    ],
+    warnings: [
+      "Host doctor output is attestation evidence for binding digests only (D-23).",
+      "No ServiceWorkflowAdmission, greenlight, gateway check, or mutation was performed.",
+      "configMutationPerformedByDoctor: false"
+    ],
+    result: {
+      ...local,
+      evidenceKind: "cli_diagnostic",
+      liveHostVerificationStatus: "not_performed",
+      configMutationPerformedByDoctor: false,
+      attestationEvidence: {
+        bindingDigestRefs: {
+          configRef: local.configRef,
+          workspaceRef: local.workspaceRef,
+          trustBundleRef: local.trustBundleRef
+        },
+        policyVersionDigest: local.x402InstallRef,
+        gatewayReadinessDigest: local.x402GatewayReadinessRef
+      },
+      attestationEvidenceRef: `handshake://local/host-doctor/${attestationDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+      attestationDigest,
+      bindingDigestInputs: {
+        configRef: local.configRef,
+        workspaceRef: local.workspaceRef,
+        trustBundleRef: local.trustBundleRef
+      }
+    }
+  });
 }
 
-// src/adapters/x402-payment/bypass-probes.ts
-var x402ProbeSpecs = [
-  {
-    probeKind: "credential_custody",
-    evaluate(posture) {
-      return {
-        passed: posture.signerCustodyStatus === "gateway_held",
-        evidenceDetails: [
-          posture.signerCustodyStatus === "gateway_held" ? "signer_gateway_held" : "signer_not_real_gateway_held"
-        ]
-      };
+// src/cli/simulate/x402-payment.ts
+async function simulateX402PaymentCommand(input) {
+  return cliOutput({
+    command: "simulate x402-payment",
+    plane: "operator",
+    ok: true,
+    reasonCodes: [],
+    nextAction: "read_result",
+    retryability: "not_retryable",
+    redactionProfileRef: "cli-simulate-x402:v1-redacted",
+    nonClaims: [
+      ...cliNonClaims,
+      "live wallet operation",
+      "provider settlement",
+      "bundled execute API",
+      "greenlight reuse"
+    ],
+    warnings: [
+      "Simulation is non-authority readback scaffolding only — not a gateway check or mutation.",
+      "No payment payload was created and no protected surface was mutated."
+    ],
+    result: {
+      simulationKind: "x402_payment_exact_readback_scaffold",
+      cwd: input.cwd,
+      simulatedOutcome: "readback_preview_only",
+      clearanceChainPresent: false
     }
-  },
-  {
-    probeKind: "raw_sibling_blocking",
-    evaluate(posture) {
-      const checks3 = [
-        ["raw_private_key_env", posture.rawPrivateKeyEnvStatus === "absent", posture.rawPrivateKeyEnvStatus],
-        [
-          "direct_core_client_signing",
-          blockedOrAbsent(posture.directCoreClientSigningStatus),
-          statusLabel(posture.directCoreClientSigningStatus)
-        ],
-        [
-          "direct_x402_client",
-          blockedOrAbsent(posture.directX402ClientStatus),
-          statusLabel(posture.directX402ClientStatus)
-        ],
-        [
-          "paid_fetch_client",
-          blockedOrAbsent(posture.paidFetchClientStatus),
-          statusLabel(posture.paidFetchClientStatus)
-        ],
-        [
-          "paid_axios_client",
-          blockedOrAbsent(posture.paidAxiosClientStatus),
-          statusLabel(posture.paidAxiosClientStatus)
-        ],
-        [
-          "package_script_payment",
-          blockedOrAbsent(posture.packageScriptPaymentStatus),
-          statusLabel(posture.packageScriptPaymentStatus)
-        ],
-        [
-          "browser_side_payment",
-          blockedOrAbsent(posture.browserSidePaymentStatus),
-          statusLabel(posture.browserSidePaymentStatus)
-        ],
-        [
-          "raw_network_payment",
-          blockedOrAbsent(posture.rawNetworkPaymentStatus),
-          statusLabel(posture.rawNetworkPaymentStatus)
-        ],
-        [
-          "raw_payment_signature_header",
-          blockedOrAbsent(posture.rawPaymentSignatureHeaderStatus),
-          statusLabel(posture.rawPaymentSignatureHeaderStatus)
-        ],
-        [
-          "raw_payment_signature_injection",
-          blockedOrAbsent(posture.rawPaymentSignatureInjectionStatus),
-          statusLabel(posture.rawPaymentSignatureInjectionStatus)
-        ],
-        [
-          "sibling_x402_wrapper",
-          blockedOrAbsent(posture.siblingX402WrapperStatus),
-          statusLabel(posture.siblingX402WrapperStatus)
-        ]
-      ];
-      const failedDetails = checks3.filter(([, passed]) => !passed).map(([name, , status]) => `${name}_${status}_reachable`);
-      return {
-        passed: failedDetails.length === 0,
-        evidenceDetails: failedDetails.length === 0 ? [
-          "raw_private_key_env_absent",
-          "direct_core_client_signing_blocked",
-          "direct_x402_client_absent",
-          "paid_fetch_client_blocked",
-          "paid_axios_client_absent",
-          "package_script_payment_absent",
-          "browser_side_payment_absent",
-          "raw_network_payment_absent",
-          "raw_payment_signature_header_blocked",
-          "raw_payment_signature_injection_absent",
-          "sibling_x402_wrapper_blocked"
-        ] : failedDetails
-      };
-    }
-  },
-  {
-    probeKind: "mcp_direct_call_blocking",
-    evaluate(posture) {
-      const checks3 = [
-        ["mcp_direct_payment", statusLabel(posture.mcpDirectPaymentStatus)],
-        ["unmanaged_mcp_server", statusLabel(posture.unmanagedMcpServerStatus)],
-        ["unmanaged_tool_packet", statusLabel(posture.unmanagedToolPacketStatus)]
-      ];
-      const failedDetails = checks3.filter(([, status]) => !blockedOrAbsent(status)).map(([name, status]) => `${name}_${status}_reachable`);
-      return {
-        passed: failedDetails.length === 0,
-        evidenceDetails: failedDetails.length === 0 ? ["mcp_direct_payment_blocked", "unmanaged_mcp_server_absent", "unmanaged_tool_packet_absent"] : failedDetails
-      };
-    }
-  },
-  {
-    probeKind: "token_passthrough_blocking",
-    evaluate(posture) {
-      return {
-        passed: ["blocked", "absent"].includes(posture.tokenPassthroughStatus),
-        evidenceDetails: [
-          ["blocked", "absent"].includes(posture.tokenPassthroughStatus) ? "token_passthrough_blocked" : "token_passthrough_reachable"
-        ]
-      };
-    }
-  },
-  {
-    probeKind: "wrapper_drift",
-    evaluate(posture) {
-      return {
-        passed: posture.wrapperDriftStatus === "absent",
-        evidenceDetails: [posture.wrapperDriftStatus === "absent" ? "wrapper_drift_absent" : "wrapper_drift_present"]
-      };
-    }
-  },
-  {
-    probeKind: "failure_closed",
-    evaluate(posture) {
-      return {
-        passed: posture.failureClosedStatus === "passed",
-        evidenceDetails: [posture.failureClosedStatus === "passed" ? "failure_closed_passed" : "failure_closed_failed"]
-      };
-    }
-  }
-];
-function x402PaymentHostileBypassProbeExecutors(surface) {
-  return x402ProbeSpecs.map((spec) => ({
-    probeKind: spec.probeKind,
-    async execute(scope2) {
-      const posture = X402PaymentConformancePostureSchema.parse(await surface.readConformancePosture(scope2));
-      const evaluation = spec.evaluate(posture);
-      const probeOutcome = evaluation.passed ? "passed" : "failed";
-      return {
-        probeOutcome,
-        sourceAuthority: "gateway_probe",
-        reasonCodes: [evaluation.passed ? "bypass_probe_passed" : "protected_path_probe_failed"],
-        evidenceRefs: evaluation.evidenceDetails.map((detail) => `evidence:x402-hostile-probe:${spec.probeKind}:${detail}`)
-      };
-    }
-  }));
-}
-function blockedOrAbsent(status) {
-  return status === undefined || status === "blocked" || status === "absent";
-}
-function statusLabel(status) {
-  return status ?? "absent";
+  });
 }
 
 // src/adapters/x402-payment/install-proposal.ts
@@ -18903,6 +21250,14265 @@ function compareAtomic(left, right) {
   return leftValue === rightValue ? 0 : leftValue > rightValue ? 1 : -1;
 }
 
+// node_modules/hono/dist/compose.js
+var compose = (middleware, onError, onNotFound) => {
+  return (context, next) => {
+    let index = -1;
+    return dispatch(0);
+    async function dispatch(i) {
+      if (i <= index) {
+        throw new Error("next() called multiple times");
+      }
+      index = i;
+      let res;
+      let isError = false;
+      let handler;
+      if (middleware[i]) {
+        handler = middleware[i][0][0];
+        context.req.routeIndex = i;
+      } else {
+        handler = i === middleware.length && next || undefined;
+      }
+      if (handler) {
+        try {
+          res = await handler(context, () => dispatch(i + 1));
+        } catch (err) {
+          if (err instanceof Error && onError) {
+            context.error = err;
+            res = await onError(err, context);
+            isError = true;
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        if (context.finalized === false && onNotFound) {
+          res = await onNotFound(context);
+        }
+      }
+      if (res && (context.finalized === false || isError)) {
+        context.res = res;
+      }
+      return context;
+    }
+  };
+};
+
+// node_modules/hono/dist/request/constants.js
+var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
+
+// node_modules/hono/dist/utils/body.js
+var parseBody = async (request, options = /* @__PURE__ */ Object.create(null)) => {
+  const { all = false, dot = false } = options;
+  const headers = request instanceof HonoRequest ? request.raw.headers : request.headers;
+  const contentType = headers.get("Content-Type");
+  if (contentType?.startsWith("multipart/form-data") || contentType?.startsWith("application/x-www-form-urlencoded")) {
+    return parseFormData(request, { all, dot });
+  }
+  return {};
+};
+async function parseFormData(request, options) {
+  const formData = await request.formData();
+  if (formData) {
+    return convertFormDataToBodyData(formData, options);
+  }
+  return {};
+}
+function convertFormDataToBodyData(formData, options) {
+  const form = /* @__PURE__ */ Object.create(null);
+  formData.forEach((value, key) => {
+    const shouldParseAllValues = options.all || key.endsWith("[]");
+    if (!shouldParseAllValues) {
+      form[key] = value;
+    } else {
+      handleParsingAllValues(form, key, value);
+    }
+  });
+  if (options.dot) {
+    Object.entries(form).forEach(([key, value]) => {
+      const shouldParseDotValues = key.includes(".");
+      if (shouldParseDotValues) {
+        handleParsingNestedValues(form, key, value);
+        delete form[key];
+      }
+    });
+  }
+  return form;
+}
+var handleParsingAllValues = (form, key, value) => {
+  if (form[key] !== undefined) {
+    if (Array.isArray(form[key])) {
+      form[key].push(value);
+    } else {
+      form[key] = [form[key], value];
+    }
+  } else {
+    if (!key.endsWith("[]")) {
+      form[key] = value;
+    } else {
+      form[key] = [value];
+    }
+  }
+};
+var handleParsingNestedValues = (form, key, value) => {
+  if (/(?:^|\.)__proto__\./.test(key)) {
+    return;
+  }
+  let nestedForm = form;
+  const keys = key.split(".");
+  keys.forEach((key2, index) => {
+    if (index === keys.length - 1) {
+      nestedForm[key2] = value;
+    } else {
+      if (!nestedForm[key2] || typeof nestedForm[key2] !== "object" || Array.isArray(nestedForm[key2]) || nestedForm[key2] instanceof File) {
+        nestedForm[key2] = /* @__PURE__ */ Object.create(null);
+      }
+      nestedForm = nestedForm[key2];
+    }
+  });
+};
+
+// node_modules/hono/dist/utils/url.js
+var splitPath = (path) => {
+  const paths = path.split("/");
+  if (paths[0] === "") {
+    paths.shift();
+  }
+  return paths;
+};
+var splitRoutingPath = (routePath) => {
+  const { groups, path } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path);
+  return replaceGroupMarks(paths, groups);
+};
+var extractGroupsFromPath = (path) => {
+  const groups = [];
+  path = path.replace(/\{[^}]+\}/g, (match, index) => {
+    const mark = `@${index}`;
+    groups.push([mark, match]);
+    return mark;
+  });
+  return { groups, path };
+};
+var replaceGroupMarks = (paths, groups) => {
+  for (let i = groups.length - 1;i >= 0; i--) {
+    const [mark] = groups[i];
+    for (let j = paths.length - 1;j >= 0; j--) {
+      if (paths[j].includes(mark)) {
+        paths[j] = paths[j].replace(mark, groups[i][1]);
+        break;
+      }
+    }
+  }
+  return paths;
+};
+var patternCache = {};
+var getPattern = (label, next) => {
+  if (label === "*") {
+    return "*";
+  }
+  const match = label.match(/^\:([^\{\}]+)(?:\{(.+)\})?$/);
+  if (match) {
+    const cacheKey = `${label}#${next}`;
+    if (!patternCache[cacheKey]) {
+      if (match[2]) {
+        patternCache[cacheKey] = next && next[0] !== ":" && next[0] !== "*" ? [cacheKey, match[1], new RegExp(`^${match[2]}(?=/${next})`)] : [label, match[1], new RegExp(`^${match[2]}$`)];
+      } else {
+        patternCache[cacheKey] = [label, match[1], true];
+      }
+    }
+    return patternCache[cacheKey];
+  }
+  return null;
+};
+var tryDecode = (str, decoder) => {
+  try {
+    return decoder(str);
+  } catch {
+    return str.replace(/(?:%[0-9A-Fa-f]{2})+/g, (match) => {
+      try {
+        return decoder(match);
+      } catch {
+        return match;
+      }
+    });
+  }
+};
+var tryDecodeURI = (str) => tryDecode(str, decodeURI);
+var getPath = (request) => {
+  const url2 = request.url;
+  const start = url2.indexOf("/", url2.indexOf(":") + 4);
+  let i = start;
+  for (;i < url2.length; i++) {
+    const charCode = url2.charCodeAt(i);
+    if (charCode === 37) {
+      const queryIndex = url2.indexOf("?", i);
+      const hashIndex = url2.indexOf("#", i);
+      const end = queryIndex === -1 ? hashIndex === -1 ? undefined : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
+      const path = url2.slice(start, end);
+      return tryDecodeURI(path.includes("%25") ? path.replace(/%25/g, "%2525") : path);
+    } else if (charCode === 63 || charCode === 35) {
+      break;
+    }
+  }
+  return url2.slice(start, i);
+};
+var getPathNoStrict = (request) => {
+  const result = getPath(request);
+  return result.length > 1 && result.at(-1) === "/" ? result.slice(0, -1) : result;
+};
+var mergePath = (base, sub, ...rest) => {
+  if (rest.length) {
+    sub = mergePath(sub, ...rest);
+  }
+  return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
+};
+var checkOptionalParameter = (path) => {
+  if (path.charCodeAt(path.length - 1) !== 63 || !path.includes(":")) {
+    return null;
+  }
+  const segments = path.split("/");
+  const results = [];
+  let basePath = "";
+  segments.forEach((segment) => {
+    if (segment !== "" && !/\:/.test(segment)) {
+      basePath += "/" + segment;
+    } else if (/\:/.test(segment)) {
+      if (/\?/.test(segment)) {
+        if (results.length === 0 && basePath === "") {
+          results.push("/");
+        } else {
+          results.push(basePath);
+        }
+        const optionalSegment = segment.replace("?", "");
+        basePath += "/" + optionalSegment;
+        results.push(basePath);
+      } else {
+        basePath += "/" + segment;
+      }
+    }
+  });
+  return results.filter((v, i, a) => a.indexOf(v) === i);
+};
+var _decodeURI = (value) => {
+  if (!/[%+]/.test(value)) {
+    return value;
+  }
+  if (value.indexOf("+") !== -1) {
+    value = value.replace(/\+/g, " ");
+  }
+  return value.indexOf("%") !== -1 ? tryDecode(value, decodeURIComponent_) : value;
+};
+var _getQueryParam = (url2, key, multiple) => {
+  let encoded;
+  if (!multiple && key && !/[%+]/.test(key)) {
+    let keyIndex2 = url2.indexOf("?", 8);
+    if (keyIndex2 === -1) {
+      return;
+    }
+    if (!url2.startsWith(key, keyIndex2 + 1)) {
+      keyIndex2 = url2.indexOf(`&${key}`, keyIndex2 + 1);
+    }
+    while (keyIndex2 !== -1) {
+      const trailingKeyCode = url2.charCodeAt(keyIndex2 + key.length + 1);
+      if (trailingKeyCode === 61) {
+        const valueIndex = keyIndex2 + key.length + 2;
+        const endIndex = url2.indexOf("&", valueIndex);
+        return _decodeURI(url2.slice(valueIndex, endIndex === -1 ? undefined : endIndex));
+      } else if (trailingKeyCode == 38 || isNaN(trailingKeyCode)) {
+        return "";
+      }
+      keyIndex2 = url2.indexOf(`&${key}`, keyIndex2 + 1);
+    }
+    encoded = /[%+]/.test(url2);
+    if (!encoded) {
+      return;
+    }
+  }
+  const results = {};
+  encoded ??= /[%+]/.test(url2);
+  let keyIndex = url2.indexOf("?", 8);
+  while (keyIndex !== -1) {
+    const nextKeyIndex = url2.indexOf("&", keyIndex + 1);
+    let valueIndex = url2.indexOf("=", keyIndex);
+    if (valueIndex > nextKeyIndex && nextKeyIndex !== -1) {
+      valueIndex = -1;
+    }
+    let name = url2.slice(keyIndex + 1, valueIndex === -1 ? nextKeyIndex === -1 ? undefined : nextKeyIndex : valueIndex);
+    if (encoded) {
+      name = _decodeURI(name);
+    }
+    keyIndex = nextKeyIndex;
+    if (name === "") {
+      continue;
+    }
+    let value;
+    if (valueIndex === -1) {
+      value = "";
+    } else {
+      value = url2.slice(valueIndex + 1, nextKeyIndex === -1 ? undefined : nextKeyIndex);
+      if (encoded) {
+        value = _decodeURI(value);
+      }
+    }
+    if (multiple) {
+      if (!(results[name] && Array.isArray(results[name]))) {
+        results[name] = [];
+      }
+      results[name].push(value);
+    } else {
+      results[name] ??= value;
+    }
+  }
+  return key ? results[key] : results;
+};
+var getQueryParam = _getQueryParam;
+var getQueryParams = (url2, key) => {
+  return _getQueryParam(url2, key, true);
+};
+var decodeURIComponent_ = decodeURIComponent;
+
+// node_modules/hono/dist/request.js
+var tryDecodeURIComponent = (str) => tryDecode(str, decodeURIComponent_);
+var HonoRequest = class {
+  raw;
+  #validatedData;
+  #matchResult;
+  routeIndex = 0;
+  path;
+  bodyCache = {};
+  constructor(request, path = "/", matchResult = [[]]) {
+    this.raw = request;
+    this.path = path;
+    this.#matchResult = matchResult;
+    this.#validatedData = {};
+  }
+  param(key) {
+    return key ? this.#getDecodedParam(key) : this.#getAllDecodedParams();
+  }
+  #getDecodedParam(key) {
+    const paramKey = this.#matchResult[0][this.routeIndex][1][key];
+    const param = this.#getParamValue(paramKey);
+    return param && /\%/.test(param) ? tryDecodeURIComponent(param) : param;
+  }
+  #getAllDecodedParams() {
+    const decoded = {};
+    const keys = Object.keys(this.#matchResult[0][this.routeIndex][1]);
+    for (const key of keys) {
+      const value = this.#getParamValue(this.#matchResult[0][this.routeIndex][1][key]);
+      if (value !== undefined) {
+        decoded[key] = /\%/.test(value) ? tryDecodeURIComponent(value) : value;
+      }
+    }
+    return decoded;
+  }
+  #getParamValue(paramKey) {
+    return this.#matchResult[1] ? this.#matchResult[1][paramKey] : paramKey;
+  }
+  query(key) {
+    return getQueryParam(this.url, key);
+  }
+  queries(key) {
+    return getQueryParams(this.url, key);
+  }
+  header(name) {
+    if (name) {
+      return this.raw.headers.get(name) ?? undefined;
+    }
+    const headerData = {};
+    this.raw.headers.forEach((value, key) => {
+      headerData[key] = value;
+    });
+    return headerData;
+  }
+  async parseBody(options) {
+    return parseBody(this, options);
+  }
+  #cachedBody = (key) => {
+    const { bodyCache, raw } = this;
+    const cachedBody = bodyCache[key];
+    if (cachedBody) {
+      return cachedBody;
+    }
+    const anyCachedKey = Object.keys(bodyCache)[0];
+    if (anyCachedKey) {
+      return bodyCache[anyCachedKey].then((body) => {
+        if (anyCachedKey === "json") {
+          body = JSON.stringify(body);
+        }
+        return new Response(body)[key]();
+      });
+    }
+    return bodyCache[key] = raw[key]();
+  };
+  json() {
+    return this.#cachedBody("text").then((text) => JSON.parse(text));
+  }
+  text() {
+    return this.#cachedBody("text");
+  }
+  arrayBuffer() {
+    return this.#cachedBody("arrayBuffer");
+  }
+  bytes() {
+    return this.#cachedBody("arrayBuffer").then((buffer) => new Uint8Array(buffer));
+  }
+  blob() {
+    return this.#cachedBody("blob");
+  }
+  formData() {
+    return this.#cachedBody("formData");
+  }
+  addValidatedData(target, data) {
+    this.#validatedData[target] = data;
+  }
+  valid(target) {
+    return this.#validatedData[target];
+  }
+  get url() {
+    return this.raw.url;
+  }
+  get method() {
+    return this.raw.method;
+  }
+  get [GET_MATCH_RESULT]() {
+    return this.#matchResult;
+  }
+  get matchedRoutes() {
+    return this.#matchResult[0].map(([[, route]]) => route);
+  }
+  get routePath() {
+    return this.#matchResult[0].map(([[, route]]) => route)[this.routeIndex].path;
+  }
+};
+
+// node_modules/hono/dist/utils/html.js
+var HtmlEscapedCallbackPhase = {
+  Stringify: 1,
+  BeforeStream: 2,
+  Stream: 3
+};
+var raw = (value, callbacks) => {
+  const escapedString = new String(value);
+  escapedString.isEscaped = true;
+  escapedString.callbacks = callbacks;
+  return escapedString;
+};
+var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => {
+  if (typeof str === "object" && !(str instanceof String)) {
+    if (!(str instanceof Promise)) {
+      str = str.toString();
+    }
+    if (str instanceof Promise) {
+      str = await str;
+    }
+  }
+  const callbacks = str.callbacks;
+  if (!callbacks?.length) {
+    return Promise.resolve(str);
+  }
+  if (buffer) {
+    buffer[0] += str;
+  } else {
+    buffer = [str];
+  }
+  const resStr = Promise.all(callbacks.map((c) => c({ phase, buffer, context }))).then((res) => Promise.all(res.filter(Boolean).map((str2) => resolveCallback(str2, phase, false, context, buffer))).then(() => buffer[0]));
+  if (preserveCallbacks) {
+    return raw(await resStr, callbacks);
+  } else {
+    return resStr;
+  }
+};
+
+// node_modules/hono/dist/context.js
+var TEXT_PLAIN = "text/plain; charset=UTF-8";
+var setDefaultContentType = (contentType, headers) => {
+  return {
+    "Content-Type": contentType,
+    ...headers
+  };
+};
+var createResponseInstance = (body, init) => new Response(body, init);
+var Context = class {
+  #rawRequest;
+  #req;
+  env = {};
+  #var;
+  finalized = false;
+  error;
+  #status;
+  #executionCtx;
+  #res;
+  #layout;
+  #renderer;
+  #notFoundHandler;
+  #preparedHeaders;
+  #matchResult;
+  #path;
+  constructor(req, options) {
+    this.#rawRequest = req;
+    if (options) {
+      this.#executionCtx = options.executionCtx;
+      this.env = options.env;
+      this.#notFoundHandler = options.notFoundHandler;
+      this.#path = options.path;
+      this.#matchResult = options.matchResult;
+    }
+  }
+  get req() {
+    this.#req ??= new HonoRequest(this.#rawRequest, this.#path, this.#matchResult);
+    return this.#req;
+  }
+  get event() {
+    if (this.#executionCtx && "respondWith" in this.#executionCtx) {
+      return this.#executionCtx;
+    } else {
+      throw Error("This context has no FetchEvent");
+    }
+  }
+  get executionCtx() {
+    if (this.#executionCtx) {
+      return this.#executionCtx;
+    } else {
+      throw Error("This context has no ExecutionContext");
+    }
+  }
+  get res() {
+    return this.#res ||= createResponseInstance(null, {
+      headers: this.#preparedHeaders ??= new Headers
+    });
+  }
+  set res(_res) {
+    if (this.#res && _res) {
+      _res = createResponseInstance(_res.body, _res);
+      for (const [k, v] of this.#res.headers.entries()) {
+        if (k === "content-type") {
+          continue;
+        }
+        if (k === "set-cookie") {
+          const cookies = this.#res.headers.getSetCookie();
+          _res.headers.delete("set-cookie");
+          for (const cookie of cookies) {
+            _res.headers.append("set-cookie", cookie);
+          }
+        } else {
+          _res.headers.set(k, v);
+        }
+      }
+    }
+    this.#res = _res;
+    this.finalized = true;
+  }
+  render = (...args) => {
+    this.#renderer ??= (content) => this.html(content);
+    return this.#renderer(...args);
+  };
+  setLayout = (layout) => this.#layout = layout;
+  getLayout = () => this.#layout;
+  setRenderer = (renderer) => {
+    this.#renderer = renderer;
+  };
+  header = (name, value, options) => {
+    if (this.finalized) {
+      this.#res = createResponseInstance(this.#res.body, this.#res);
+    }
+    const headers = this.#res ? this.#res.headers : this.#preparedHeaders ??= new Headers;
+    if (value === undefined) {
+      headers.delete(name);
+    } else if (options?.append) {
+      headers.append(name, value);
+    } else {
+      headers.set(name, value);
+    }
+  };
+  status = (status) => {
+    this.#status = status;
+  };
+  set = (key, value) => {
+    this.#var ??= /* @__PURE__ */ new Map;
+    this.#var.set(key, value);
+  };
+  get = (key) => {
+    return this.#var ? this.#var.get(key) : undefined;
+  };
+  get var() {
+    if (!this.#var) {
+      return {};
+    }
+    return Object.fromEntries(this.#var);
+  }
+  #newResponse(data, arg, headers) {
+    const responseHeaders = this.#res ? new Headers(this.#res.headers) : this.#preparedHeaders ?? new Headers;
+    if (typeof arg === "object" && "headers" in arg) {
+      const argHeaders = arg.headers instanceof Headers ? arg.headers : new Headers(arg.headers);
+      for (const [key, value] of argHeaders) {
+        if (key.toLowerCase() === "set-cookie") {
+          responseHeaders.append(key, value);
+        } else {
+          responseHeaders.set(key, value);
+        }
+      }
+    }
+    if (headers) {
+      for (const [k, v] of Object.entries(headers)) {
+        if (typeof v === "string") {
+          responseHeaders.set(k, v);
+        } else {
+          responseHeaders.delete(k);
+          for (const v2 of v) {
+            responseHeaders.append(k, v2);
+          }
+        }
+      }
+    }
+    const status = typeof arg === "number" ? arg : arg?.status ?? this.#status;
+    return createResponseInstance(data, { status, headers: responseHeaders });
+  }
+  newResponse = (...args) => this.#newResponse(...args);
+  body = (data, arg, headers) => this.#newResponse(data, arg, headers);
+  text = (text, arg, headers) => {
+    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text) : this.#newResponse(text, arg, setDefaultContentType(TEXT_PLAIN, headers));
+  };
+  json = (object2, arg, headers) => {
+    return this.#newResponse(JSON.stringify(object2), arg, setDefaultContentType("application/json", headers));
+  };
+  html = (html, arg, headers) => {
+    const res = (html2) => this.#newResponse(html2, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
+    return typeof html === "object" ? resolveCallback(html, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html);
+  };
+  redirect = (location, status) => {
+    const locationString = String(location);
+    this.header("Location", !/[^\x00-\xFF]/.test(locationString) ? locationString : encodeURI(locationString));
+    return this.newResponse(null, status ?? 302);
+  };
+  notFound = () => {
+    this.#notFoundHandler ??= () => createResponseInstance();
+    return this.#notFoundHandler(this);
+  };
+};
+
+// node_modules/hono/dist/router.js
+var METHOD_NAME_ALL = "ALL";
+var METHOD_NAME_ALL_LOWERCASE = "all";
+var METHODS = ["get", "post", "put", "delete", "options", "patch"];
+var MESSAGE_MATCHER_IS_ALREADY_BUILT = "Can not add a route since the matcher is already built.";
+var UnsupportedPathError = class extends Error {
+};
+
+// node_modules/hono/dist/utils/constants.js
+var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
+
+// node_modules/hono/dist/hono-base.js
+var notFoundHandler = (c) => {
+  return c.text("404 Not Found", 404);
+};
+var errorHandler = (err, c) => {
+  if ("getResponse" in err) {
+    const res = err.getResponse();
+    return c.newResponse(res.body, res);
+  }
+  console.error(err);
+  return c.text("Internal Server Error", 500);
+};
+var Hono = class _Hono {
+  get;
+  post;
+  put;
+  delete;
+  options;
+  patch;
+  all;
+  on;
+  use;
+  router;
+  getPath;
+  _basePath = "/";
+  #path = "/";
+  routes = [];
+  constructor(options = {}) {
+    const allMethods = [...METHODS, METHOD_NAME_ALL_LOWERCASE];
+    allMethods.forEach((method) => {
+      this[method] = (args1, ...args) => {
+        if (typeof args1 === "string") {
+          this.#path = args1;
+        } else {
+          this.#addRoute(method, this.#path, args1);
+        }
+        args.forEach((handler) => {
+          this.#addRoute(method, this.#path, handler);
+        });
+        return this;
+      };
+    });
+    this.on = (method, path, ...handlers) => {
+      for (const p of [path].flat()) {
+        this.#path = p;
+        for (const m of [method].flat()) {
+          handlers.map((handler) => {
+            this.#addRoute(m.toUpperCase(), this.#path, handler);
+          });
+        }
+      }
+      return this;
+    };
+    this.use = (arg1, ...handlers) => {
+      if (typeof arg1 === "string") {
+        this.#path = arg1;
+      } else {
+        this.#path = "*";
+        handlers.unshift(arg1);
+      }
+      handlers.forEach((handler) => {
+        this.#addRoute(METHOD_NAME_ALL, this.#path, handler);
+      });
+      return this;
+    };
+    const { strict, ...optionsWithoutStrict } = options;
+    Object.assign(this, optionsWithoutStrict);
+    this.getPath = strict ?? true ? options.getPath ?? getPath : getPathNoStrict;
+  }
+  #clone() {
+    const clone2 = new _Hono({
+      router: this.router,
+      getPath: this.getPath
+    });
+    clone2.errorHandler = this.errorHandler;
+    clone2.#notFoundHandler = this.#notFoundHandler;
+    clone2.routes = this.routes;
+    return clone2;
+  }
+  #notFoundHandler = notFoundHandler;
+  errorHandler = errorHandler;
+  route(path, app) {
+    const subApp = this.basePath(path);
+    app.routes.map((r) => {
+      let handler;
+      if (app.errorHandler === errorHandler) {
+        handler = r.handler;
+      } else {
+        handler = async (c, next) => (await compose([], app.errorHandler)(c, () => r.handler(c, next))).res;
+        handler[COMPOSED_HANDLER] = r.handler;
+      }
+      subApp.#addRoute(r.method, r.path, handler);
+    });
+    return this;
+  }
+  basePath(path) {
+    const subApp = this.#clone();
+    subApp._basePath = mergePath(this._basePath, path);
+    return subApp;
+  }
+  onError = (handler) => {
+    this.errorHandler = handler;
+    return this;
+  };
+  notFound = (handler) => {
+    this.#notFoundHandler = handler;
+    return this;
+  };
+  mount(path, applicationHandler, options) {
+    let replaceRequest;
+    let optionHandler;
+    if (options) {
+      if (typeof options === "function") {
+        optionHandler = options;
+      } else {
+        optionHandler = options.optionHandler;
+        if (options.replaceRequest === false) {
+          replaceRequest = (request) => request;
+        } else {
+          replaceRequest = options.replaceRequest;
+        }
+      }
+    }
+    const getOptions = optionHandler ? (c) => {
+      const options2 = optionHandler(c);
+      return Array.isArray(options2) ? options2 : [options2];
+    } : (c) => {
+      let executionContext = undefined;
+      try {
+        executionContext = c.executionCtx;
+      } catch {}
+      return [c.env, executionContext];
+    };
+    replaceRequest ||= (() => {
+      const mergedPath = mergePath(this._basePath, path);
+      const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
+      return (request) => {
+        const url2 = new URL(request.url);
+        url2.pathname = url2.pathname.slice(pathPrefixLength) || "/";
+        return new Request(url2, request);
+      };
+    })();
+    const handler = async (c, next) => {
+      const res = await applicationHandler(replaceRequest(c.req.raw), ...getOptions(c));
+      if (res) {
+        return res;
+      }
+      await next();
+    };
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path, "*"), handler);
+    return this;
+  }
+  #addRoute(method, path, handler) {
+    method = method.toUpperCase();
+    path = mergePath(this._basePath, path);
+    const r = { basePath: this._basePath, path, method, handler };
+    this.router.add(method, path, [handler, r]);
+    this.routes.push(r);
+  }
+  #handleError(err, c) {
+    if (err instanceof Error) {
+      return this.errorHandler(err, c);
+    }
+    throw err;
+  }
+  #dispatch(request, executionCtx, env, method) {
+    if (method === "HEAD") {
+      return (async () => new Response(null, await this.#dispatch(request, executionCtx, env, "GET")))();
+    }
+    const path = this.getPath(request, { env });
+    const matchResult = this.router.match(method, path);
+    const c = new Context(request, {
+      path,
+      matchResult,
+      env,
+      executionCtx,
+      notFoundHandler: this.#notFoundHandler
+    });
+    if (matchResult[0].length === 1) {
+      let res;
+      try {
+        res = matchResult[0][0][0][0](c, async () => {
+          c.res = await this.#notFoundHandler(c);
+        });
+      } catch (err) {
+        return this.#handleError(err, c);
+      }
+      return res instanceof Promise ? res.then((resolved) => resolved || (c.finalized ? c.res : this.#notFoundHandler(c))).catch((err) => this.#handleError(err, c)) : res ?? this.#notFoundHandler(c);
+    }
+    const composed = compose(matchResult[0], this.errorHandler, this.#notFoundHandler);
+    return (async () => {
+      try {
+        const context = await composed(c);
+        if (!context.finalized) {
+          throw new Error("Context is not finalized. Did you forget to return a Response object or `await next()`?");
+        }
+        return context.res;
+      } catch (err) {
+        return this.#handleError(err, c);
+      }
+    })();
+  }
+  fetch = (request, ...rest) => {
+    return this.#dispatch(request, rest[1], rest[0], request.method);
+  };
+  request = (input, requestInit, Env, executionCtx) => {
+    if (input instanceof Request) {
+      return this.fetch(requestInit ? new Request(input, requestInit) : input, Env, executionCtx);
+    }
+    input = input.toString();
+    return this.fetch(new Request(/^https?:\/\//.test(input) ? input : `http://localhost${mergePath("/", input)}`, requestInit), Env, executionCtx);
+  };
+  fire = () => {
+    addEventListener("fetch", (event) => {
+      event.respondWith(this.#dispatch(event.request, event, undefined, event.request.method));
+    });
+  };
+};
+
+// node_modules/hono/dist/router/reg-exp-router/matcher.js
+var emptyParam = [];
+function match(method, path) {
+  const matchers = this.buildAllMatchers();
+  const match2 = (method2, path2) => {
+    const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
+    const staticMatch = matcher[2][path2];
+    if (staticMatch) {
+      return staticMatch;
+    }
+    const match3 = path2.match(matcher[0]);
+    if (!match3) {
+      return [[], emptyParam];
+    }
+    const index = match3.indexOf("", 1);
+    return [matcher[1][index], match3];
+  };
+  this.match = match2;
+  return match2(method, path);
+}
+
+// node_modules/hono/dist/router/reg-exp-router/node.js
+var LABEL_REG_EXP_STR = "[^/]+";
+var ONLY_WILDCARD_REG_EXP_STR = ".*";
+var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
+var PATH_ERROR = /* @__PURE__ */ Symbol();
+var regExpMetaChars = new Set(".\\+*[^]$()");
+function compareKey(a, b) {
+  if (a.length === 1) {
+    return b.length === 1 ? a < b ? -1 : 1 : -1;
+  }
+  if (b.length === 1) {
+    return 1;
+  }
+  if (a === ONLY_WILDCARD_REG_EXP_STR || a === TAIL_WILDCARD_REG_EXP_STR) {
+    return 1;
+  } else if (b === ONLY_WILDCARD_REG_EXP_STR || b === TAIL_WILDCARD_REG_EXP_STR) {
+    return -1;
+  }
+  if (a === LABEL_REG_EXP_STR) {
+    return 1;
+  } else if (b === LABEL_REG_EXP_STR) {
+    return -1;
+  }
+  return a.length === b.length ? a < b ? -1 : 1 : b.length - a.length;
+}
+var Node = class _Node {
+  #index;
+  #varIndex;
+  #children = /* @__PURE__ */ Object.create(null);
+  insert(tokens, index, paramMap, context, pathErrorCheckOnly) {
+    if (tokens.length === 0) {
+      if (this.#index !== undefined) {
+        throw PATH_ERROR;
+      }
+      if (pathErrorCheckOnly) {
+        return;
+      }
+      this.#index = index;
+      return;
+    }
+    const [token, ...restTokens] = tokens;
+    const pattern = token === "*" ? restTokens.length === 0 ? ["", "", ONLY_WILDCARD_REG_EXP_STR] : ["", "", LABEL_REG_EXP_STR] : token === "/*" ? ["", "", TAIL_WILDCARD_REG_EXP_STR] : token.match(/^\:([^\{\}]+)(?:\{(.+)\})?$/);
+    let node;
+    if (pattern) {
+      const name = pattern[1];
+      let regexpStr = pattern[2] || LABEL_REG_EXP_STR;
+      if (name && pattern[2]) {
+        if (regexpStr === ".*") {
+          throw PATH_ERROR;
+        }
+        regexpStr = regexpStr.replace(/^\((?!\?:)(?=[^)]+\)$)/, "(?:");
+        if (/\((?!\?:)/.test(regexpStr)) {
+          throw PATH_ERROR;
+        }
+      }
+      node = this.#children[regexpStr];
+      if (!node) {
+        if (Object.keys(this.#children).some((k) => k !== ONLY_WILDCARD_REG_EXP_STR && k !== TAIL_WILDCARD_REG_EXP_STR)) {
+          throw PATH_ERROR;
+        }
+        if (pathErrorCheckOnly) {
+          return;
+        }
+        node = this.#children[regexpStr] = new _Node;
+        if (name !== "") {
+          node.#varIndex = context.varIndex++;
+        }
+      }
+      if (!pathErrorCheckOnly && name !== "") {
+        paramMap.push([name, node.#varIndex]);
+      }
+    } else {
+      node = this.#children[token];
+      if (!node) {
+        if (Object.keys(this.#children).some((k) => k.length > 1 && k !== ONLY_WILDCARD_REG_EXP_STR && k !== TAIL_WILDCARD_REG_EXP_STR)) {
+          throw PATH_ERROR;
+        }
+        if (pathErrorCheckOnly) {
+          return;
+        }
+        node = this.#children[token] = new _Node;
+      }
+    }
+    node.insert(restTokens, index, paramMap, context, pathErrorCheckOnly);
+  }
+  buildRegExpStr() {
+    const childKeys = Object.keys(this.#children).sort(compareKey);
+    const strList = childKeys.map((k) => {
+      const c = this.#children[k];
+      return (typeof c.#varIndex === "number" ? `(${k})@${c.#varIndex}` : regExpMetaChars.has(k) ? `\\${k}` : k) + c.buildRegExpStr();
+    });
+    if (typeof this.#index === "number") {
+      strList.unshift(`#${this.#index}`);
+    }
+    if (strList.length === 0) {
+      return "";
+    }
+    if (strList.length === 1) {
+      return strList[0];
+    }
+    return "(?:" + strList.join("|") + ")";
+  }
+};
+
+// node_modules/hono/dist/router/reg-exp-router/trie.js
+var Trie = class {
+  #context = { varIndex: 0 };
+  #root = new Node;
+  insert(path, index, pathErrorCheckOnly) {
+    const paramAssoc = [];
+    const groups = [];
+    for (let i = 0;; ) {
+      let replaced = false;
+      path = path.replace(/\{[^}]+\}/g, (m) => {
+        const mark = `@\\${i}`;
+        groups[i] = [mark, m];
+        i++;
+        replaced = true;
+        return mark;
+      });
+      if (!replaced) {
+        break;
+      }
+    }
+    const tokens = path.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    for (let i = groups.length - 1;i >= 0; i--) {
+      const [mark] = groups[i];
+      for (let j = tokens.length - 1;j >= 0; j--) {
+        if (tokens[j].indexOf(mark) !== -1) {
+          tokens[j] = tokens[j].replace(mark, groups[i][1]);
+          break;
+        }
+      }
+    }
+    this.#root.insert(tokens, index, paramAssoc, this.#context, pathErrorCheckOnly);
+    return paramAssoc;
+  }
+  buildRegExp() {
+    let regexp = this.#root.buildRegExpStr();
+    if (regexp === "") {
+      return [/^$/, [], []];
+    }
+    let captureIndex = 0;
+    const indexReplacementMap = [];
+    const paramReplacementMap = [];
+    regexp = regexp.replace(/#(\d+)|@(\d+)|\.\*\$/g, (_, handlerIndex, paramIndex) => {
+      if (handlerIndex !== undefined) {
+        indexReplacementMap[++captureIndex] = Number(handlerIndex);
+        return "$()";
+      }
+      if (paramIndex !== undefined) {
+        paramReplacementMap[Number(paramIndex)] = ++captureIndex;
+        return "";
+      }
+      return "";
+    });
+    return [new RegExp(`^${regexp}`), indexReplacementMap, paramReplacementMap];
+  }
+};
+
+// node_modules/hono/dist/router/reg-exp-router/router.js
+var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
+var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
+function buildWildcardRegExp(path) {
+  return wildcardRegExpCache[path] ??= new RegExp(path === "*" ? "" : `^${path.replace(/\/\*$|([.\\+*[^\]$()])/g, (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)")}$`);
+}
+function clearWildcardRegExpCache() {
+  wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
+}
+function buildMatcherFromPreprocessedRoutes(routes) {
+  const trie = new Trie;
+  const handlerData = [];
+  if (routes.length === 0) {
+    return nullMatcher;
+  }
+  const routesWithStaticPathFlag = routes.map((route) => [!/\*|\/:/.test(route[0]), ...route]).sort(([isStaticA, pathA], [isStaticB, pathB]) => isStaticA ? 1 : isStaticB ? -1 : pathA.length - pathB.length);
+  const staticMap = /* @__PURE__ */ Object.create(null);
+  for (let i = 0, j = -1, len = routesWithStaticPathFlag.length;i < len; i++) {
+    const [pathErrorCheckOnly, path, handlers] = routesWithStaticPathFlag[i];
+    if (pathErrorCheckOnly) {
+      staticMap[path] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+    } else {
+      j++;
+    }
+    let paramAssoc;
+    try {
+      paramAssoc = trie.insert(path, j, pathErrorCheckOnly);
+    } catch (e) {
+      throw e === PATH_ERROR ? new UnsupportedPathError(path) : e;
+    }
+    if (pathErrorCheckOnly) {
+      continue;
+    }
+    handlerData[j] = handlers.map(([h, paramCount]) => {
+      const paramIndexMap = /* @__PURE__ */ Object.create(null);
+      paramCount -= 1;
+      for (;paramCount >= 0; paramCount--) {
+        const [key, value] = paramAssoc[paramCount];
+        paramIndexMap[key] = value;
+      }
+      return [h, paramIndexMap];
+    });
+  }
+  const [regexp, indexReplacementMap, paramReplacementMap] = trie.buildRegExp();
+  for (let i = 0, len = handlerData.length;i < len; i++) {
+    for (let j = 0, len2 = handlerData[i].length;j < len2; j++) {
+      const map2 = handlerData[i][j]?.[1];
+      if (!map2) {
+        continue;
+      }
+      const keys = Object.keys(map2);
+      for (let k = 0, len3 = keys.length;k < len3; k++) {
+        map2[keys[k]] = paramReplacementMap[map2[keys[k]]];
+      }
+    }
+  }
+  const handlerMap = [];
+  for (const i in indexReplacementMap) {
+    handlerMap[i] = handlerData[indexReplacementMap[i]];
+  }
+  return [regexp, handlerMap, staticMap];
+}
+function findMiddleware(middleware, path) {
+  if (!middleware) {
+    return;
+  }
+  for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
+    if (buildWildcardRegExp(k).test(path)) {
+      return [...middleware[k]];
+    }
+  }
+  return;
+}
+var RegExpRouter = class {
+  name = "RegExpRouter";
+  #middleware;
+  #routes;
+  constructor() {
+    this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
+    this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
+  }
+  add(method, path, handler) {
+    const middleware = this.#middleware;
+    const routes = this.#routes;
+    if (!middleware || !routes) {
+      throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
+    }
+    if (!middleware[method]) {
+      [middleware, routes].forEach((handlerMap) => {
+        handlerMap[method] = /* @__PURE__ */ Object.create(null);
+        Object.keys(handlerMap[METHOD_NAME_ALL]).forEach((p) => {
+          handlerMap[method][p] = [...handlerMap[METHOD_NAME_ALL][p]];
+        });
+      });
+    }
+    if (path === "/*") {
+      path = "*";
+    }
+    const paramCount = (path.match(/\/:/g) || []).length;
+    if (/\*$/.test(path)) {
+      const re = buildWildcardRegExp(path);
+      if (method === METHOD_NAME_ALL) {
+        Object.keys(middleware).forEach((m) => {
+          middleware[m][path] ||= findMiddleware(middleware[m], path) || findMiddleware(middleware[METHOD_NAME_ALL], path) || [];
+        });
+      } else {
+        middleware[method][path] ||= findMiddleware(middleware[method], path) || findMiddleware(middleware[METHOD_NAME_ALL], path) || [];
+      }
+      Object.keys(middleware).forEach((m) => {
+        if (method === METHOD_NAME_ALL || method === m) {
+          Object.keys(middleware[m]).forEach((p) => {
+            re.test(p) && middleware[m][p].push([handler, paramCount]);
+          });
+        }
+      });
+      Object.keys(routes).forEach((m) => {
+        if (method === METHOD_NAME_ALL || method === m) {
+          Object.keys(routes[m]).forEach((p) => re.test(p) && routes[m][p].push([handler, paramCount]));
+        }
+      });
+      return;
+    }
+    const paths = checkOptionalParameter(path) || [path];
+    for (let i = 0, len = paths.length;i < len; i++) {
+      const path2 = paths[i];
+      Object.keys(routes).forEach((m) => {
+        if (method === METHOD_NAME_ALL || method === m) {
+          routes[m][path2] ||= [
+            ...findMiddleware(middleware[m], path2) || findMiddleware(middleware[METHOD_NAME_ALL], path2) || []
+          ];
+          routes[m][path2].push([handler, paramCount - len + i + 1]);
+        }
+      });
+    }
+  }
+  match = match;
+  buildAllMatchers() {
+    const matchers = /* @__PURE__ */ Object.create(null);
+    Object.keys(this.#routes).concat(Object.keys(this.#middleware)).forEach((method) => {
+      matchers[method] ||= this.#buildMatcher(method);
+    });
+    this.#middleware = this.#routes = undefined;
+    clearWildcardRegExpCache();
+    return matchers;
+  }
+  #buildMatcher(method) {
+    const routes = [];
+    let hasOwnRoute = method === METHOD_NAME_ALL;
+    [this.#middleware, this.#routes].forEach((r) => {
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path) => [path, r[method][path]]) : [];
+      if (ownRoute.length !== 0) {
+        hasOwnRoute ||= true;
+        routes.push(...ownRoute);
+      } else if (method !== METHOD_NAME_ALL) {
+        routes.push(...Object.keys(r[METHOD_NAME_ALL]).map((path) => [path, r[METHOD_NAME_ALL][path]]));
+      }
+    });
+    if (!hasOwnRoute) {
+      return null;
+    } else {
+      return buildMatcherFromPreprocessedRoutes(routes);
+    }
+  }
+};
+
+// node_modules/hono/dist/router/reg-exp-router/prepared-router.js
+var PreparedRegExpRouter = class {
+  name = "PreparedRegExpRouter";
+  #matchers;
+  #relocateMap;
+  constructor(matchers, relocateMap) {
+    this.#matchers = matchers;
+    this.#relocateMap = relocateMap;
+  }
+  #addWildcard(method, handlerData) {
+    const matcher = this.#matchers[method];
+    matcher[1].forEach((list) => list && list.push(handlerData));
+    Object.values(matcher[2]).forEach((list) => list[0].push(handlerData));
+  }
+  #addPath(method, path, handler, indexes, map2) {
+    const matcher = this.#matchers[method];
+    if (!map2) {
+      matcher[2][path][0].push([handler, {}]);
+    } else {
+      indexes.forEach((index) => {
+        if (typeof index === "number") {
+          matcher[1][index].push([handler, map2]);
+        } else {
+          matcher[2][index || path][0].push([handler, map2]);
+        }
+      });
+    }
+  }
+  add(method, path, handler) {
+    if (!this.#matchers[method]) {
+      const all = this.#matchers[METHOD_NAME_ALL];
+      const staticMap = {};
+      for (const key in all[2]) {
+        staticMap[key] = [all[2][key][0].slice(), emptyParam];
+      }
+      this.#matchers[method] = [
+        all[0],
+        all[1].map((list) => Array.isArray(list) ? list.slice() : 0),
+        staticMap
+      ];
+    }
+    if (path === "/*" || path === "*") {
+      const handlerData = [handler, {}];
+      if (method === METHOD_NAME_ALL) {
+        for (const m in this.#matchers) {
+          this.#addWildcard(m, handlerData);
+        }
+      } else {
+        this.#addWildcard(method, handlerData);
+      }
+      return;
+    }
+    const data = this.#relocateMap[path];
+    if (!data) {
+      throw new Error(`Path ${path} is not registered`);
+    }
+    for (const [indexes, map2] of data) {
+      if (method === METHOD_NAME_ALL) {
+        for (const m in this.#matchers) {
+          this.#addPath(m, path, handler, indexes, map2);
+        }
+      } else {
+        this.#addPath(method, path, handler, indexes, map2);
+      }
+    }
+  }
+  buildAllMatchers() {
+    return this.#matchers;
+  }
+  match = match;
+};
+
+// node_modules/hono/dist/router/smart-router/router.js
+var SmartRouter = class {
+  name = "SmartRouter";
+  #routers = [];
+  #routes = [];
+  constructor(init) {
+    this.#routers = init.routers;
+  }
+  add(method, path, handler) {
+    if (!this.#routes) {
+      throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
+    }
+    this.#routes.push([method, path, handler]);
+  }
+  match(method, path) {
+    if (!this.#routes) {
+      throw new Error("Fatal error");
+    }
+    const routers = this.#routers;
+    const routes = this.#routes;
+    const len = routers.length;
+    let i = 0;
+    let res;
+    for (;i < len; i++) {
+      const router = routers[i];
+      try {
+        for (let i2 = 0, len2 = routes.length;i2 < len2; i2++) {
+          router.add(...routes[i2]);
+        }
+        res = router.match(method, path);
+      } catch (e) {
+        if (e instanceof UnsupportedPathError) {
+          continue;
+        }
+        throw e;
+      }
+      this.match = router.match.bind(router);
+      this.#routers = [router];
+      this.#routes = undefined;
+      break;
+    }
+    if (i === len) {
+      throw new Error("Fatal error");
+    }
+    this.name = `SmartRouter + ${this.activeRouter.name}`;
+    return res;
+  }
+  get activeRouter() {
+    if (this.#routes || this.#routers.length !== 1) {
+      throw new Error("No active router has been determined yet.");
+    }
+    return this.#routers[0];
+  }
+};
+
+// node_modules/hono/dist/router/trie-router/node.js
+var emptyParams = /* @__PURE__ */ Object.create(null);
+var hasChildren = (children) => {
+  for (const _ in children) {
+    return true;
+  }
+  return false;
+};
+var Node2 = class _Node2 {
+  #methods;
+  #children;
+  #patterns;
+  #order = 0;
+  #params = emptyParams;
+  constructor(method, handler, children) {
+    this.#children = children || /* @__PURE__ */ Object.create(null);
+    this.#methods = [];
+    if (method && handler) {
+      const m = /* @__PURE__ */ Object.create(null);
+      m[method] = { handler, possibleKeys: [], score: 0 };
+      this.#methods = [m];
+    }
+    this.#patterns = [];
+  }
+  insert(method, path, handler) {
+    this.#order = ++this.#order;
+    let curNode = this;
+    const parts = splitRoutingPath(path);
+    const possibleKeys = [];
+    for (let i = 0, len = parts.length;i < len; i++) {
+      const p = parts[i];
+      const nextP = parts[i + 1];
+      const pattern = getPattern(p, nextP);
+      const key = Array.isArray(pattern) ? pattern[0] : p;
+      if (key in curNode.#children) {
+        curNode = curNode.#children[key];
+        if (pattern) {
+          possibleKeys.push(pattern[1]);
+        }
+        continue;
+      }
+      curNode.#children[key] = new _Node2;
+      if (pattern) {
+        curNode.#patterns.push(pattern);
+        possibleKeys.push(pattern[1]);
+      }
+      curNode = curNode.#children[key];
+    }
+    curNode.#methods.push({
+      [method]: {
+        handler,
+        possibleKeys: possibleKeys.filter((v, i, a) => a.indexOf(v) === i),
+        score: this.#order
+      }
+    });
+    return curNode;
+  }
+  #pushHandlerSets(handlerSets, node, method, nodeParams, params) {
+    for (let i = 0, len = node.#methods.length;i < len; i++) {
+      const m = node.#methods[i];
+      const handlerSet = m[method] || m[METHOD_NAME_ALL];
+      const processedSet = {};
+      if (handlerSet !== undefined) {
+        handlerSet.params = /* @__PURE__ */ Object.create(null);
+        handlerSets.push(handlerSet);
+        if (nodeParams !== emptyParams || params && params !== emptyParams) {
+          for (let i2 = 0, len2 = handlerSet.possibleKeys.length;i2 < len2; i2++) {
+            const key = handlerSet.possibleKeys[i2];
+            const processed = processedSet[handlerSet.score];
+            handlerSet.params[key] = params?.[key] && !processed ? params[key] : nodeParams[key] ?? params?.[key];
+            processedSet[handlerSet.score] = true;
+          }
+        }
+      }
+    }
+  }
+  search(method, path) {
+    const handlerSets = [];
+    this.#params = emptyParams;
+    const curNode = this;
+    let curNodes = [curNode];
+    const parts = splitPath(path);
+    const curNodesQueue = [];
+    const len = parts.length;
+    let partOffsets = null;
+    for (let i = 0;i < len; i++) {
+      const part = parts[i];
+      const isLast = i === len - 1;
+      const tempNodes = [];
+      for (let j = 0, len2 = curNodes.length;j < len2; j++) {
+        const node = curNodes[j];
+        const nextNode = node.#children[part];
+        if (nextNode) {
+          nextNode.#params = node.#params;
+          if (isLast) {
+            if (nextNode.#children["*"]) {
+              this.#pushHandlerSets(handlerSets, nextNode.#children["*"], method, node.#params);
+            }
+            this.#pushHandlerSets(handlerSets, nextNode, method, node.#params);
+          } else {
+            tempNodes.push(nextNode);
+          }
+        }
+        for (let k = 0, len3 = node.#patterns.length;k < len3; k++) {
+          const pattern = node.#patterns[k];
+          const params = node.#params === emptyParams ? {} : { ...node.#params };
+          if (pattern === "*") {
+            const astNode = node.#children["*"];
+            if (astNode) {
+              this.#pushHandlerSets(handlerSets, astNode, method, node.#params);
+              astNode.#params = params;
+              tempNodes.push(astNode);
+            }
+            continue;
+          }
+          const [key, name, matcher] = pattern;
+          if (!part && !(matcher instanceof RegExp)) {
+            continue;
+          }
+          const child = node.#children[key];
+          if (matcher instanceof RegExp) {
+            if (partOffsets === null) {
+              partOffsets = new Array(len);
+              let offset = path[0] === "/" ? 1 : 0;
+              for (let p = 0;p < len; p++) {
+                partOffsets[p] = offset;
+                offset += parts[p].length + 1;
+              }
+            }
+            const restPathString = path.substring(partOffsets[i]);
+            const m = matcher.exec(restPathString);
+            if (m) {
+              params[name] = m[0];
+              this.#pushHandlerSets(handlerSets, child, method, node.#params, params);
+              if (hasChildren(child.#children)) {
+                child.#params = params;
+                const componentCount = m[0].match(/\//)?.length ?? 0;
+                const targetCurNodes = curNodesQueue[componentCount] ||= [];
+                targetCurNodes.push(child);
+              }
+              continue;
+            }
+          }
+          if (matcher === true || matcher.test(part)) {
+            params[name] = part;
+            if (isLast) {
+              this.#pushHandlerSets(handlerSets, child, method, params, node.#params);
+              if (child.#children["*"]) {
+                this.#pushHandlerSets(handlerSets, child.#children["*"], method, params, node.#params);
+              }
+            } else {
+              child.#params = params;
+              tempNodes.push(child);
+            }
+          }
+        }
+      }
+      const shifted = curNodesQueue.shift();
+      curNodes = shifted ? tempNodes.concat(shifted) : tempNodes;
+    }
+    if (handlerSets.length > 1) {
+      handlerSets.sort((a, b) => {
+        return a.score - b.score;
+      });
+    }
+    return [handlerSets.map(({ handler, params }) => [handler, params])];
+  }
+};
+
+// node_modules/hono/dist/router/trie-router/router.js
+var TrieRouter = class {
+  name = "TrieRouter";
+  #node;
+  constructor() {
+    this.#node = new Node2;
+  }
+  add(method, path, handler) {
+    const results = checkOptionalParameter(path);
+    if (results) {
+      for (let i = 0, len = results.length;i < len; i++) {
+        this.#node.insert(method, results[i], handler);
+      }
+      return;
+    }
+    this.#node.insert(method, path, handler);
+  }
+  match(method, path) {
+    return this.#node.search(method, path);
+  }
+};
+
+// node_modules/hono/dist/hono.js
+var Hono2 = class extends Hono {
+  constructor(options = {}) {
+    super(options);
+    this.router = options.router ?? new SmartRouter({
+      routers: [new RegExpRouter, new TrieRouter]
+    });
+  }
+};
+
+// src/protocol/store/action-contract-index.ts
+function actionContractIdsForRecord(record2) {
+  const payload = asRecord(record2.payload);
+  if (!payload)
+    return [];
+  const ids = new Set;
+  addString(ids, payload.actionContractId);
+  addString(ids, payload.sourceActionContractId);
+  const terminal = asRecord(payload.terminal);
+  if (terminal)
+    addString(ids, terminal.actionContractId);
+  for (const ref of arrayOfStrings(payload.affectedObjectRefs)) {
+    addActionContractRef(ids, ref);
+  }
+  return [...ids];
+}
+function recordMatchesActionContract(record2, actionContractId) {
+  return actionContractIdsForRecord(record2).includes(actionContractId);
+}
+function addActionContractRef(ids, ref) {
+  if (ref === "")
+    return;
+  ids.add(ref.startsWith("action_contract:") ? ref.slice("action_contract:".length) : ref);
+}
+function addString(ids, value) {
+  if (typeof value === "string" && value.length > 0)
+    ids.add(value);
+}
+function arrayOfStrings(value) {
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
+}
+function asRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+// src/storage/memory/index.ts
+class InMemoryProtocolStore {
+  records = new Map;
+  events = [];
+  consumptions = new Map;
+  greenlightIssuanceClaims = new Map;
+  currentIdempotencyLedgerEntries = new Map;
+  recoveryTerminalClaims = new Map;
+  currentIsolationStates = new Map;
+  currentProtectedPathPostures = new Map;
+  currentProtectedSurfaceOperationClaims = new Map;
+  receiptsByMutationAttempt = new Map;
+  async putRecord(record2) {
+    this.records.set(recordKey(record2.objectType, record2.objectId), structuredClone(record2));
+  }
+  async putRecordIfAbsentOrSame(record2) {
+    const key = recordKey(record2.objectType, record2.objectId);
+    const existing = this.records.get(key);
+    if (!existing) {
+      this.records.set(key, structuredClone(record2));
+      return "inserted";
+    }
+    if (existing.canonicalDigest === record2.canonicalDigest)
+      return "unchanged";
+    return "conflict";
+  }
+  async getRecord(objectType, objectId) {
+    const record2 = this.records.get(recordKey(objectType, objectId));
+    return record2 ? structuredClone(record2) : null;
+  }
+  async listRecordsByType(objectType, scope2 = {}) {
+    const records = [];
+    for (const record2 of this.records.values()) {
+      if (record2.objectType !== objectType)
+        continue;
+      if (scope2.tenantId && record2.tenantId !== scope2.tenantId)
+        continue;
+      if (scope2.organizationId && record2.organizationId !== scope2.organizationId)
+        continue;
+      records.push(structuredClone(record2));
+    }
+    return records;
+  }
+  async listRecordsByActionContract(objectType, actionContractId, scope2 = {}) {
+    const records = [];
+    for (const record2 of this.records.values()) {
+      if (record2.objectType !== objectType)
+        continue;
+      if (scope2.tenantId && record2.tenantId !== scope2.tenantId)
+        continue;
+      if (scope2.organizationId && record2.organizationId !== scope2.organizationId)
+        continue;
+      if (!recordMatchesActionContract(record2, actionContractId))
+        continue;
+      records.push(structuredClone(record2));
+    }
+    return records;
+  }
+  async getStreamTail(streamId, partitionKey) {
+    const tail = this.events.filter((event) => event.streamId === streamId && event.partitionKey === partitionKey).sort((a, b) => b.offset - a.offset)[0];
+    return tail ? { offset: tail.offset, eventDigest: tail.eventDigest } : null;
+  }
+  async getStreamEvent(streamId, partitionKey, offset) {
+    const event = this.events.find((candidate) => candidate.streamId === streamId && candidate.partitionKey === partitionKey && candidate.offset === offset);
+    return event ? structuredClone(event) : null;
+  }
+  async listStreamEvents(streamId, partitionKey, range = {}) {
+    const startOffset = range.startOffset ?? 0;
+    const endOffset = range.endOffset ?? Number.MAX_SAFE_INTEGER;
+    const events = this.events.filter((event) => event.streamId === streamId && event.partitionKey === partitionKey && event.offset >= startOffset && event.offset <= endOffset).sort((a, b) => a.offset - b.offset).map((event) => structuredClone(event));
+    return typeof range.limit === "number" ? events.slice(0, range.limit) : events;
+  }
+  async getCurrentProtectedPathPosture(postureScopeKey) {
+    const entry = this.currentProtectedPathPostures.get(postureScopeKey);
+    if (!entry)
+      return null;
+    return this.getRecord("protected_path_posture", entry.protectedPathPostureId);
+  }
+  async getCurrentIdempotencyLedgerEntry(ledgerKeyDigest) {
+    const entry = this.currentIdempotencyLedgerEntries.get(ledgerKeyDigest);
+    if (!entry)
+      return null;
+    return this.getRecord("idempotency_ledger_entry", entry.idempotencyLedgerEntryId);
+  }
+  async getCurrentProtectedSurfaceOperationClaim(claimKeyDigest) {
+    const entry = this.currentProtectedSurfaceOperationClaims.get(claimKeyDigest);
+    if (!entry)
+      return null;
+    return this.getRecord("protected_surface_operation_claim", entry.protectedSurfaceOperationClaimId);
+  }
+  async getReceiptByMutationAttemptId(mutationAttemptId) {
+    const entry = this.receiptsByMutationAttempt.get(mutationAttemptId);
+    if (!entry)
+      return null;
+    return this.getRecord("receipt", entry.receiptId);
+  }
+  async appendEvent(event) {
+    this.events.push(structuredClone(event));
+    await this.putRecord({
+      objectId: event.streamEventId,
+      objectType: "contract_stream_event",
+      tenantId: event.tenantId,
+      organizationId: event.organizationId,
+      schemaVersion: event.schemaVersion,
+      canonicalDigest: event.eventDigest,
+      payload: event,
+      createdAt: event.createdAt,
+      sourceEventId: null
+    });
+  }
+  async listIsolationStates(scopeRefs) {
+    const scopeSet = new Set(scopeRefs.map(isolationScopeKey));
+    const states = [];
+    for (const entry of this.currentIsolationStates.values()) {
+      if (!scopeSet.has(entry.isolationScopeKey))
+        continue;
+      const record2 = await this.getRecord("isolation_state", entry.isolationStateId);
+      if (record2?.payload.clearedAt === null)
+        states.push(record2.payload);
+    }
+    return states;
+  }
+  async consumeGreenlight(consumption) {
+    if (this.consumptions.has(consumption.greenlightId))
+      return "already_consumed";
+    this.consumptions.set(consumption.greenlightId, structuredClone(consumption));
+    return "consumed";
+  }
+  async commitProtocolRecords(commit) {
+    if (commit.greenlightIssuanceClaims?.some((claim) => this.greenlightIssuanceClaims.has(claim.actionContractId))) {
+      return "greenlight_issuance_conflict";
+    }
+    if (commit.idempotencyLedgerReservationEntries?.some((entry) => this.currentIdempotencyLedgerEntries.has(entry.ledgerKeyDigest))) {
+      return "idempotency_ledger_conflict";
+    }
+    if (commit.recoveryTerminalClaims?.some((claim) => this.recoveryTerminalClaims.has(claim.recoveryRecommendationId))) {
+      return "recovery_terminal_conflict";
+    }
+    if (commit.events.some((event) => this.hasStreamOffset(event))) {
+      return "stream_conflict";
+    }
+    if (commit.recordConflictMode === "absent_or_same") {
+      for (const record2 of commit.records) {
+        const existing = this.records.get(recordKey(record2.objectType, record2.objectId));
+        if (existing && existing.canonicalDigest !== record2.canonicalDigest)
+          return "record_digest_conflict";
+      }
+    }
+    const nextRecords = new Map(this.records);
+    const nextEvents = [...this.events];
+    const nextGreenlightIssuanceClaims = new Map(this.greenlightIssuanceClaims);
+    const nextCurrentIdempotencyLedgerEntries = new Map(this.currentIdempotencyLedgerEntries);
+    const nextRecoveryTerminalClaims = new Map(this.recoveryTerminalClaims);
+    const nextCurrentIsolationStates = new Map(this.currentIsolationStates);
+    const nextCurrentProtectedPathPostures = new Map(this.currentProtectedPathPostures);
+    const nextCurrentProtectedSurfaceOperationClaims = new Map(this.currentProtectedSurfaceOperationClaims);
+    const nextReceiptsByMutationAttempt = new Map(this.receiptsByMutationAttempt);
+    for (const claim of commit.greenlightIssuanceClaims ?? []) {
+      nextGreenlightIssuanceClaims.set(claim.actionContractId, structuredClone(claim));
+    }
+    for (const entry of commit.idempotencyLedgerReservationEntries ?? []) {
+      nextCurrentIdempotencyLedgerEntries.set(entry.ledgerKeyDigest, structuredClone(entry));
+    }
+    for (const entry of commit.idempotencyLedgerIndexEntries ?? []) {
+      nextCurrentIdempotencyLedgerEntries.set(entry.ledgerKeyDigest, structuredClone(entry));
+    }
+    for (const claim of commit.recoveryTerminalClaims ?? []) {
+      nextRecoveryTerminalClaims.set(claim.recoveryRecommendationId, structuredClone(claim));
+    }
+    for (const entry of commit.isolationStateIndexEntries ?? []) {
+      nextCurrentIsolationStates.set(entry.isolationScopeKey, structuredClone(entry));
+    }
+    for (const entry of commit.protectedPathPostureIndexEntries ?? []) {
+      nextCurrentProtectedPathPostures.set(entry.postureScopeKey, structuredClone(entry));
+    }
+    for (const claimKeyDigest of commit.protectedSurfaceOperationClaimIndexReleases ?? []) {
+      nextCurrentProtectedSurfaceOperationClaims.delete(claimKeyDigest);
+    }
+    for (const entry of commit.protectedSurfaceOperationClaimIndexEntries ?? []) {
+      nextCurrentProtectedSurfaceOperationClaims.set(entry.claimKeyDigest, structuredClone(entry));
+    }
+    for (const entry of commit.receiptMutationAttemptIndexEntries ?? []) {
+      nextReceiptsByMutationAttempt.set(entry.mutationAttemptId, structuredClone(entry));
+    }
+    this.stageRecordsAndEvents(nextRecords, nextEvents, commit.records, commit.events);
+    this.records = nextRecords;
+    this.events = nextEvents;
+    this.greenlightIssuanceClaims = nextGreenlightIssuanceClaims;
+    this.currentIdempotencyLedgerEntries = nextCurrentIdempotencyLedgerEntries;
+    this.recoveryTerminalClaims = nextRecoveryTerminalClaims;
+    this.currentIsolationStates = nextCurrentIsolationStates;
+    this.currentProtectedPathPostures = nextCurrentProtectedPathPostures;
+    this.currentProtectedSurfaceOperationClaims = nextCurrentProtectedSurfaceOperationClaims;
+    this.receiptsByMutationAttempt = nextReceiptsByMutationAttempt;
+    return "committed";
+  }
+  async commitGatewayCheck(commit) {
+    if (commit.consumption && this.consumptions.has(commit.consumption.greenlightId)) {
+      return "already_consumed";
+    }
+    if (commit.protectedSurfaceOperationClaimIndexEntries?.some((entry) => this.currentProtectedSurfaceOperationClaims.has(entry.claimKeyDigest))) {
+      return "operation_claim_conflict";
+    }
+    if (commit.receiptMutationAttemptIndexEntries?.some((entry) => this.receiptsByMutationAttempt.has(entry.mutationAttemptId))) {
+      return "receipt_index_conflict";
+    }
+    if (commit.events.some((event) => this.hasStreamOffset(event))) {
+      return "stream_conflict";
+    }
+    const nextRecords = new Map(this.records);
+    const nextEvents = [...this.events];
+    const nextConsumptions = new Map(this.consumptions);
+    const nextCurrentIdempotencyLedgerEntries = new Map(this.currentIdempotencyLedgerEntries);
+    const nextCurrentProtectedSurfaceOperationClaims = new Map(this.currentProtectedSurfaceOperationClaims);
+    const nextReceiptsByMutationAttempt = new Map(this.receiptsByMutationAttempt);
+    if (commit.consumption) {
+      nextConsumptions.set(commit.consumption.greenlightId, structuredClone(commit.consumption));
+    }
+    for (const entry of commit.protectedSurfaceOperationClaimIndexEntries ?? []) {
+      nextCurrentProtectedSurfaceOperationClaims.set(entry.claimKeyDigest, structuredClone(entry));
+    }
+    for (const entry of commit.idempotencyLedgerIndexEntries ?? []) {
+      nextCurrentIdempotencyLedgerEntries.set(entry.ledgerKeyDigest, structuredClone(entry));
+    }
+    for (const entry of commit.receiptMutationAttemptIndexEntries ?? []) {
+      nextReceiptsByMutationAttempt.set(entry.mutationAttemptId, structuredClone(entry));
+    }
+    this.stageRecordsAndEvents(nextRecords, nextEvents, commit.records, commit.events);
+    this.records = nextRecords;
+    this.events = nextEvents;
+    this.consumptions = nextConsumptions;
+    this.currentIdempotencyLedgerEntries = nextCurrentIdempotencyLedgerEntries;
+    this.currentProtectedSurfaceOperationClaims = nextCurrentProtectedSurfaceOperationClaims;
+    this.receiptsByMutationAttempt = nextReceiptsByMutationAttempt;
+    return "committed";
+  }
+  countRecordsOfType(objectType) {
+    let count = 0;
+    for (const record2 of this.records.values()) {
+      if (record2.objectType === objectType)
+        count += 1;
+    }
+    return count;
+  }
+  listEventsForPartition(streamId, partitionKey) {
+    return this.events.filter((event) => event.streamId === streamId && event.partitionKey === partitionKey).sort((a, b) => a.offset - b.offset).map((event) => structuredClone(event));
+  }
+  hasStreamOffset(event) {
+    return this.events.some((existing) => existing.streamId === event.streamId && existing.partitionKey === event.partitionKey && existing.offset === event.offset);
+  }
+  stageRecordsAndEvents(records, events, commitRecords, commitEvents) {
+    for (const record2 of commitRecords) {
+      records.set(recordKey(record2.objectType, record2.objectId), structuredClone(record2));
+    }
+    for (const event of commitEvents) {
+      events.push(structuredClone(event));
+      records.set(recordKey("contract_stream_event", event.streamEventId), structuredClone({
+        objectId: event.streamEventId,
+        objectType: "contract_stream_event",
+        tenantId: event.tenantId,
+        organizationId: event.organizationId,
+        schemaVersion: event.schemaVersion,
+        canonicalDigest: event.eventDigest,
+        payload: event,
+        createdAt: event.createdAt,
+        sourceEventId: null
+      }));
+    }
+  }
+}
+function recordKey(type, id) {
+  return `${type}:${id}`;
+}
+function isolationScopeKey(scopeRef) {
+  return `${scopeRef.tenantId}:${scopeRef.organizationId}:${scopeRef.scopeType}:${scopeRef.scopeId}`;
+}
+
+// src/http/admission/caller-auth.ts
+var tokenBindingByRole = {
+  control_plane: "HANDSHAKE_CONTROL_PLANE_TOKEN",
+  runtime_evidence: "HANDSHAKE_RUNTIME_EVIDENCE_TOKEN",
+  gateway_custody: "HANDSHAKE_GATEWAY_CUSTODY_TOKEN",
+  review_custody: "HANDSHAKE_REVIEW_CUSTODY_TOKEN"
+};
+function authorizeTransitionCaller(c, configuredTokens, role, context = {}) {
+  const expectedToken = configuredTokenForRole(c.env, configuredTokens, role);
+  if (!expectedToken) {
+    return errorResponse(c, new HandshakeProtocolError("caller_auth_not_configured", `${role} transition routes require an explicit bearer token binding.`, 503, { retryability: "terminal", commitState: "not_started" }), context);
+  }
+  const providedToken = parseBearerToken(c.req.header("authorization"));
+  if (!providedToken) {
+    c.header("WWW-Authenticate", 'Bearer realm="handshake"');
+    return errorResponse(c, new HandshakeProtocolError("caller_auth_required", `${role} transition routes require a bearer token.`, 401, {
+      retryability: "terminal",
+      commitState: "not_started"
+    }), context);
+  }
+  if (!constantTimeTokenEquals(providedToken, expectedToken)) {
+    return errorResponse(c, new HandshakeProtocolError("caller_auth_forbidden", `Bearer token does not satisfy ${role} transition custody.`, 403, { retryability: "terminal", commitState: "not_started" }), context);
+  }
+  return null;
+}
+function authorizeTransitionCallerForAny(c, configuredTokens, roles, context = {}) {
+  const expectedTokens = roles.map((role) => ({ role, token: configuredTokenForRole(c.env, configuredTokens, role) })).filter((entry) => Boolean(entry.token));
+  const roleLabel = roles.join(" or ");
+  if (expectedTokens.length === 0) {
+    return errorResponse(c, new HandshakeProtocolError("caller_auth_not_configured", `${roleLabel} evidence read routes require an explicit bearer token binding.`, 503, { retryability: "terminal", commitState: "not_started" }), context);
+  }
+  const providedToken = parseBearerToken(c.req.header("authorization"));
+  if (!providedToken) {
+    c.header("WWW-Authenticate", 'Bearer realm="handshake"');
+    return errorResponse(c, new HandshakeProtocolError("caller_auth_required", `${roleLabel} evidence read routes require a bearer token.`, 401, {
+      retryability: "terminal",
+      commitState: "not_started"
+    }), context);
+  }
+  if (expectedTokens.some(({ token }) => constantTimeTokenEquals(providedToken, token))) {
+    return null;
+  }
+  return errorResponse(c, new HandshakeProtocolError("caller_auth_forbidden", `Bearer token does not satisfy ${roleLabel} evidence read custody.`, 403, { retryability: "terminal", commitState: "not_started" }), context);
+}
+function transitionCallerSecuritySchemeName(role) {
+  switch (role) {
+    case "control_plane":
+      return "handshakeControlPlaneBearer";
+    case "runtime_evidence":
+      return "handshakeRuntimeEvidenceBearer";
+    case "gateway_custody":
+      return "handshakeGatewayCustodyBearer";
+    case "review_custody":
+      return "handshakeReviewCustodyBearer";
+  }
+}
+function configuredTokenForRole(env, configuredTokens, role) {
+  const envToken = env?.[tokenBindingByRole[role]];
+  return normalizeToken(envToken) ?? normalizeToken(configuredTokens?.[role]);
+}
+function parseBearerToken(header) {
+  if (!header)
+    return null;
+  const [scheme, token, extra] = header.trim().split(/\s+/);
+  if (extra || scheme?.toLowerCase() !== "bearer")
+    return null;
+  return normalizeToken(token);
+}
+function normalizeToken(token) {
+  const normalized = token?.trim();
+  return normalized ? normalized : null;
+}
+function constantTimeTokenEquals(providedToken, expectedToken) {
+  let diff = providedToken.length ^ expectedToken.length;
+  const maxLength = Math.max(providedToken.length, expectedToken.length);
+  for (let index = 0;index < maxLength; index += 1) {
+    diff |= (providedToken.charCodeAt(index) || 0) ^ (expectedToken.charCodeAt(index) || 0);
+  }
+  return diff === 0;
+}
+function errorResponse(c, error51, context) {
+  const result = transitionErrorResult(error51, context);
+  return c.json(result.body, result.status);
+}
+
+// src/hosted-admission/hosted-admission-config.ts
+var HostedDeploymentModeSchema = exports_external.enum(["local-dev", "test", "preview", "production"]);
+var HostedVerifierStrategySchema = exports_external.enum([
+  "local_test_verifier",
+  "clerk_session",
+  "oauth_oidc_jwks",
+  "cloudflare_access_jwt",
+  "pinned_jwks",
+  "custom_server_verifier"
+]);
+var HostedReadRoleSchema = exports_external.enum(["viewer", "auditor", "operator", "rawEvidenceReader"]);
+var HostedScopeSchema = exports_external.enum([
+  "evidence:redacted:read",
+  "evidence:raw:request",
+  "evidence:raw:read",
+  "evidence:export:create",
+  "evidence:retention:admin",
+  "hosted:readiness:read"
+]);
+var HostedTenantSourceSchema = exports_external.enum(["verifier_claims", "route_scope_match", "static_test_scope"]);
+var HostedRawReadPostureSchema = exports_external.enum(["unavailable", "disabled", "gated", "allowed"]);
+var HostedReadinessStateSchema = exports_external.enum([
+  "active",
+  "configured_but_unverified",
+  "missing",
+  "disabled",
+  "read_only",
+  "not_promoted"
+]);
+var HostedRolePolicySchema = exports_external.strictObject({
+  admittedTransitionRoles: exports_external.array(exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"])).min(1)
+});
+var HostedReadEntitlementSchema = exports_external.strictObject({
+  allowedRoles: exports_external.array(HostedReadRoleSchema).min(1),
+  requiredScopes: exports_external.array(HostedScopeSchema).min(1)
+});
+var HostedStorageBindingPostureSchema = exports_external.strictObject({
+  bindingName: exports_external.string().min(1).max(200),
+  required: exports_external.boolean(),
+  authority: exports_external.enum(["structured_evidence", "non_authoritative_cache"])
+});
+var HostedAdmissionConfigSchema = exports_external.strictObject({
+  deploymentMode: HostedDeploymentModeSchema,
+  verifierStrategy: HostedVerifierStrategySchema,
+  maxIdentityAgeSeconds: exports_external.number().int().positive().max(86400),
+  rolePolicy: HostedRolePolicySchema,
+  readPolicy: exports_external.strictObject({
+    redactedEvidence: HostedReadEntitlementSchema,
+    rawEvidence: HostedReadEntitlementSchema,
+    readiness: HostedReadEntitlementSchema
+  }),
+  tenantSource: HostedTenantSourceSchema,
+  storage: exports_external.strictObject({
+    d1: HostedStorageBindingPostureSchema,
+    kv: HostedStorageBindingPostureSchema
+  }),
+  secretNames: exports_external.array(exports_external.string().min(1).max(200)),
+  publicVarNames: exports_external.array(exports_external.string().min(1).max(200)),
+  rawReadPosture: HostedRawReadPostureSchema,
+  redactionProfileRefs: exports_external.array(exports_external.string().min(1).max(200)).min(1),
+  retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]),
+  exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]),
+  readinessExpectations: exports_external.array(exports_external.string().min(1).max(500)).min(1)
+}).superRefine((config2, ctx) => {
+  if (!config2.readPolicy.redactedEvidence.requiredScopes.includes("evidence:redacted:read")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["readPolicy", "redactedEvidence", "requiredScopes"],
+      message: "Redacted evidence reads must require evidence:redacted:read."
+    });
+  }
+  if (!config2.readPolicy.rawEvidence.requiredScopes.includes("evidence:raw:read")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["readPolicy", "rawEvidence", "requiredScopes"],
+      message: "Raw evidence reads must require evidence:raw:read."
+    });
+  }
+  if (!config2.readPolicy.rawEvidence.requiredScopes.includes("evidence:raw:request")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["readPolicy", "rawEvidence", "requiredScopes"],
+      message: "Raw evidence reads must require evidence:raw:request."
+    });
+  }
+  if (!config2.readPolicy.rawEvidence.allowedRoles.includes("rawEvidenceReader")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["readPolicy", "rawEvidence", "allowedRoles"],
+      message: "Raw evidence reads must require rawEvidenceReader role."
+    });
+  }
+  if (!config2.readPolicy.readiness.requiredScopes.includes("hosted:readiness:read")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["readPolicy", "readiness", "requiredScopes"],
+      message: "Hosted readiness reads must require hosted:readiness:read."
+    });
+  }
+  if (config2.storage.d1.authority !== "structured_evidence") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["storage", "d1", "authority"],
+      message: "Hosted protocol records must declare D1 as structured evidence authority."
+    });
+  }
+  if (config2.storage.kv.authority !== "non_authoritative_cache") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["storage", "kv", "authority"],
+      message: "KV must be declared non-authoritative for hosted evidence."
+    });
+  }
+  if ((config2.deploymentMode === "preview" || config2.deploymentMode === "production") && config2.secretNames.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["secretNames"],
+      message: "Promoted hosted modes must declare required secret names."
+    });
+  }
+});
+var HostedReadinessReportSchema = exports_external.strictObject({
+  configured: exports_external.boolean(),
+  deploymentMode: HostedDeploymentModeSchema.nullable(),
+  readinessState: HostedReadinessStateSchema,
+  authorityClass: exports_external.literal("hosted_admission_and_redacted_evidence_read_only"),
+  hostedMutationAuthorityCreated: exports_external.literal(false),
+  paymentManagementCreated: exports_external.literal(false),
+  settlementAuthorityCreated: exports_external.literal(false),
+  providerCustodyCreated: exports_external.literal(false),
+  verifier: exports_external.strictObject({
+    strategy: HostedVerifierStrategySchema.nullable(),
+    serverVerifierConfigured: exports_external.boolean(),
+    maxIdentityAgeSeconds: exports_external.number().int().positive().nullable()
+  }),
+  roles: exports_external.strictObject({
+    admittedTransitionRoles: exports_external.array(exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"])),
+    redactedEvidenceRoles: exports_external.array(HostedReadRoleSchema),
+    rawEvidenceRoles: exports_external.array(HostedReadRoleSchema),
+    readinessRoles: exports_external.array(HostedReadRoleSchema),
+    redactedEvidenceScopes: exports_external.array(HostedScopeSchema),
+    rawEvidenceScopes: exports_external.array(HostedScopeSchema),
+    readinessScopes: exports_external.array(HostedScopeSchema)
+  }),
+  tenantSource: HostedTenantSourceSchema.nullable(),
+  storage: exports_external.strictObject({
+    d1: exports_external.strictObject({
+      bindingName: exports_external.string().nullable(),
+      required: exports_external.boolean(),
+      present: exports_external.boolean(),
+      authority: exports_external.enum(["structured_evidence", "missing"]),
+      environmentPosture: exports_external.enum(["local_or_injected", "remote_required", "unknown"]),
+      schema: exports_external.strictObject({
+        checked: exports_external.boolean(),
+        status: exports_external.enum(["present", "missing", "not_checked", "error"]),
+        requiredTableRefs: exports_external.array(exports_external.string()),
+        missingTableRefs: exports_external.array(exports_external.string())
+      })
+    }),
+    kv: exports_external.strictObject({
+      bindingName: exports_external.string().nullable(),
+      required: exports_external.boolean(),
+      present: exports_external.boolean(),
+      authority: exports_external.literal("non_authoritative_cache")
+    })
+  }),
+  secrets: exports_external.array(exports_external.strictObject({
+    name: exports_external.string(),
+    present: exports_external.boolean()
+  })),
+  publicVars: exports_external.array(exports_external.strictObject({
+    name: exports_external.string(),
+    present: exports_external.boolean()
+  })),
+  rawReadPosture: HostedRawReadPostureSchema.nullable(),
+  redactionProfileRefs: exports_external.array(exports_external.string()),
+  retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]).nullable(),
+  exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]).nullable(),
+  readinessExpectations: exports_external.array(exports_external.string()),
+  unsupportedCapabilities: exports_external.array(exports_external.string())
+});
+function requireHostedAdmissionConfig(config2) {
+  if (!config2) {
+    throw new HandshakeProtocolError("hosted_admission_config_not_configured", "Hosted admission requires explicit deployment-mode authority, storage, read, raw-read, and secret-name posture.", 503, { retryability: "terminal", commitState: "not_started" });
+  }
+  const parsed = HostedAdmissionConfigSchema.safeParse(config2);
+  if (!parsed.success) {
+    throw new HandshakeProtocolError("hosted_admission_config_invalid", "Hosted admission config did not satisfy the deployment-mode authority schema.", 503, { retryability: "terminal", commitState: "not_started" });
+  }
+  return parsed.data;
+}
+function parseOptionalHostedAdmissionConfig(config2) {
+  if (!config2)
+    return null;
+  return requireHostedAdmissionConfig(config2);
+}
+function assertHostedTransitionRolesConfigured(config2, requiredRoles) {
+  const missingRoles = requiredRoles.filter((role) => !config2.rolePolicy.admittedTransitionRoles.includes(role));
+  if (missingRoles.length > 0) {
+    throw new HandshakeProtocolError("hosted_transition_role_not_admitted", `Hosted deployment config does not admit ${missingRoles.join(" or ")} transition custody.`, 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+function assertHostedRedactedEvidenceEntitlement(identity, config2) {
+  assertHostedReadEntitlement(identity, config2.readPolicy.redactedEvidence, "hosted_read_entitlement_forbidden");
+}
+function assertHostedReadinessEntitlement(identity, config2) {
+  assertHostedReadEntitlement(identity, config2.readPolicy.readiness, "hosted_readiness_entitlement_forbidden");
+}
+function assertHostedRawEvidenceEntitlement(identity, config2, headers, now) {
+  if (config2.rawReadPosture === "unavailable" || config2.rawReadPosture === "disabled") {
+    throw new HandshakeProtocolError("hosted_raw_read_unavailable", `Hosted raw evidence reads are ${config2.rawReadPosture}.`, 403, { retryability: "terminal", commitState: "not_started" });
+  }
+  assertHostedReadEntitlement(identity, config2.readPolicy.rawEvidence, "hosted_raw_read_entitlement_forbidden");
+  const purpose = headers.get("x-handshake-raw-read-purpose")?.trim();
+  const expiresAt = headers.get("x-handshake-raw-read-expires-at")?.trim();
+  if (!purpose || !expiresAt) {
+    throw new HandshakeProtocolError("hosted_raw_read_purpose_required", "Hosted raw evidence reads require explicit purpose and expiry headers.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+  const nowMs = Date.parse(now);
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs || expiresAtMs > nowMs + 3600000) {
+    throw new HandshakeProtocolError("hosted_raw_read_window_invalid", "Hosted raw evidence read expiry must be parseable, future, and bounded to one hour.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+function assertHostedReadEntitlement(identity, entitlement, code3) {
+  const roleAllowed = identity.hostedRoles.some((role) => entitlement.allowedRoles.includes(role));
+  const scopesAllowed = entitlement.requiredScopes.every((scope2) => identity.hostedScopes.includes(scope2));
+  if (!roleAllowed || !scopesAllowed) {
+    throw new HandshakeProtocolError(code3, "Hosted caller identity does not satisfy the configured read role/scope entitlement.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+// src/hosted-admission/hosted-caller-identity.ts
+var HostedIdentityProviderKindSchema = exports_external.enum([
+  "clerk",
+  "oauth_oidc",
+  "cloudflare_access",
+  "custom_jwt",
+  "service_credential",
+  "test_fixture",
+  "other"
+]);
+var HostedIdentityEvidenceInputSchema = exports_external.strictObject({
+  providerKind: HostedIdentityProviderKindSchema,
+  authProviderRef: exports_external.string().min(1).max(500),
+  callerIdentityRef: exports_external.string().min(1).max(500).nullable().default(null),
+  subjectRef: exports_external.string().min(1).max(500).nullable().default(null),
+  subjectDigest: DigestSchema.nullable().default(null),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  projectId: IdSchema.nullable().default(null),
+  workspaceId: IdSchema.nullable().default(null),
+  custodyRoles: exports_external.array(exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"])).min(1),
+  hostedRoles: exports_external.array(HostedReadRoleSchema).default([]),
+  hostedScopes: exports_external.array(HostedScopeSchema).default([]),
+  sessionRef: exports_external.string().min(1).max(500).nullable().default(null),
+  sessionDigest: DigestSchema.nullable().default(null),
+  serviceCredentialRef: exports_external.string().min(1).max(500).nullable().default(null),
+  serviceCredentialDigest: DigestSchema.nullable().default(null),
+  claims: JsonValueSchema.nullable().default(null),
+  claimsDigest: DigestSchema.nullable().default(null),
+  membershipRefs: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  revocationEpochRef: exports_external.string().min(1).max(500)
+});
+var TransitionCallerIdentitySchema = exports_external.strictObject({
+  callerIdentityRef: exports_external.string().min(1).max(500),
+  callerSubjectDigest: DigestSchema,
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  projectId: IdSchema.nullable().default(null),
+  workspaceId: IdSchema.nullable().default(null),
+  custodyRoles: exports_external.array(exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"])).min(1),
+  hostedRoles: exports_external.array(HostedReadRoleSchema).default([]),
+  hostedScopes: exports_external.array(HostedScopeSchema).default([]),
+  authProviderRef: exports_external.string().min(1).max(500),
+  authSessionDigest: DigestSchema.nullable().default(null),
+  serviceCredentialDigest: DigestSchema.nullable().default(null),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  revocationEpochRef: exports_external.string().min(1).max(500),
+  claimsDigest: DigestSchema
+}).superRefine((identity, ctx) => {
+  const sourceCount = [identity.authSessionDigest, identity.serviceCredentialDigest].filter(Boolean).length;
+  if (sourceCount !== 1) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["authSessionDigest"],
+      message: "TransitionCallerIdentity must contain exactly one auth source digest."
+    });
+  }
+});
+var HostedParticipantIdentityBindingInputSchema = exports_external.strictObject({
+  participantRole: exports_external.enum(["principal", "agent"]),
+  participantRef: IdSchema,
+  verificationEvidenceRef: exports_external.string().min(1).max(500).nullable().default(null),
+  bindingEvidenceRef: exports_external.string().min(1).max(500).nullable().default(null)
+});
+function parseHostedCallerIdentity(value) {
+  const parsed = TransitionCallerIdentitySchema.safeParse(value);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0]?.message;
+    throw new HandshakeProtocolError("hosted_caller_identity_invalid", firstIssue ?? "Hosted caller identity did not satisfy the transition admission schema.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+  return parsed.data;
+}
+function assertHostedCallerRole(identity, requiredRole) {
+  if (!identity.custodyRoles.includes(requiredRole)) {
+    throw new HandshakeProtocolError("hosted_caller_role_forbidden", `Hosted caller identity does not satisfy ${requiredRole} transition custody.`, 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+function assertHostedCallerAnyRole(identity, requiredRoles) {
+  if (!requiredRoles.some((role) => identity.custodyRoles.includes(role))) {
+    throw new HandshakeProtocolError("hosted_caller_role_forbidden", `Hosted caller identity does not satisfy ${requiredRoles.join(" or ")} transition custody.`, 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+function assertHostedCallerFresh(identity, now, maxIdentityAgeSeconds) {
+  const issuedAt = Date.parse(identity.issuedAt);
+  const expiresAt = Date.parse(identity.expiresAt);
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || !Number.isFinite(nowMs)) {
+    throw new HandshakeProtocolError("hosted_caller_identity_invalid", "Hosted caller identity timestamps are not parseable.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+  if (issuedAt > nowMs || expiresAt <= nowMs) {
+    throw new HandshakeProtocolError("hosted_caller_identity_expired", "Hosted caller identity is not valid at the transition admission time.", 412, { retryability: "terminal", commitState: "not_started" });
+  }
+  if (maxIdentityAgeSeconds !== undefined && nowMs - issuedAt > maxIdentityAgeSeconds * 1000) {
+    throw new HandshakeProtocolError("hosted_caller_identity_stale", "Hosted caller identity is older than the configured freshness window.", 412, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+function assertHostedCallerScope(identity, scope2) {
+  if (identity.tenantId !== scope2.tenantId || identity.organizationId !== scope2.organizationId || scope2.projectId !== undefined && identity.projectId !== scope2.projectId || scope2.workspaceId !== undefined && identity.workspaceId !== scope2.workspaceId) {
+    throw new HandshakeProtocolError("hosted_caller_scope_forbidden", "Hosted caller identity cannot write transition records for the requested tenant/org/project/workspace scope.", 403, { retryability: "terminal", commitState: "not_started" });
+  }
+}
+async function transitionCallerEvidenceFromIdentity(identity) {
+  const callerIdentityClaimsDigest = await digestCanonical({
+    callerIdentityRef: identity.callerIdentityRef,
+    callerSubjectDigest: identity.callerSubjectDigest,
+    tenantId: identity.tenantId,
+    organizationId: identity.organizationId,
+    projectId: identity.projectId,
+    workspaceId: identity.workspaceId,
+    custodyRoles: identity.custodyRoles,
+    hostedRoles: identity.hostedRoles,
+    hostedScopes: identity.hostedScopes,
+    authProviderRef: identity.authProviderRef,
+    authSessionDigest: identity.authSessionDigest,
+    serviceCredentialDigest: identity.serviceCredentialDigest,
+    issuedAt: identity.issuedAt,
+    expiresAt: identity.expiresAt,
+    revocationEpochRef: identity.revocationEpochRef,
+    claimsDigest: identity.claimsDigest
+  });
+  return {
+    callerIdentityRef: identity.callerIdentityRef,
+    callerSubjectDigest: identity.callerSubjectDigest,
+    callerTenantId: identity.tenantId,
+    callerOrganizationId: identity.organizationId,
+    callerIdentityClaimsDigest,
+    authProviderRef: identity.authProviderRef,
+    authSessionDigest: identity.authSessionDigest,
+    serviceCredentialDigest: identity.serviceCredentialDigest,
+    revocationEpochRef: identity.revocationEpochRef,
+    callerIdentityIssuedAt: identity.issuedAt,
+    callerIdentityExpiresAt: identity.expiresAt
+  };
+}
+// src/http/admission/index.ts
+async function authorizeTransitionAdmission(c, options, route, context) {
+  if (options.authMode === "hosted") {
+    const config2 = requireHostedAdmissionConfig(options.hostedAdmissionConfig);
+    assertHostedTransitionRolesConfigured(config2, [route.role]);
+    return authorizeHosted(c, options.hostedCallerVerifier, route.routeId, route.path, [route.role], config2, {
+      kind: "transition"
+    });
+  }
+  return {
+    failure: authorizeTransitionCaller(c, options.callerAuthTokens, route.role, context),
+    hostedIdentity: null,
+    callerEvidence: undefined
+  };
+}
+async function authorizeEvidenceReadAdmission(c, options, route, context) {
+  if (options.authMode === "hosted") {
+    const config2 = requireHostedAdmissionConfig(options.hostedAdmissionConfig);
+    return authorizeHosted(c, options.hostedCallerVerifier, route.routeId, route.honoPath, route.roles, config2, {
+      kind: "redacted_evidence_read"
+    });
+  }
+  return {
+    failure: authorizeTransitionCallerForAny(c, options.callerAuthTokens, route.roles, context),
+    hostedIdentity: null,
+    callerEvidence: undefined
+  };
+}
+async function authorizeHostedRawRecordReadAdmission(c, options) {
+  const config2 = requireHostedAdmissionConfig(options.hostedAdmissionConfig);
+  return authorizeHosted(c, options.hostedCallerVerifier, "readProtocolRecord", "/v0.2/records/:objectType/:objectId", ["review_custody"], config2, { kind: "raw_evidence_read" });
+}
+async function authorizeHostedReadinessAdmission(c, options) {
+  const config2 = requireHostedAdmissionConfig(options.hostedAdmissionConfig);
+  return authorizeHosted(c, options.hostedCallerVerifier, "getHostedReadiness", "/v0.2/hosted/readiness", ["review_custody"], config2, { kind: "readiness_read" });
+}
+async function authorizeHosted(c, verifier, routeId, routePath, requiredRoles, config2, purpose) {
+  if (!verifier) {
+    throw new HandshakeProtocolError("hosted_caller_verifier_not_configured", "Hosted transition admission requires a server-side caller verifier.", 503, { retryability: "terminal", commitState: "not_started" });
+  }
+  const now = new Date().toISOString();
+  const requiredRole = requiredRoles[0] ?? "control_plane";
+  const identity = parseHostedCallerIdentity(await verifier.verify({
+    headers: c.req.raw.headers,
+    method: c.req.raw.method,
+    url: c.req.raw.url,
+    requiredRole,
+    routeId,
+    routePath,
+    now,
+    requiredRoles
+  }));
+  assertHostedCallerFresh(identity, now, config2.maxIdentityAgeSeconds);
+  switch (purpose.kind) {
+    case "transition":
+      if (requiredRoles.length === 1) {
+        assertHostedCallerRole(identity, requiredRole);
+      } else {
+        assertHostedCallerAnyRole(identity, requiredRoles);
+      }
+      break;
+    case "redacted_evidence_read":
+      assertHostedRedactedEvidenceEntitlement(identity, config2);
+      break;
+    case "raw_evidence_read":
+      assertHostedRawEvidenceEntitlement(identity, config2, c.req.raw.headers, now);
+      break;
+    case "readiness_read":
+      assertHostedReadinessEntitlement(identity, config2);
+      break;
+  }
+  return {
+    failure: null,
+    hostedIdentity: identity,
+    callerEvidence: await transitionCallerEvidenceFromIdentity(identity)
+  };
+}
+
+// src/http/routes/evidence-read-route-registry.ts
+var evidenceReadRoles = ["review_custody", "runtime_evidence"];
+var evidenceReadRouteDefinitions = [
+  {
+    routeId: "getGeneratedGraphEvidenceProjection",
+    honoPath: "/v0.2/evidence/generated-execution-graphs/:generatedExecutionGraphId",
+    openApiPath: "/v0.2/evidence/generated-execution-graphs/{generatedExecutionGraphId}",
+    roles: evidenceReadRoles,
+    summary: "Read redacted generated execution graph evidence for diagnostics only",
+    responseDescription: "Generated execution graph evidence projection. Inspection evidence only; not authority and not execution proof.",
+    responseSchema: GeneratedGraphEvidenceProjectionSchema,
+    pathParameters: [
+      {
+        name: "generatedExecutionGraphId",
+        description: "Generated execution graph identifier."
+      }
+    ]
+  },
+  {
+    routeId: "getContractEvidenceProjection",
+    honoPath: "/v0.2/evidence/contracts/:actionContractId",
+    openApiPath: "/v0.2/evidence/contracts/{actionContractId}",
+    roles: evidenceReadRoles,
+    summary: "Read a redacted action contract view for diagnostics only",
+    responseDescription: "Redacted action contract projection. Inspection evidence only; not authority and not execution proof.",
+    responseSchema: ContractEvidenceProjectionSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier."
+      }
+    ]
+  },
+  {
+    routeId: "getAgentTransactionEnvelopeProjection",
+    honoPath: "/v0.2/evidence/agent-transactions/:actionContractId",
+    openApiPath: "/v0.2/evidence/agent-transactions/{actionContractId}",
+    roles: evidenceReadRoles,
+    summary: "Read a redacted agent transaction envelope for diagnostics only",
+    responseDescription: "Redacted agent transaction envelope projection. Inspection evidence only; not authority, not receipt export, and not downstream business proof.",
+    responseSchema: AgentTransactionEnvelopeProjectionSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier used to assemble the redacted transaction envelope."
+      }
+    ]
+  },
+  {
+    routeId: "getOperationReadbackProjection",
+    honoPath: "/v0.2/evidence/operations/:actionContractId/readback",
+    openApiPath: "/v0.2/evidence/operations/{actionContractId}/readback",
+    roles: evidenceReadRoles,
+    summary: "Read redacted operation readback for diagnostics only",
+    responseDescription: "Operation readback projection with compilation provenance stages. Inspection evidence only; does not create authority or greenlights.",
+    responseSchema: OperationReadbackProjectionSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier for operation readback assembly."
+      }
+    ]
+  },
+  {
+    routeId: "getOperationCorrelationIndex",
+    honoPath: "/v0.2/evidence/operations/:actionContractId/correlation",
+    openApiPath: "/v0.2/evidence/operations/{actionContractId}/correlation",
+    roles: evidenceReadRoles,
+    summary: "Read linked operation correlation refs for diagnostics only",
+    responseDescription: "Read-only correlation index over existing evidence refs. No mutation routes and no authority creation.",
+    responseSchema: OperationCorrelationIndexSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier for correlation index assembly."
+      }
+    ]
+  },
+  {
+    routeId: "getIdempotencyRecoveryProjection",
+    honoPath: "/v0.2/evidence/idempotency-recovery/:actionContractId",
+    openApiPath: "/v0.2/evidence/idempotency-recovery/{actionContractId}",
+    roles: evidenceReadRoles,
+    summary: "Read redacted idempotency reuse and recovery state for diagnostics only",
+    responseDescription: "Redacted idempotency recovery projection. Evidence only; same-key reads do not create fresh authority.",
+    responseSchema: IdempotencyRecoveryProjectionSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier used to derive the idempotency scope."
+      }
+    ]
+  },
+  {
+    routeId: "getReceiptTimelineProjection",
+    honoPath: "/v0.2/evidence/receipts/:receiptId/timeline",
+    openApiPath: "/v0.2/evidence/receipts/{receiptId}/timeline",
+    roles: evidenceReadRoles,
+    summary: "Read a redacted receipt event timeline for diagnostics only",
+    responseDescription: "Redacted receipt timeline projection. Inspection evidence only; not authority and not downstream business proof.",
+    responseSchema: ReceiptTimelineProjectionSchema,
+    pathParameters: [
+      {
+        name: "receiptId",
+        description: "Receipt identifier."
+      }
+    ]
+  },
+  {
+    routeId: "getProtectedPathInstallHealthProjection",
+    honoPath: "/v0.2/evidence/protected-path-install-health/:actionContractId",
+    openApiPath: "/v0.2/evidence/protected-path-install-health/{actionContractId}",
+    roles: evidenceReadRoles,
+    summary: "Read redacted package-install protected-path health for diagnostics only",
+    responseDescription: "Redacted protected-path install health projection. Inspection evidence only; not gateway authority.",
+    responseSchema: ProtectedPathInstallHealthProjectionSchema,
+    pathParameters: [
+      {
+        name: "actionContractId",
+        description: "Action contract identifier used to derive the protected-path scope."
+      }
+    ]
+  }
+];
+// src/protocol/areas/generated-execution-graph/inputs.ts
+var GraphEvidenceIssuerContextSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  graphIssuerRef: exports_external.string().min(1),
+  graphIssuerAuthority: GraphIssuerAuthoritySchema,
+  graphIssuedAt: exports_external.string().datetime({ offset: true })
+});
+var CreateGeneratedExecutionGraphInputSchema = exports_external.strictObject({
+  runtimeExecutionId: exports_external.string().min(1),
+  graphNonce: exports_external.string().min(8),
+  graphSchemaVersion: exports_external.string().min(1).default("generated-execution-graph-0.2.4"),
+  parserVersion: exports_external.string().min(1),
+  supportedGrammarVersion: exports_external.string().min(1),
+  coverageValidatorVersion: exports_external.string().min(1).default("handshake-generated-coverage-0.2.4"),
+  entryNodeIds: exports_external.array(exports_external.string().min(1)).default([]),
+  edges: exports_external.array(GeneratedExecutionGraphEdgeSchema).default([]),
+  maxNodeCount: exports_external.number().int().positive().default(64),
+  maxEdgeCount: exports_external.number().int().nonnegative().default(128),
+  maxDepth: exports_external.number().int().positive().default(16),
+  maxGraphByteSize: exports_external.number().int().positive().default(65536),
+  truncationStatus: GraphTruncationStatusSchema.default("complete"),
+  catalogSnapshotDigest: DigestSchema,
+  gatewayRegistrySnapshotDigest: DigestSchema,
+  registryBindingSetDigest: DigestSchema,
+  nodes: exports_external.array(GeneratedExecutionNodeInputSchema).default([])
+});
+// src/protocol/areas/generated-execution-graph/coverage.ts
+async function deriveGraphCoverage(input) {
+  const terminalReasonCodes = [];
+  const nodeIds = new Set;
+  for (const node of input.nodes) {
+    if (nodeIds.has(node.nodeId)) {
+      throw new HandshakeProtocolError("generated_execution_graph_duplicate_node_id", "Generated execution graph node ids must be unique.", 422);
+    }
+    nodeIds.add(node.nodeId);
+  }
+  for (const nodeId of input.entryNodeIds)
+    assertKnownNode(nodeIds, nodeId, "entryNodeIds");
+  for (const edge of input.edges) {
+    assertKnownNode(nodeIds, edge.fromNodeId, "edge.fromNodeId");
+    assertKnownNode(nodeIds, edge.toNodeId, "edge.toNodeId");
+  }
+  const nodes = await Promise.all(input.nodes.map(async (node) => GeneratedExecutionNodeSchema.parse({
+    ...node,
+    nodeDigest: await digestCanonical(node)
+  })));
+  const graphByteSize = new TextEncoder().encode(JSON.stringify({ ...input, nodes })).byteLength;
+  const observedDepth = graphDepth(input.entryNodeIds, input.edges);
+  if (input.nodes.length === 0)
+    terminalReasonCodes.push("generated_execution_graph_empty");
+  if (input.entryNodeIds.length === 0)
+    terminalReasonCodes.push("generated_execution_graph_missing_entry_node");
+  if (observedDepth.cycleDetected)
+    terminalReasonCodes.push("generated_execution_graph_cycle_detected");
+  if (input.nodes.length > input.maxNodeCount)
+    terminalReasonCodes.push("generated_execution_graph_node_limit_exceeded");
+  if (input.edges.length > input.maxEdgeCount)
+    terminalReasonCodes.push("generated_execution_graph_edge_limit_exceeded");
+  if (observedDepth.depth > input.maxDepth)
+    terminalReasonCodes.push("generated_execution_graph_depth_limit_exceeded");
+  if (graphByteSize > input.maxGraphByteSize)
+    terminalReasonCodes.push("generated_execution_graph_byte_limit_exceeded");
+  if (input.truncationStatus !== "complete")
+    terminalReasonCodes.push(truncationReason(input.truncationStatus));
+  for (const node of nodes)
+    terminalReasonCodes.push(...reasonCodesForNode(node));
+  return {
+    nodes,
+    terminalReasonCodes: [...new Set(terminalReasonCodes)],
+    coverageStatus: coverageStatusForGraph(nodes, terminalReasonCodes),
+    graphByteSize
+  };
+}
+function assertKnownNode(nodeIds, nodeId, field) {
+  if (nodeIds.has(nodeId))
+    return;
+  throw new HandshakeProtocolError("generated_execution_graph_unknown_node_ref", `Generated execution graph ${field} references an unknown node id.`, 422);
+}
+function reasonCodesForNode(node) {
+  const reasonCodes = [...node.unsupportedReasonCodes];
+  if (node.nodeKind === "unknown")
+    reasonCodes.push("generated_execution_node_kind_unknown");
+  if (node.rawSecretMaterialDetected)
+    reasonCodes.push("generated_execution_node_raw_secret_material");
+  if (node.argvRedactionStatus === "raw_material_present")
+    reasonCodes.push("generated_execution_node_raw_argv_material");
+  if (node.stdinRedactionStatus === "raw_material_present")
+    reasonCodes.push("generated_execution_node_raw_stdin_material");
+  reasonCodes.push(...classificationReasonCodes(node.classification));
+  reasonCodes.push(...commandRiskReasonCodes(node.commandRiskClassifierPosture));
+  return reasonCodes;
+}
+function classificationReasonCodes(classification) {
+  switch (classification) {
+    case "candidate_action_eligible":
+    case "read_only":
+    case "nonconsequential":
+      return [];
+    case "bypass_risk":
+      return ["generated_execution_node_bypass_risk"];
+    case "hidden_trigger":
+      return ["generated_execution_node_hidden_trigger"];
+    case "observer_only":
+      return ["generated_execution_node_observer_only"];
+    case "unsupported":
+      return ["generated_execution_node_unsupported"];
+    case "ambiguous":
+      return ["generated_execution_node_ambiguous"];
+  }
+}
+function commandRiskReasonCodes(posture) {
+  switch (posture) {
+    case "absent":
+    case "advisory_allow":
+    case "advisory_no_match":
+      return [];
+    case "deny":
+      return ["generated_execution_command_risk_denied"];
+    case "warn":
+      return ["generated_execution_command_risk_warned"];
+    case "allowlist":
+      return ["generated_execution_command_risk_allowlist"];
+    case "allow_once":
+      return ["generated_execution_command_risk_allow_once"];
+    case "bypass_detected":
+      return ["generated_execution_command_risk_bypass_detected"];
+    case "fail_open":
+      return ["generated_execution_command_risk_fail_open"];
+    case "skipped":
+      return ["generated_execution_command_risk_skipped"];
+    case "unknown":
+      return ["generated_execution_command_risk_unknown"];
+  }
+}
+function coverageStatusForGraph(nodes, terminalReasonCodes) {
+  const reasonText = terminalReasonCodes.join(" ");
+  if (reasonText.includes("bypass"))
+    return "contains_bypass_risk";
+  if (reasonText.includes("raw_secret") || reasonText.includes("raw_argv") || reasonText.includes("raw_stdin") || reasonText.includes("denied") || reasonText.includes("warned") || reasonText.includes("allowlist") || reasonText.includes("allow_once")) {
+    return "contains_refusal";
+  }
+  if (reasonText.includes("unsupported") || reasonText.includes("ambiguous")) {
+    return "unsupported_or_ambiguous";
+  }
+  if (terminalReasonCodes.length > 0 || nodes.some((node) => node.classification === "hidden_trigger" || node.classification === "observer_only")) {
+    return "contains_coverage_gap";
+  }
+  if (nodes.length > 0 && nodes.every((node) => node.classification === "read_only" || node.classification === "nonconsequential")) {
+    return "nonconsequential_only";
+  }
+  if (nodes.length > 0 && nodes.some((node) => node.classification === "candidate_action_eligible") && nodes.every((node) => ["candidate_action_eligible", "read_only", "nonconsequential"].includes(node.classification))) {
+    return "fully_covered_no_unsupported_nodes";
+  }
+  return "unknown";
+}
+function truncationReason(truncationStatus) {
+  switch (truncationStatus) {
+    case "complete":
+      return "generated_execution_graph_complete";
+    case "truncated":
+      return "generated_execution_graph_truncated";
+    case "over_limit":
+      return "generated_execution_graph_over_limit";
+    case "unknown":
+      return "generated_execution_graph_truncation_unknown";
+  }
+}
+function graphDepth(entryNodeIds, edges) {
+  const adjacency = new Map;
+  for (const edge of edges) {
+    adjacency.set(edge.fromNodeId, [...adjacency.get(edge.fromNodeId) ?? [], edge.toNodeId]);
+  }
+  let maxDepth = entryNodeIds.length > 0 ? 1 : 0;
+  let cycleDetected = false;
+  const visit = (nodeId, depth, path) => {
+    maxDepth = Math.max(maxDepth, depth);
+    if (path.has(nodeId)) {
+      cycleDetected = true;
+      return;
+    }
+    const nextPath = new Set(path);
+    nextPath.add(nodeId);
+    for (const nextNodeId of adjacency.get(nodeId) ?? [])
+      visit(nextNodeId, depth + 1, nextPath);
+  };
+  for (const nodeId of entryNodeIds)
+    visit(nodeId, 1, new Set);
+  return { depth: maxDepth, cycleDetected };
+}
+
+// src/protocol/areas/generated-execution-graph/transitions.ts
+async function createGeneratedExecutionGraph(store, recorder, inputValue, issuerContextValue) {
+  const evidenceContext = await getGraphEvidenceContext(store, recorder, inputValue, issuerContextValue);
+  const coverage = await deriveGraphCoverage(evidenceContext.input);
+  const graph = await buildGeneratedExecutionGraph(evidenceContext, coverage);
+  await commitGeneratedExecutionGraph(recorder, graph);
+  return graph;
+}
+async function getGraphEvidenceContext(store, recorder, inputValue, issuerContextValue) {
+  const input = CreateGeneratedExecutionGraphInputSchema.parse(inputValue);
+  const issuerContext = GraphEvidenceIssuerContextSchema.parse(issuerContextValue);
+  const runtimeExecutionRecord = await recorder.requiredRecord("runtime_execution", input.runtimeExecutionId, "runtime_execution_missing");
+  const runtimeExecution = runtimeExecutionRecord.payload;
+  assertIssuerMatchesRuntime(runtimeExecution, issuerContext);
+  await assertNonceUnused(store, runtimeExecution, input.graphNonce);
+  return { input, issuerContext, runtimeExecution };
+}
+async function buildGeneratedExecutionGraph(context, coverage) {
+  const createdAt = nowIso();
+  const graphInputDigest = await buildGraphInputDigest(context);
+  const generatedExecutionGraphId = createId("geg");
+  const graphDigestMaterial = buildGraphDigestMaterial(context, coverage, graphInputDigest);
+  const graphDigest = await digestCanonical(graphDigestMaterial);
+  const { input, issuerContext, runtimeExecution } = context;
+  const graph = GeneratedExecutionGraphSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: runtimeExecution.tenantId,
+    organizationId: runtimeExecution.organizationId,
+    createdAt,
+    generatedExecutionGraphId,
+    runtimeExecutionId: runtimeExecution.runtimeExecutionId,
+    runtimeExecutionDigest: runtimeExecution.runtimeExecutionDigest,
+    executionBlockDigest: runtimeExecution.executionBlockDigest,
+    graphIssuerRef: issuerContext.graphIssuerRef,
+    graphIssuerAuthority: issuerContext.graphIssuerAuthority,
+    graphIssuedAt: issuerContext.graphIssuedAt,
+    graphNonce: input.graphNonce,
+    graphInputDigest,
+    graphSchemaVersion: input.graphSchemaVersion,
+    parserVersion: input.parserVersion,
+    supportedGrammarVersion: input.supportedGrammarVersion,
+    coverageValidatorVersion: input.coverageValidatorVersion,
+    graphDigest,
+    coverageStatus: coverage.coverageStatus,
+    terminalReasonCodes: coverage.terminalReasonCodes,
+    entryNodeIds: input.entryNodeIds,
+    edges: input.edges,
+    nodeCount: coverage.nodes.length,
+    edgeCount: input.edges.length,
+    maxNodeCount: input.maxNodeCount,
+    maxEdgeCount: input.maxEdgeCount,
+    maxDepth: input.maxDepth,
+    graphByteSize: coverage.graphByteSize,
+    maxGraphByteSize: input.maxGraphByteSize,
+    truncationStatus: input.truncationStatus,
+    catalogSnapshotDigest: input.catalogSnapshotDigest,
+    gatewayRegistrySnapshotDigest: input.gatewayRegistrySnapshotDigest,
+    registryBindingSetDigest: input.registryBindingSetDigest,
+    nodes: coverage.nodes
+  });
+  return graph;
+}
+async function commitGeneratedExecutionGraph(recorder, graph) {
+  await recorder.commitRecordsWithEvents([{ objectType: "generated_execution_graph", payload: graph }], [
+    {
+      source: graph,
+      eventType: "generated_execution_graph_recorded",
+      objectRefs: [
+        graph.generatedExecutionGraphId,
+        graph.graphDigest,
+        graph.runtimeExecutionId,
+        graph.runtimeExecutionDigest
+      ],
+      payload: {
+        runtimeExecutionId: graph.runtimeExecutionId,
+        coverageStatus: graph.coverageStatus,
+        terminalReasonCodes: graph.terminalReasonCodes,
+        nodeCount: graph.nodeCount,
+        edgeCount: graph.edgeCount
+      }
+    }
+  ]);
+}
+async function buildGraphInputDigest(context) {
+  return digestCanonical({
+    input: context.input,
+    issuerContext: context.issuerContext,
+    runtimeExecutionId: context.runtimeExecution.runtimeExecutionId,
+    runtimeExecutionDigest: context.runtimeExecution.runtimeExecutionDigest
+  });
+}
+function buildGraphDigestMaterial(context, coverage, graphInputDigest) {
+  const { input, issuerContext, runtimeExecution } = context;
+  return {
+    tenantId: runtimeExecution.tenantId,
+    organizationId: runtimeExecution.organizationId,
+    runtimeExecutionId: runtimeExecution.runtimeExecutionId,
+    runtimeExecutionDigest: runtimeExecution.runtimeExecutionDigest,
+    executionBlockDigest: runtimeExecution.executionBlockDigest,
+    graphIssuerRef: issuerContext.graphIssuerRef,
+    graphIssuerAuthority: issuerContext.graphIssuerAuthority,
+    graphIssuedAt: issuerContext.graphIssuedAt,
+    graphNonce: input.graphNonce,
+    graphInputDigest,
+    graphSchemaVersion: input.graphSchemaVersion,
+    parserVersion: input.parserVersion,
+    supportedGrammarVersion: input.supportedGrammarVersion,
+    coverageValidatorVersion: input.coverageValidatorVersion,
+    coverageStatus: coverage.coverageStatus,
+    terminalReasonCodes: coverage.terminalReasonCodes,
+    entryNodeIds: input.entryNodeIds,
+    edges: input.edges,
+    nodeCount: coverage.nodes.length,
+    edgeCount: input.edges.length,
+    maxNodeCount: input.maxNodeCount,
+    maxEdgeCount: input.maxEdgeCount,
+    maxDepth: input.maxDepth,
+    graphByteSize: coverage.graphByteSize,
+    maxGraphByteSize: input.maxGraphByteSize,
+    truncationStatus: input.truncationStatus,
+    catalogSnapshotDigest: input.catalogSnapshotDigest,
+    gatewayRegistrySnapshotDigest: input.gatewayRegistrySnapshotDigest,
+    registryBindingSetDigest: input.registryBindingSetDigest,
+    nodes: coverage.nodes
+  };
+}
+function assertIssuerMatchesRuntime(runtimeExecution, issuerContext) {
+  const mismatches = [
+    ["tenantId", runtimeExecution.tenantId, issuerContext.tenantId],
+    ["organizationId", runtimeExecution.organizationId, issuerContext.organizationId],
+    ["principalIntentRef", runtimeExecution.principalIntentRef, issuerContext.principalIntentRef],
+    ["principalId", runtimeExecution.principalId, issuerContext.principalId],
+    ["agentId", runtimeExecution.agentId, issuerContext.agentId],
+    ["runId", runtimeExecution.runId, issuerContext.runId],
+    ["runtimeAdapterId", runtimeExecution.runtimeAdapterId, issuerContext.runtimeAdapterId]
+  ].filter(([, runtimeValue, issuerValue]) => runtimeValue !== issuerValue);
+  if (mismatches.length > 0) {
+    throw new HandshakeProtocolError("generated_execution_graph_issuer_scope_mismatch", "Generated execution graph issuer context must match the runtime execution scope.", 409);
+  }
+}
+async function assertNonceUnused(store, runtimeExecution, graphNonce) {
+  const graphs = await store.listRecordsByType("generated_execution_graph", {
+    tenantId: runtimeExecution.tenantId,
+    organizationId: runtimeExecution.organizationId
+  });
+  const reused = graphs.some((record2) => record2.payload.runtimeExecutionId === runtimeExecution.runtimeExecutionId && record2.payload.graphNonce === graphNonce);
+  if (reused) {
+    throw new HandshakeProtocolError("generated_execution_graph_nonce_replay", "Generated execution graph nonce was already used for this runtime execution.", 409);
+  }
+}
+// src/protocol/areas/generated-execution-graph/projections.ts
+function projectGeneratedGraphEvidence(graph) {
+  return GeneratedGraphEvidenceProjectionSchema.parse({
+    graphRef: graph.generatedExecutionGraphId,
+    runtimeExecutionRef: graph.runtimeExecutionId,
+    executionBlockDigest: graph.executionBlockDigest,
+    coverageStatus: graph.coverageStatus,
+    terminalReasonCodes: graph.terminalReasonCodes,
+    contractableNodeRefs: graph.nodes.filter(isContractableNode).map(nodeProjectionRef),
+    refusedNodeRefs: graph.nodes.filter((node) => !isContractableNode(node)).map(nodeProjectionRef),
+    catalogDigest: graph.catalogSnapshotDigest,
+    gatewayRegistryDigest: graph.gatewayRegistrySnapshotDigest,
+    redactionPosture: aggregateRedactionPosture(graph.nodes),
+    graphDigest: graph.graphDigest
+  });
+}
+function isContractableNode(node) {
+  return node.classification === "candidate_action_eligible";
+}
+function nodeProjectionRef(node) {
+  return {
+    nodeId: node.nodeId,
+    nodeDigest: node.nodeDigest,
+    classification: node.classification,
+    actionTypeId: node.actionTypeId,
+    gatewayRegistryEntryId: node.gatewayRegistryEntryId,
+    nodeGatewayBindingDigest: node.nodeGatewayBindingDigest,
+    unsupportedReasonCodes: node.unsupportedReasonCodes
+  };
+}
+function aggregateRedactionPosture(nodes) {
+  if (nodes.some((node) => node.rawSecretMaterialDetected))
+    return "raw_material_present";
+  const statuses = nodes.flatMap((node) => [node.argvRedactionStatus, node.stdinRedactionStatus]);
+  if (statuses.some((status) => status === "raw_material_present"))
+    return "raw_material_present";
+  if (statuses.some((status) => status === "unknown"))
+    return "unknown";
+  if (statuses.some((status) => status === "secret_refs_only"))
+    return "secret_refs_only";
+  if (statuses.length > 0 && statuses.every((status) => status === "digest_only"))
+    return "digest_only";
+  return "redacted";
+}
+// src/protocol/areas/refusal/records.ts
+async function buildRefusal(input) {
+  const normalized = {
+    schemaVersion: input.schemaVersion ?? PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: input.createdAt,
+    phase: input.phase,
+    actionContractId: input.actionContractId ?? null,
+    policyDecisionId: input.policyDecisionId ?? null,
+    greenlightId: input.greenlightId ?? null,
+    gateAttemptId: input.gateAttemptId ?? null,
+    refusedObjectRef: input.refusedObjectRef ?? null,
+    reasonCode: input.reasonCode,
+    reason: input.reason,
+    evidenceRefs: input.evidenceRefs ?? [],
+    refusedAt: input.refusedAt
+  };
+  const refusalDigest = await digestCanonical(normalized);
+  return RefusalSchema.parse({
+    ...normalized,
+    refusalId: `ref_${refusalDigest.slice("sha256:".length, "sha256:".length + 48)}`,
+    mutationAttempted: false,
+    authorityCreated: false
+  });
+}
+function protocolObjectRef(objectType, objectId) {
+  return `${objectType}:${objectId}`;
+}
+// src/protocol/areas/idempotency-ledger/entries.ts
+function idempotencyLedgerKey(contract) {
+  return {
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    gatewayId: contract.gatewayId,
+    protectedSurfaceKind: contract.protectedSurfaceKind,
+    actionClass: contract.actionClass,
+    resourceRef: contract.resourceRef,
+    idempotencyKey: contract.idempotencyKey
+  };
+}
+function idempotencyLedgerKeyDigest(key) {
+  return digestCanonical(key);
+}
+async function buildIdempotencyLedgerReservation(input) {
+  const { contract, policyDecision, greenlight, now } = input;
+  return buildIdempotencyLedgerEntry({
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    idempotencyLedgerEntryId: createId("idl"),
+    ledgerKeyDigest: input.ledgerKeyDigest ?? await idempotencyLedgerKeyDigest(idempotencyLedgerKey(contract)),
+    gatewayId: contract.gatewayId,
+    protectedSurfaceKind: contract.protectedSurfaceKind,
+    actionClass: contract.actionClass,
+    resourceRef: contract.resourceRef,
+    idempotencyKey: input.idempotencyKey ?? contract.idempotencyKey,
+    paramsDigest: contract.paramsDigest,
+    actionContractId: contract.actionContractId,
+    policyDecisionId: policyDecision.policyDecisionId,
+    greenlightId: greenlight.greenlightId,
+    gateAttemptId: null,
+    mutationAttemptId: null,
+    receiptId: null,
+    ledgerState: "authority_reserved",
+    reasonCode: "policy_passed",
+    evidenceRefs: [
+      protocolObjectRef("action_contract", contract.actionContractId),
+      protocolObjectRef("policy_decision", policyDecision.policyDecisionId),
+      protocolObjectRef("greenlight", greenlight.greenlightId),
+      ...input.evidenceRefs ?? []
+    ],
+    firstReservedAt: now,
+    updatedAt: now
+  });
+}
+async function buildIdempotencyLedgerMutationStarted(input) {
+  return updateIdempotencyLedgerEntry(input.current, {
+    gateAttemptId: input.gateAttempt.gateAttemptId,
+    mutationAttemptId: input.mutationAttempt.mutationAttemptId,
+    receiptId: input.receiptId,
+    ledgerState: "mutation_started",
+    reasonCode: "gate_passed",
+    evidenceRefs: [
+      ...input.current.evidenceRefs,
+      protocolObjectRef("gateway_check_attempt", input.gateAttempt.gateAttemptId),
+      protocolObjectRef("mutation_attempt", input.mutationAttempt.mutationAttemptId),
+      protocolObjectRef("receipt", input.receiptId)
+    ],
+    updatedAt: input.now
+  });
+}
+async function buildIdempotencyLedgerTerminal(input) {
+  return updateIdempotencyLedgerEntry(input.current, {
+    ledgerState: ledgerStateForReconciliation(input.reconciliation),
+    reasonCode: input.reconciliation.observedDownstreamStatus,
+    evidenceRefs: [
+      ...input.current.evidenceRefs,
+      protocolObjectRef("surface_operation_reconciliation", input.reconciliation.reconciliationId)
+    ],
+    updatedAt: input.now
+  });
+}
+function idempotencyConflictDecisionValue(contract, existing) {
+  if (existing.paramsDigest !== contract.paramsDigest) {
+    return {
+      decision: "refuse",
+      reasonCode: "idempotency_key_params_mismatch",
+      reason: "Idempotency key is already bound to a different parameter digest for this protected surface; fresh authority is refused.",
+      matchedRuleIds: ["idempotency_ledger_params_digest"]
+    };
+  }
+  return {
+    decision: "refuse",
+    reasonCode: "idempotency_duplicate_authority",
+    reason: "Idempotency key is already bound to this protected surface and parameter digest; fresh authority is refused.",
+    matchedRuleIds: ["idempotency_ledger_duplicate_authority"]
+  };
+}
+function idempotencyLedgerIndexEntry(entry) {
+  return {
+    ledgerKeyDigest: entry.ledgerKeyDigest,
+    idempotencyLedgerEntryId: entry.idempotencyLedgerEntryId,
+    tenantId: entry.tenantId,
+    organizationId: entry.organizationId,
+    paramsDigest: entry.paramsDigest,
+    actionContractId: entry.actionContractId,
+    policyDecisionId: entry.policyDecisionId,
+    greenlightId: entry.greenlightId,
+    ledgerState: entry.ledgerState,
+    updatedAt: entry.updatedAt
+  };
+}
+async function updateIdempotencyLedgerEntry(current, updates) {
+  return buildIdempotencyLedgerEntry({
+    ...current,
+    idempotencyLedgerEntryId: createId("idl"),
+    createdAt: updates.updatedAt,
+    gateAttemptId: updates.gateAttemptId ?? current.gateAttemptId,
+    mutationAttemptId: updates.mutationAttemptId ?? current.mutationAttemptId,
+    receiptId: updates.receiptId ?? current.receiptId,
+    ledgerState: updates.ledgerState,
+    reasonCode: updates.reasonCode,
+    evidenceRefs: [...new Set(updates.evidenceRefs)],
+    updatedAt: updates.updatedAt
+  });
+}
+async function buildIdempotencyLedgerEntry(entry) {
+  const seed = {
+    schemaVersion: PROTOCOL_VERSION,
+    ...entry,
+    ledgerDigest: null
+  };
+  const ledgerDigest = await digestCanonical(seed);
+  return IdempotencyLedgerEntrySchema.parse({ ...seed, ledgerDigest });
+}
+function ledgerStateForReconciliation(reconciliation) {
+  if (reconciliation.observedDownstreamStatus === "succeeded")
+    return "terminal_succeeded";
+  if (reconciliation.observedDownstreamStatus === "failed")
+    return "terminal_failed";
+  if (reconciliation.observedDownstreamStatus === "refused")
+    return "terminal_refused";
+  if (reconciliation.observedDownstreamStatus === "unknown")
+    return "terminal_unknown";
+  return "mutation_started";
+}
+// src/protocol/areas/receipt-export/status.ts
+function deriveGatewayAdmissionStatus(input) {
+  if (input.greenlightConsumptionStatus === "replayed")
+    return "replayed";
+  if (input.gatewayCheckStatus === "passed")
+    return "admitted";
+  if (input.gatewayCheckStatus === "refused")
+    return "refused";
+  if (input.gatewayCheckStatus === "proof_gap")
+    return "proof_gap";
+  return "not_requested";
+}
+function deriveDownstreamOutcomeStatus(input) {
+  return input.downstreamExecutionStatus;
+}
+
+// src/protocol/evidence-projections/projections.ts
+var AuthMdEvidenceRefsProjectionSchema2 = AgentTransactionEnvelopeProjectionSchema.shape.authMdEvidenceRefs;
+function projectContractEvidence(contract) {
+  return ContractEvidenceProjectionSchema.parse({
+    actionContractRef: contract.actionContractId,
+    contractDigest: contract.actionContractDigest,
+    intentCompilationRef: contract.intentCompilationId,
+    candidateActionRef: contract.candidateActionId,
+    candidateDigest: contract.candidateDigest,
+    envelopeRef: contract.envelopeId,
+    principalRef: contract.principalId,
+    agentRef: contract.agentId,
+    participantIdentityBindings: contract.participantIdentityBindings,
+    runId: contract.runId,
+    runtimeAdapterRef: contract.runtimeAdapterId,
+    actionClass: contract.actionClass,
+    protectedSurfaceKind: contract.protectedSurfaceKind,
+    resourceRef: contract.resourceRef,
+    gatewayId: contract.gatewayId,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    requiredProtectedPathState: contract.requiredProtectedPathState,
+    idempotencyKey: contract.idempotencyKey,
+    paramsDigest: contract.paramsDigest,
+    nonSecretParamsSummary: contract.nonSecretParamsSummary,
+    gatewayCredentialRefs: contract.gatewayCredentialRefs,
+    delegatedAuthorityRefs: contract.delegatedAuthorityRefs,
+    evidenceRefs: contract.evidenceRefs,
+    clearingEvidenceRefs: contract.clearingEvidenceRefs,
+    signaturePosture: contract.signaturePosture,
+    keyIdentityRef: contract.keyIdentityRef,
+    verificationPolicyRef: contract.verificationPolicyRef,
+    generatedExecutionGraphRef: contract.generatedExecutionGraphId,
+    generatedExecutionNodeRef: contract.generatedExecutionNodeId,
+    redactionProfileRef: "contract-view:v0.2-redacted",
+    omittedFields: ["parameters", "secretRefs", "contractSignature"]
+  });
+}
+async function projectAgentTransactionEnvelope(input) {
+  const proofGaps = input.proofGaps ?? [];
+  const refusals = scopedRefusals(input.refusals ?? [], input.contract);
+  const idempotencyRecoveryDispositionValue = input.ledger ? idempotencyRecoveryDisposition(input.ledger, input.contract.paramsDigest) : null;
+  const idempotencyReasonCodes = idempotencyRecoveryDispositionValue ? idempotencyRecoveryReasonCodes(idempotencyRecoveryDispositionValue) : [];
+  const reconciliations = scopedReconciliations(input.reconciliations ?? [], input.contract);
+  const latestReconciliation = latestReconciliationFor(reconciliations);
+  const surfaceOperationEvidenceRefs = redactedProjectionRefs(reconciliations.flatMap((reconciliation) => reconciliation.evidenceRefs));
+  const credentialResolutionEvidence = scopedCredentialResolutionEvidence(input.credentialResolutionEvidence ?? [], input.contract);
+  const credentialResolutionEvidenceRefs = credentialResolutionEvidence.map((evidence) => protocolObjectRef("credential_resolution_evidence", evidence.credentialResolutionEvidenceId)).filter(unique2);
+  const signerInvocationEvidenceRefs = signerInvocationEvidenceRefsFor(surfaceOperationEvidenceRefs);
+  const gatewayCredentialRefs = gatewayCredentialEvidenceRefs([
+    ...surfaceOperationEvidenceRefs,
+    ...input.contract.gatewayCredentialRefs.map((ref) => protocolObjectRef("gateway_credential_ref", ref.gatewayCredentialRefId)),
+    ...credentialResolutionEvidenceRefs
+  ]);
+  const delegatedAuthorityRefs = redactedProjectionRefs(input.contract.delegatedAuthorityRefs.map((ref) => protocolObjectRef("delegated_authority_ref", ref.delegatedAuthorityRefId)));
+  const downstreamRefs = downstreamEvidenceRefs(surfaceOperationEvidenceRefs);
+  const envelopeEvidenceRefs = [
+    ...redactedProjectionRefs(input.contract.evidenceRefs),
+    ...delegatedAuthorityRefs,
+    ...redactedProjectionRefs(input.receipt?.evidenceRefs ?? []),
+    ...redactedProjectionRefs(proofGaps.flatMap((proofGap) => proofGap.affectedObjectRefs)),
+    ...redactedProjectionRefs(refusals.flatMap((refusal) => refusal.evidenceRefs)),
+    ...redactedProjectionRefs(input.ledger?.evidenceRefs ?? []),
+    ...surfaceOperationEvidenceRefs,
+    ...credentialResolutionEvidenceRefs,
+    ...redactedProjectionRefs(credentialResolutionEvidence.flatMap((evidence) => evidence.evidenceRefs))
+  ].filter(unique2);
+  const authMdEvidenceRefs = projectAuthMdEvidenceRefs({
+    evidenceRefs: envelopeEvidenceRefs,
+    gatewayCredentialEvidenceRefs: gatewayCredentialRefs,
+    credentialResolutionEvidenceRefs,
+    surfaceOperationEvidenceRefs
+  });
+  const gatewayAdmissionStatus = agentTransactionGatewayAdmissionStatus(input);
+  const downstreamOutcomeStatus = agentTransactionDownstreamOutcomeStatus(input);
+  const envelopeSeed = {
+    actionContractRef: input.contract.actionContractId,
+    contractDigest: input.contract.actionContractDigest,
+    policyDecisionRef: input.policyDecision.policyDecisionId,
+    policyDecisionStatus: input.policyDecision.decision,
+    greenlightRef: input.greenlight?.greenlightId ?? input.receipt?.greenlightId ?? null,
+    gateAttemptRef: input.gateAttempt?.gateAttemptId ?? input.receipt?.gateAttemptId ?? null,
+    mutationAttemptRef: input.mutationAttempt?.mutationAttemptId ?? input.receipt?.mutationAttemptId ?? null,
+    receiptRef: input.receipt?.receiptId ?? null,
+    principalRef: input.contract.principalId,
+    agentRef: input.contract.agentId,
+    participantIdentityBindings: input.contract.participantIdentityBindings,
+    runId: input.contract.runId,
+    runtimeAdapterRef: input.contract.runtimeAdapterId,
+    actionClass: input.contract.actionClass,
+    protectedSurfaceKind: input.contract.protectedSurfaceKind,
+    resourceRef: input.contract.resourceRef,
+    gatewayId: input.contract.gatewayId,
+    gatewayPolicyVersion: input.contract.gatewayPolicyVersion,
+    idempotencyKey: input.contract.idempotencyKey,
+    paramsDigest: input.contract.paramsDigest,
+    nonSecretParamsSummary: input.contract.nonSecretParamsSummary,
+    clearingEvidenceRefs: clearingEvidenceRefsJson(input.contract.clearingEvidenceRefs),
+    surfaceOperationRef: latestReconciliation?.surfaceOperationRef ?? input.mutationAttempt?.surfaceOperationRef ?? null,
+    surfaceOperationReconciliationRef: latestReconciliation?.reconciliationId ?? null,
+    surfaceOperationEvidenceLabels: surfaceOperationEvidenceLabels({
+      contract: input.contract,
+      gateAttempt: input.gateAttempt ?? null,
+      latestReconciliation,
+      mutationAttempt: input.mutationAttempt ?? null,
+      surfaceOperationEvidenceRefs,
+      gatewayCredentialEvidenceRefs: gatewayCredentialRefs,
+      credentialResolutionEvidenceRefs,
+      signerInvocationEvidenceRefs,
+      downstreamEvidenceRefs: downstreamRefs
+    }),
+    surfaceOperationEvidenceRefs,
+    gatewayCredentialEvidenceRefs: gatewayCredentialRefs,
+    credentialResolutionEvidenceRefs,
+    signerInvocationEvidenceRefs,
+    downstreamEvidenceRefs: downstreamRefs,
+    authMdEvidenceRefs,
+    authMdEvidenceLabels: authMdEvidenceLabels({
+      authMdEvidenceRefs,
+      policyDecisionRef: input.policyDecision.policyDecisionId,
+      greenlightRef: input.greenlight?.greenlightId ?? input.receipt?.greenlightId ?? null,
+      gateAttemptRef: input.gateAttempt?.gateAttemptId ?? input.receipt?.gateAttemptId ?? null,
+      mutationAttemptRef: input.mutationAttempt?.mutationAttemptId ?? input.receipt?.mutationAttemptId ?? null,
+      refusalRefs: refusals.map((refusal) => refusal.refusalId),
+      proofGapRefs: [...input.receipt?.proofGapIds ?? [], ...proofGaps.map((proofGap) => proofGap.proofGapId)],
+      gatewayAdmissionStatus,
+      downstreamOutcomeStatus,
+      reconciliationFinalityStatus: latestReconciliation?.finalityStatus ?? null
+    }),
+    providerRequestRef: latestReconciliation?.providerRequestRef ?? null,
+    providerOperationRef: latestReconciliation?.providerOperationRef ?? null,
+    downstreamRetryability: latestReconciliation?.downstreamRetryability ?? null,
+    reconciliationFinalityStatus: latestReconciliation?.finalityStatus ?? null,
+    gatewayAdmissionStatus,
+    greenlightConsumptionStatus: input.receipt?.greenlightConsumptionStatus ?? null,
+    downstreamOutcomeStatus,
+    proofGapRefs: [...input.receipt?.proofGapIds ?? [], ...proofGaps.map((proofGap) => proofGap.proofGapId)].filter(unique2),
+    proofGapReasonCodes: proofGaps.map((proofGap) => proofGap.reasonCode).filter(unique2),
+    refusalRefs: refusals.map((refusal) => refusal.refusalId).filter(unique2),
+    refusalReasonCodes: refusals.map((refusal) => refusal.reasonCode).filter(unique2),
+    idempotencyLedgerRef: input.ledger?.idempotencyLedgerEntryId ?? null,
+    idempotencyLedgerState: input.ledger?.ledgerState ?? null,
+    idempotencyRecoveryDisposition: idempotencyRecoveryDispositionValue,
+    idempotencyReasonCodes,
+    recoveryRefs: input.recoveryRefs ?? [],
+    isolationRefs: input.isolationRefs ?? [],
+    authorityCertificateRefs: (input.authorityCertificates ?? []).filter((certificate) => certificate.terminal.actionContractId === input.contract.actionContractId).map((certificate) => certificate.authorityCertificateId).filter(unique2),
+    evidenceRefs: envelopeEvidenceRefs,
+    streamOffsets: input.receipt?.streamOffsets ?? [],
+    receiptDigest: input.receipt?.receiptDigest ?? null,
+    auditChainDigest: input.receipt?.auditChainDigest ?? null,
+    receiptExportRef: input.receiptExportRef ?? null,
+    redactionProfileRef: "agent-transaction-envelope:v0.2-redacted",
+    omittedFields: ["actionContract.parameters", "actionContract.secretRefs", "receipt.evidenceRefs.raw"],
+    envelopeDigest: null
+  };
+  const envelopeWithPlaceholderDigest = AgentTransactionEnvelopeProjectionSchema.parse({
+    ...envelopeSeed,
+    envelopeDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  });
+  const envelopeDigest = await digestCanonical({
+    ...envelopeWithPlaceholderDigest,
+    envelopeDigest: null
+  });
+  return AgentTransactionEnvelopeProjectionSchema.parse({ ...envelopeWithPlaceholderDigest, envelopeDigest });
+}
+function scopedRefusals(refusals, contract) {
+  return refusals.filter((refusal) => refusal.actionContractId === contract.actionContractId);
+}
+function scopedReconciliations(reconciliations, contract) {
+  return reconciliations.filter((reconciliation) => reconciliation.actionContractId === contract.actionContractId);
+}
+function scopedCredentialResolutionEvidence(records2, contract) {
+  return records2.filter((record2) => record2.actionContractId === contract.actionContractId);
+}
+function latestReconciliationFor(reconciliations) {
+  return [...reconciliations].sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;
+}
+async function projectIdempotencyRecovery(input) {
+  const ledgerKeyDigest = await idempotencyLedgerKeyDigest(idempotencyLedgerKey(input.contract));
+  const paramsDigestMatch = input.ledger ? input.ledger.paramsDigest === input.contract.paramsDigest : null;
+  const recoveryDisposition = idempotencyRecoveryDisposition(input.ledger, input.contract.paramsDigest);
+  return IdempotencyRecoveryProjectionSchema.parse({
+    actionContractRef: input.contract.actionContractId,
+    ledgerKeyDigest,
+    idempotencyKey: input.contract.idempotencyKey,
+    paramsDigest: input.contract.paramsDigest,
+    currentLedgerRef: input.ledger?.idempotencyLedgerEntryId ?? null,
+    currentLedgerState: input.ledger?.ledgerState ?? null,
+    paramsDigestMatch,
+    priorActionContractRef: input.ledger?.actionContractId ?? null,
+    policyDecisionRef: input.ledger?.policyDecisionId ?? null,
+    greenlightRef: input.ledger?.greenlightId ?? null,
+    gateAttemptRef: input.ledger?.gateAttemptId ?? null,
+    mutationAttemptRef: input.ledger?.mutationAttemptId ?? null,
+    receiptRef: input.ledger?.receiptId ?? null,
+    priorResultRefs: idempotencyPriorResultRefs(input.ledger),
+    recoveryDisposition,
+    reasonCodes: idempotencyRecoveryReasonCodes(recoveryDisposition),
+    evidenceRefs: input.ledger?.evidenceRefs ?? [],
+    redactionProfileRef: "idempotency-recovery:v0.2-redacted",
+    omittedFields: ["ledger.evidenceRefs.raw", "actionContract.parameters", "actionContract.secretRefs"]
+  });
+}
+function idempotencyPriorResultRefs(ledger) {
+  if (!ledger)
+    return [];
+  return [
+    protocolObjectRef("action_contract", ledger.actionContractId),
+    protocolObjectRef("policy_decision", ledger.policyDecisionId),
+    ledger.greenlightId ? protocolObjectRef("greenlight", ledger.greenlightId) : null,
+    ledger.gateAttemptId ? protocolObjectRef("gateway_check_attempt", ledger.gateAttemptId) : null,
+    ledger.mutationAttemptId ? protocolObjectRef("mutation_attempt", ledger.mutationAttemptId) : null,
+    ledger.receiptId ? protocolObjectRef("receipt", ledger.receiptId) : null,
+    ...ledger.evidenceRefs
+  ].filter((ref) => typeof ref === "string");
+}
+function projectReceiptTimeline(input) {
+  const latestReconciliation = input.reconciliations.filter((reconciliation) => reconciliation.mutationAttemptId === input.receipt.mutationAttemptId).sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0];
+  return ReceiptTimelineProjectionSchema.parse({
+    receiptRef: input.receipt.receiptId,
+    actionContractRef: input.receipt.actionContractId,
+    policyDecisionRef: input.receipt.policyDecisionId,
+    greenlightRef: input.receipt.greenlightId,
+    gateAttemptRef: input.receipt.gateAttemptId,
+    mutationAttemptRef: input.receipt.mutationAttemptId,
+    gatewayId: input.receipt.gatewayId,
+    policyDecisionStatus: input.receipt.policyDecisionStatus,
+    gatewayCheckStatus: input.receipt.gatewayCheckStatus,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(input.receipt),
+    greenlightConsumptionStatus: input.receipt.greenlightConsumptionStatus,
+    mutationAttemptStatus: input.receipt.mutationAttemptStatus,
+    downstreamExecutionStatus: input.receipt.downstreamExecutionStatus,
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(input.receipt),
+    proofGapRefs: input.receipt.proofGapIds,
+    finalityStatus: input.receipt.finalityStatus,
+    receiptDigest: input.receipt.receiptDigest,
+    auditChainDigest: input.receipt.auditChainDigest,
+    streamOffsets: input.receipt.streamOffsets,
+    events: input.events.map((event) => ({
+      streamId: event.streamId,
+      streamScope: event.streamScope,
+      partitionKey: event.partitionKey,
+      offset: event.offset,
+      eventType: event.eventType,
+      eventTime: event.eventTime,
+      eventDigest: event.eventDigest,
+      objectRefs: event.objectRefs
+    })),
+    missingEventCount: input.missingEventCount,
+    failureEvidence: latestReconciliation ? {
+      downstreamRetryability: latestReconciliation.downstreamRetryability,
+      providerRequestRef: latestReconciliation.providerRequestRef,
+      providerOperationRef: latestReconciliation.providerOperationRef,
+      redactedDiagnosticsDigest: latestReconciliation.redactedDiagnosticsDigest,
+      traceRef: latestReconciliation.traceRef,
+      spanRef: latestReconciliation.spanRef,
+      diagnosticsRedactionPosture: latestReconciliation.diagnosticsRedactionPosture
+    } : null,
+    redactionProfileRef: "receipt-timeline:v0.2-redacted",
+    omittedFields: ["event.payload", "event.createdAt", "receipt.evidenceRefs"]
+  });
+}
+function idempotencyRecoveryDisposition(ledger, paramsDigest) {
+  if (!ledger)
+    return "missing";
+  if (ledger.paramsDigest !== paramsDigest)
+    return "different_params_refused";
+  if (ledger.ledgerState === "terminal_unknown")
+    return "terminal_unknown_requires_recovery";
+  if (ledger.ledgerState === "terminal_succeeded" || ledger.ledgerState === "terminal_failed" || ledger.ledgerState === "terminal_refused") {
+    return "same_params_result_available";
+  }
+  return "same_params_duplicate_refused";
+}
+function idempotencyRecoveryReasonCodes(disposition) {
+  if (disposition === "missing")
+    return ["idempotency_recovery_missing"];
+  if (disposition === "different_params_refused")
+    return ["idempotency_key_params_mismatch"];
+  if (disposition === "terminal_unknown_requires_recovery")
+    return ["idempotency_terminal_unknown_recovery_required"];
+  if (disposition === "same_params_result_available")
+    return ["idempotency_result_reusable"];
+  return ["idempotency_duplicate_authority"];
+}
+function projectProtectedPathInstallHealth(input) {
+  const postureScopeKey = protectedPathPostureScopeKeyForContract(input.contract);
+  const evaluation = input.gateway ? evaluateRequiredProtectedPathPosture({
+    contract: input.contract,
+    gateway: input.gateway,
+    posture: input.posture,
+    now: input.now
+  }) : null;
+  const reasonCodes = evaluation && !evaluation.ok ? [evaluation.reasonCode] : input.gateway ? [] : ["gateway_record_missing"];
+  const current = input.posture?.payload ?? null;
+  return ProtectedPathInstallHealthProjectionSchema.parse({
+    actionContractRef: input.contract.actionContractId,
+    postureScopeKey,
+    runtimeAdapterRef: input.contract.runtimeAdapterId,
+    gatewayId: input.contract.gatewayId,
+    actionClass: input.contract.actionClass,
+    protectedSurfaceKind: input.contract.protectedSurfaceKind,
+    resourceRef: input.contract.resourceRef,
+    requiredProtectedPathState: input.contract.requiredProtectedPathState,
+    installHealthStatus: installHealthStatus(input.contract, evaluation, current, input.now),
+    reasonCodes,
+    currentPostureRef: current?.protectedPathPostureId ?? null,
+    currentPostureDigest: current?.postureDigest ?? null,
+    postureState: current?.postureState ?? null,
+    credentialCustodyStatus: current?.credentialCustodyStatus ?? null,
+    rawSiblingToolStatus: current?.rawSiblingToolStatus ?? null,
+    sourceAuthority: current?.sourceAuthority ?? null,
+    bypassProbeCoverage: current?.bypassProbeCoverage ?? [],
+    observedAt: current?.observedAt ?? null,
+    expiresAt: current?.expiresAt ?? null,
+    redactionProfileRef: "protected-path-install-health:v0.2-redacted",
+    omittedFields: ["bypassProbe.evidenceRefs", "bypassProbe.probeDiagnosticsDigest"]
+  });
+}
+function installHealthStatus(contract, evaluation, posture, now) {
+  if (contract.requiredProtectedPathState === "not_required")
+    return "not_required";
+  if (!evaluation)
+    return "unknown";
+  if (evaluation.ok)
+    return "satisfies_gateway_checked";
+  if (!posture)
+    return "missing";
+  if (Date.parse(posture.expiresAt) <= Date.parse(now))
+    return "stale";
+  return "unsafe";
+}
+function agentTransactionGatewayAdmissionStatus(input) {
+  if (input.receipt)
+    return deriveGatewayAdmissionStatus(input.receipt);
+  if (input.gateAttempt?.gateDecision === "passed")
+    return "admitted";
+  if (input.gateAttempt?.gateDecision === "refused")
+    return "refused";
+  if (input.gateAttempt?.gateDecision === "proof_gap")
+    return "proof_gap";
+  return "not_requested";
+}
+function agentTransactionDownstreamOutcomeStatus(input) {
+  if (input.receipt)
+    return deriveDownstreamOutcomeStatus(input.receipt);
+  if (!input.mutationAttempt)
+    return "not_started";
+  if (input.mutationAttempt.outcome === "submitted")
+    return "pending";
+  if (input.mutationAttempt.outcome === "succeeded")
+    return "succeeded";
+  if (input.mutationAttempt.outcome === "downstream_refused")
+    return "refused";
+  if (input.mutationAttempt.outcome === "failed")
+    return "failed";
+  return "unknown";
+}
+function unique2(value, index, values) {
+  return values.indexOf(value) === index;
+}
+function clearingEvidenceRefsJson(refs) {
+  const json2 = {};
+  if (refs.correlationRef !== undefined)
+    json2.correlationRef = refs.correlationRef;
+  if (refs.obligationRef !== undefined)
+    json2.obligationRef = refs.obligationRef;
+  if (refs.counterpartyRef !== undefined)
+    json2.counterpartyRef = refs.counterpartyRef;
+  return json2;
+}
+function redactedProjectionRefs(refs) {
+  return refs.filter((ref) => !looksLikeRawPaymentCredential(ref)).filter(unique2);
+}
+function looksLikeRawPaymentCredential(value) {
+  return [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /secret[-_]?ref:/i,
+    /private[_-]?key/i,
+    /signer[_-]?ref/i,
+    /raw[_-]?signer/i,
+    /signing[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /aws[_-]?secret[_-]?access[_-]?key\s*[:=]\s*\S+/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/\S+/i,
+    /infisical:\/\/\S+/i,
+    /op:\/\/\S+/i,
+    /^PAYMENT[-_ ]?SIGNATURE\b/i,
+    /PaymentPayload/,
+    /raw_payment_signature/i,
+    /token[_-]?passthrough/i,
+    /facilitator[_-]?secret/i,
+    /\bBearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /\b(?:claim[_-]?token|access[_-]?token|api[_-]?key|client[_-]?secret|refresh[_-]?token)\s*[:=]\s*\S+/i,
+    /\bsk_(?:live|test)_[A-Za-z0-9_/-]+/i,
+    /auth[-_]?md.*secret/i
+  ].some((pattern) => pattern.test(value));
+}
+function projectAuthMdEvidenceRefs(input) {
+  const refs = input.evidenceRefs;
+  const protectedApiCallRefs = refs.filter((ref) => ref.startsWith("evidence:auth-md-protected-api-call")).filter(unique2);
+  return AuthMdEvidenceRefsProjectionSchema2.parse({
+    discoveryRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-discovery:")).filter(unique2),
+    authorizationServerRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-authorization-server:")).filter(unique2),
+    identityAssertionRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-identity-assertion:")).filter(unique2),
+    registrationRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-registration:")).filter(unique2),
+    claimRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-claim:")).filter(unique2),
+    revocationRefs: refs.filter((ref) => ref.startsWith("evidence:auth-md-revocation:")).filter(unique2),
+    credentialCustodyRefs: input.gatewayCredentialEvidenceRefs.filter((ref) => ref.startsWith("gateway_credential_ref:")).filter(unique2),
+    credentialResolutionRefs: input.credentialResolutionEvidenceRefs.filter(unique2),
+    protectedApiCallRefs,
+    downstreamEvidenceRefs: [
+      ...protectedApiCallRefs,
+      ...input.surfaceOperationEvidenceRefs.filter((ref) => ref.startsWith("evidence:auth-md-downstream"))
+    ].filter(unique2)
+  });
+}
+function authMdEvidenceLabels(input) {
+  const labels = [];
+  if (input.authMdEvidenceRefs.discoveryRefs.length > 0)
+    labels.push("auth_md_discovery");
+  if (input.authMdEvidenceRefs.authorizationServerRefs.length > 0) {
+    labels.push("auth_md_authorization_server_metadata");
+  }
+  if (input.authMdEvidenceRefs.identityAssertionRefs.length > 0)
+    labels.push("auth_md_identity_assertion");
+  if (input.authMdEvidenceRefs.registrationRefs.length > 0)
+    labels.push("auth_md_registration");
+  if (input.authMdEvidenceRefs.claimRefs.length > 0)
+    labels.push("auth_md_claim");
+  if (input.authMdEvidenceRefs.revocationRefs.length > 0)
+    labels.push("auth_md_revocation");
+  if (input.authMdEvidenceRefs.credentialCustodyRefs.length > 0)
+    labels.push("gateway_credential_custody");
+  if (input.policyDecisionRef)
+    labels.push("handshake_policy_decision");
+  if (input.greenlightRef)
+    labels.push("handshake_one_use_greenlight");
+  if (input.gateAttemptRef)
+    labels.push("handshake_gateway_check");
+  if (input.authMdEvidenceRefs.credentialResolutionRefs.length > 0)
+    labels.push("gateway_credential_resolution");
+  if (input.mutationAttemptRef)
+    labels.push("handshake_mutation_attempt");
+  if (input.authMdEvidenceRefs.protectedApiCallRefs.length > 0)
+    labels.push("auth_md_protected_api_call_evidence");
+  if (input.refusalRefs.length > 0 || input.gatewayAdmissionStatus === "refused")
+    labels.push("handshake_refusal");
+  if (input.proofGapRefs.length > 0 || input.gatewayAdmissionStatus === "proof_gap")
+    labels.push("handshake_proof_gap");
+  if (input.reconciliationFinalityStatus === "unknown" || input.downstreamOutcomeStatus === "unknown") {
+    labels.push("downstream_uncertainty");
+  } else if (input.downstreamOutcomeStatus === "pending") {
+    labels.push("downstream_pending");
+  } else if (input.downstreamOutcomeStatus !== "not_started") {
+    labels.push(`downstream_${input.downstreamOutcomeStatus}`);
+  }
+  return labels.filter(unique2);
+}
+function gatewayCredentialEvidenceRefs(refs) {
+  return refs.filter((ref) => ref.startsWith("credential:") && ref.includes("payment") || ref.startsWith("credential:") && ref.includes("signature") || ref.startsWith("gateway_credential_ref:") || ref.startsWith("credential_resolution_evidence:") || ref.startsWith("digest:sha256:")).filter(unique2);
+}
+function signerInvocationEvidenceRefsFor(refs) {
+  return refs.filter((ref) => ref.startsWith("evidence:x402-payment-signature:") || ref.startsWith("evidence:x402-official-payment-signature:") || ref.startsWith("credential:x402-payment-signature:") || ref.startsWith("credential:x402-local-fixture-signature:")).filter(unique2);
+}
+function downstreamEvidenceRefs(refs) {
+  return refs.filter((ref) => ref.startsWith("evidence:") && (ref.includes("payment-response") || ref.includes("signed-retry"))).filter(unique2);
+}
+function surfaceOperationEvidenceLabels(input) {
+  const labels = [];
+  if (input.gateAttempt)
+    labels.push("local_gateway_check");
+  if (input.credentialResolutionEvidenceRefs.length > 0)
+    labels.push("gateway_credential_resolution");
+  if (input.signerInvocationEvidenceRefs.length > 0)
+    labels.push("gateway_signer_invocation");
+  if (input.gatewayCredentialEvidenceRefs.length > 0) {
+    labels.push(hasPaymentCredentialEvidence(input.surfaceOperationEvidenceRefs) ? "payment_payload_created" : "gateway_credential_evidence");
+  }
+  if (input.mutationAttempt && input.latestReconciliation)
+    labels.push("downstream_reconciliation_recorded");
+  if (input.downstreamEvidenceRefs.length > 0) {
+    labels.push("payment_response_received");
+  } else if (input.latestReconciliation?.observedDownstreamStatus === "unknown") {
+    labels.push("payment_response_missing");
+  }
+  if (input.surfaceOperationEvidenceRefs.some((ref) => ref.includes("signed-retry"))) {
+    labels.push("signed_retry_recorded");
+  }
+  if (input.surfaceOperationEvidenceRefs.some((ref) => ref.includes("x402-local-sandbox-signed-retry"))) {
+    labels.push("local_reference_downstream_fixture");
+  }
+  labels.push(...facilitatorEvidenceLabels(input.surfaceOperationEvidenceRefs));
+  return labels.filter(unique2);
+}
+function hasPaymentCredentialEvidence(refs) {
+  return refs.some((ref) => /payment/i.test(ref));
+}
+function facilitatorEvidenceLabels(refs) {
+  const labels = [];
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("facilitator-verify:attempt"))) {
+    labels.push("facilitator_verify_attempted");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("facilitator-verify:succeeded"))) {
+    labels.push("facilitator_verify_succeeded");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("facilitator-verify:failed"))) {
+    labels.push("facilitator_verify_failed");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("facilitator-settle:attempt"))) {
+    labels.push("facilitator_settle_attempted");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("settlement:succeeded"))) {
+    labels.push("settlement_succeeded");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("settlement:failed"))) {
+    labels.push("settlement_failed");
+  }
+  if (refs.some((ref) => ref.startsWith("evidence:") && ref.includes("settlement:unknown"))) {
+    labels.push("settlement_unknown");
+  }
+  return labels;
+}
+async function projectOperationReadback(input) {
+  const envelope = await projectAgentTransactionEnvelope(input);
+  const operationStatus = operationReadbackStatus(envelope);
+  const latestAuthoritativeStage = operationReadbackStage(envelope, input.contract, operationStatus);
+  const nextMechanism = operationReadbackNextMechanism(operationStatus);
+  const greenlightUsePosture = operationReadbackGreenlightUsePosture(envelope);
+  const reasonCodes = operationReadbackReasonCodes(envelope, input.policyDecision.decisionReasonCode);
+  const safeToReuseGreenlight = greenlightUsePosture === "available_for_one_gateway_check";
+  const requiresNewContract = operationReadbackRequiresNewContract(operationStatus);
+  const supportContext = {
+    schemaVersion: "handshake.support-context.v0.1",
+    supportContextRef: `support_context:${input.contract.actionContractId}`,
+    sourceAuthority: "protocol_store_projection",
+    surface: "operation_readback",
+    actionContractRef: input.contract.actionContractId,
+    requestIdentity: null,
+    operationStatus,
+    reasonCodes,
+    nextMechanism,
+    safeToRetryReadback: true,
+    safeToReuseGreenlight,
+    requiresNewContract,
+    supportSeverity: operationReadbackSupportSeverity(operationStatus),
+    docsUrl: null,
+    nextCommand: `handshake evidence fetch --contract-id ${input.contract.actionContractId}`,
+    evidenceRefs: envelope.evidenceRefs,
+    proofGapRefs: envelope.proofGapRefs,
+    refusalRefs: envelope.refusalRefs,
+    traceRef: envelope.providerRequestRef,
+    spanRef: envelope.providerOperationRef,
+    redactionProfileRef: "operation-readback:v0.1-redacted"
+  };
+  return OperationReadbackProjectionSchema.parse({
+    schemaVersion: "handshake.operation-readback.v0.1",
+    actionContractRef: envelope.actionContractRef,
+    contractDigest: envelope.contractDigest,
+    principalRef: envelope.principalRef,
+    agentRef: envelope.agentRef,
+    runId: envelope.runId,
+    runtimeAdapterRef: envelope.runtimeAdapterRef,
+    actionClass: envelope.actionClass,
+    protectedSurfaceKind: envelope.protectedSurfaceKind,
+    resourceRef: envelope.resourceRef,
+    gatewayId: envelope.gatewayId,
+    gatewayPolicyVersion: envelope.gatewayPolicyVersion,
+    sourceAuthority: "protocol_store_projection",
+    operationStatus,
+    latestAuthoritativeStage,
+    policyDecisionRef: envelope.policyDecisionRef,
+    policyDecisionStatus: envelope.policyDecisionStatus,
+    agreementObligationPolicy: agreementObligationPolicyFromDecision(input.policyDecision),
+    greenlightRef: envelope.greenlightRef,
+    gateAttemptRef: envelope.gateAttemptRef,
+    mutationAttemptRef: envelope.mutationAttemptRef,
+    receiptRef: envelope.receiptRef,
+    gatewayAdmissionStatus: envelope.gatewayAdmissionStatus,
+    downstreamOutcomeStatus: envelope.downstreamOutcomeStatus,
+    finalityStatus: envelope.reconciliationFinalityStatus ?? input.receipt?.finalityStatus ?? null,
+    greenlightUsePosture,
+    reasonCodes,
+    nextMechanism,
+    safeToRetryReadback: true,
+    safeToReuseGreenlight,
+    requiresNewContract,
+    authorityCreatedByReadback: false,
+    greenlightCreatedByReadback: false,
+    gatewayCheckPerformedByReadback: false,
+    mutationAttemptedByReadback: false,
+    receiptExportCreatedByReadback: false,
+    rawInternalRecordIncluded: false,
+    credentialMaterialIncluded: false,
+    paymentMaterialIncluded: false,
+    evidenceRefs: envelope.evidenceRefs,
+    proofGapRefs: envelope.proofGapRefs,
+    refusalRefs: envelope.refusalRefs,
+    recoveryRefs: envelope.recoveryRefs,
+    isolationRefs: envelope.isolationRefs,
+    authorityCertificateRefs: envelope.authorityCertificateRefs,
+    providerRequestRef: envelope.providerRequestRef,
+    providerOperationRef: envelope.providerOperationRef,
+    traceRef: envelope.providerRequestRef,
+    spanRef: envelope.providerOperationRef,
+    redactionProfileRef: "operation-readback:v0.1-redacted",
+    omittedFields: [
+      "actionContract.parameters",
+      "actionContract.secretRefs",
+      "receipt.evidenceRefs.raw",
+      "rawInternalRecord",
+      "credentialMaterial",
+      "paymentMaterial"
+    ],
+    supportContext
+  });
+}
+function projectOperationCorrelationIndex(input) {
+  const contract = input.contract;
+  return OperationCorrelationIndexSchema.parse({
+    schemaVersion: "handshake.operation-correlation.v0.1",
+    actionContractRef: contract.actionContractId,
+    sourceAuthority: "protocol_store_projection",
+    authorityCreatedByProjection: false,
+    greenlightCreatedByReadback: false,
+    gatewayCheckPerformedByReadback: false,
+    mutationAttemptedByReadback: false,
+    intentCompilationRef: contract.intentCompilationId,
+    candidateActionRef: contract.candidateActionId,
+    policyDecisionRef: input.policyDecision.policyDecisionId,
+    greenlightRef: input.greenlight?.greenlightId ?? input.receipt?.greenlightId ?? null,
+    gateAttemptRef: input.gateAttempt?.gateAttemptId ?? input.receipt?.gateAttemptId ?? null,
+    mutationAttemptRef: input.mutationAttempt?.mutationAttemptId ?? input.receipt?.mutationAttemptId ?? null,
+    receiptRef: input.receipt?.receiptId ?? null,
+    proofGapRefs: [...input.receipt?.proofGapIds ?? [], ...(input.proofGaps ?? []).map((gap) => gap.proofGapId)].filter(unique2),
+    refusalRefs: (input.refusals ?? []).filter((refusal) => refusal.actionContractId === contract.actionContractId).map((refusal) => refusal.refusalId).filter(unique2),
+    recoveryRefs: input.recoveryRefs ?? [],
+    isolationRefs: input.isolationRefs ?? [],
+    authorityCertificateRefs: (input.authorityCertificates ?? []).filter((certificate) => certificate.terminal.actionContractId === contract.actionContractId).map((certificate) => certificate.authorityCertificateId).filter(unique2),
+    redactionProfileRef: "operation-correlation:v0.1-redacted",
+    omittedFields: ["rawInternalRecord", "credentialMaterial", "paymentMaterial"]
+  });
+}
+function agreementObligationPolicyFromDecision(policy) {
+  const evaluationStatus = policy.decision === "greenlight" ? "greenlight" : policy.decision === "proof_gap" ? "proof_gap" : "refuse";
+  return {
+    sourceAuthority: "policy_decision_snapshot",
+    evaluationStatus,
+    ok: policy.decision === "greenlight",
+    reasonCode: policy.decision === "greenlight" ? null : policy.decisionReasonCode,
+    reason: policy.decision === "greenlight" ? null : policy.decisionReasonCode,
+    policyInput: {
+      posture: "not_applicable",
+      obligationRef: null,
+      linkedAgreementId: null,
+      acceptedNegotiationResolutionId: null
+    }
+  };
+}
+function operationReadbackStatus(envelope) {
+  if (envelope.isolationRefs.length > 0)
+    return "isolated";
+  if (envelope.idempotencyRecoveryDisposition === "terminal_unknown_requires_recovery") {
+    return "recovery_required";
+  }
+  if (envelope.gatewayAdmissionStatus === "replayed")
+    return "replay_refused";
+  if (envelope.policyDecisionStatus === "refuse")
+    return "policy_refused";
+  if (envelope.policyDecisionStatus === "review_required")
+    return "review_required";
+  if (envelope.policyDecisionStatus === "halt")
+    return "halted";
+  if (envelope.policyDecisionStatus === "quarantine")
+    return "quarantined";
+  if (envelope.policyDecisionStatus === "proof_gap")
+    return "policy_proof_gap";
+  if (envelope.gatewayAdmissionStatus === "refused")
+    return "gateway_refused";
+  if (envelope.gatewayAdmissionStatus === "proof_gap")
+    return "gateway_proof_gap";
+  if (envelope.gatewayAdmissionStatus === "admitted") {
+    if (envelope.downstreamOutcomeStatus === "pending")
+      return "downstream_pending";
+    if (envelope.downstreamOutcomeStatus === "succeeded")
+      return "downstream_succeeded";
+    if (envelope.downstreamOutcomeStatus === "refused")
+      return "downstream_refused";
+    if (envelope.downstreamOutcomeStatus === "failed")
+      return "downstream_failed";
+    if (envelope.downstreamOutcomeStatus === "unknown")
+      return "downstream_unknown";
+    return "gateway_admitted";
+  }
+  if (envelope.greenlightRef && !envelope.gateAttemptRef)
+    return "greenlight_available";
+  return "policy_refused";
+}
+function operationReadbackStage(envelope, contract, status) {
+  if (status === "isolated")
+    return "isolation";
+  if (status === "recovery_required")
+    return "recovery";
+  if (envelope.receiptRef)
+    return "receipt";
+  if (envelope.mutationAttemptRef)
+    return "mutation_attempt";
+  if (envelope.gateAttemptRef)
+    return "gateway_check";
+  if (envelope.greenlightRef)
+    return "greenlight";
+  if (envelope.policyDecisionRef)
+    return "policy_decision";
+  if (contract.candidateActionId)
+    return "candidate_action";
+  if (contract.intentCompilationId)
+    return "intent_compilation";
+  return "action_contract";
+}
+function operationReadbackNextMechanism(status) {
+  if (status === "greenlight_available")
+    return "use_greenlight_at_gateway";
+  if (status === "review_required")
+    return "request_review";
+  if (status === "policy_refused" || status === "gateway_refused")
+    return "recraft_request";
+  if (status === "replay_refused")
+    return "create_new_contract";
+  if (status === "recovery_required" || status === "downstream_unknown")
+    return "recover_terminal_unknown";
+  if (status === "isolated" || status === "halted" || status === "quarantined")
+    return "stop";
+  if (status === "downstream_pending")
+    return "wait_for_downstream";
+  return "read_evidence";
+}
+function operationReadbackGreenlightUsePosture(envelope) {
+  if (!envelope.greenlightRef)
+    return "none";
+  if (!envelope.gateAttemptRef && !envelope.receiptRef)
+    return "available_for_one_gateway_check";
+  if (envelope.greenlightConsumptionStatus === "consumed")
+    return "consumed";
+  if (envelope.greenlightConsumptionStatus === "replayed" || envelope.gatewayAdmissionStatus === "replayed") {
+    return "replayed_or_unusable";
+  }
+  if (envelope.greenlightConsumptionStatus === "not_consumed")
+    return "available_for_one_gateway_check";
+  return "unknown";
+}
+function operationReadbackRequiresNewContract(status) {
+  return status === "policy_refused" || status === "gateway_refused" || status === "replay_refused" || status === "recovery_required" || status === "halted" || status === "quarantined" || status === "isolated";
+}
+function operationReadbackSupportSeverity(status) {
+  if (status === "halted" || status === "quarantined" || status === "isolated" || status === "recovery_required" || status === "downstream_unknown") {
+    return "urgent";
+  }
+  if (status === "policy_refused" || status === "gateway_refused" || status === "gateway_proof_gap" || status === "policy_proof_gap" || status === "replay_refused" || status === "downstream_failed" || status === "downstream_refused") {
+    return "warning";
+  }
+  if (status === "downstream_succeeded")
+    return "none";
+  return "info";
+}
+function operationReadbackReasonCodes(envelope, policyDecisionReasonCode) {
+  return [
+    ...envelope.policyDecisionStatus === "greenlight" ? [] : [policyDecisionReasonCode],
+    ...envelope.proofGapReasonCodes,
+    ...envelope.refusalReasonCodes,
+    ...envelope.idempotencyReasonCodes
+  ].filter(unique2);
+}
+// src/protocol/areas/object-registry/index.ts
+var protocolObjectTypes = ProtocolObjectTypeSchema.options;
+var protocolObjectRegistry = {
+  tool_capability: entry("tool_capability", ToolCapabilitySchema, (record2) => record2.payload.toolCapabilityId, "catalog_public", "control_plane_read"),
+  action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
+  gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
+  operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
+  gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
+  delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
+  delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
+  gateway_custody_proof_packet: entry("gateway_custody_proof_packet", GatewayCustodyProofPacketSchema, (record2) => record2.payload.gatewayCustodyProofPacketId, "transition_evidence", "audit_read"),
+  credential_resolution_evidence: entry("credential_resolution_evidence", CredentialResolutionEvidenceSchema, (record2) => record2.payload.credentialResolutionEvidenceId, "transition_evidence", "audit_read"),
+  transition_request_context: entry("transition_request_context", TransitionRequestContextSchema, (record2) => record2.payload.transitionRequestContextId, "internal_evidence", "internal_only"),
+  runtime_execution: entry("runtime_execution", RuntimeExecutionRecordSchema, (record2) => record2.payload.runtimeExecutionId, "transition_evidence", "audit_read"),
+  generated_execution_graph: entry("generated_execution_graph", GeneratedExecutionGraphSchema, (record2) => record2.payload.generatedExecutionGraphId, "transition_evidence", "audit_read"),
+  idempotency_ledger_entry: entry("idempotency_ledger_entry", IdempotencyLedgerEntrySchema, (record2) => record2.payload.idempotencyLedgerEntryId, "internal_evidence", "internal_only"),
+  bypass_probe: entry("bypass_probe", BypassProbeSchema, (record2) => record2.payload.bypassProbeId, "internal_evidence", "internal_only"),
+  tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
+  protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
+  intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
+  negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
+  negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
+  negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
+  linked_agreement: entry("linked_agreement", LinkedAgreementSchema, (record2) => record2.payload.linkedAgreementId, "transition_evidence", "audit_read"),
+  agreement_obligation_binding: entry("agreement_obligation_binding", AgreementObligationBindingSchema, (record2) => record2.payload.agreementObligationBindingId, "transition_evidence", "audit_read"),
+  agreement_status_transition: entry("agreement_status_transition", AgreementStatusTransitionSchema, (record2) => record2.payload.agreementStatusTransitionId, "transition_evidence", "audit_read"),
+  action_contract: entry("action_contract", ActionContractSchema, (record2) => record2.payload.actionContractId, "transition_evidence", "audit_read"),
+  authority_certificate: entry("authority_certificate", AuthorityCertificateSchema, (record2) => record2.payload.authorityCertificateId, "receipt_evidence", "audit_read"),
+  policy_decision: entry("policy_decision", PolicyDecisionSchema, (record2) => record2.payload.policyDecisionId, "transition_evidence", "audit_read"),
+  greenlight: entry("greenlight", GreenlightSchema, (record2) => record2.payload.greenlightId, "transition_evidence", "audit_read"),
+  review_artifact: entry("review_artifact", ReviewArtifactRecordSchema, (record2) => record2.payload.reviewArtifactId, "transition_evidence", "audit_read"),
+  review_decision: entry("review_decision", ReviewDecisionSchema, (record2) => record2.payload.reviewDecisionId, "transition_evidence", "audit_read"),
+  breaker_decision: entry("breaker_decision", BreakerDecisionSchema, (record2) => record2.payload.breakerDecisionId, "transition_evidence", "audit_read"),
+  isolation_state: entry("isolation_state", IsolationStateSchema, (record2) => record2.payload.isolationStateId, "transition_evidence", "audit_read"),
+  gateway_check_attempt: entry("gateway_check_attempt", GatewayCheckAttemptSchema, (record2) => record2.payload.gateAttemptId, "transition_evidence", "audit_read"),
+  mutation_attempt: entry("mutation_attempt", MutationAttemptSchema, (record2) => record2.payload.mutationAttemptId, "transition_evidence", "audit_read"),
+  protected_surface_operation_claim: entry("protected_surface_operation_claim", ProtectedSurfaceOperationClaimSchema, (record2) => record2.payload.protectedSurfaceOperationClaimId, "internal_evidence", "internal_only"),
+  surface_operation_reconciliation: entry("surface_operation_reconciliation", SurfaceOperationReconciliationSchema, (record2) => record2.payload.reconciliationId, "transition_evidence", "audit_read"),
+  proof_gap: entry("proof_gap", ProofGapSchema, (record2) => record2.payload.proofGapId, "transition_evidence", "audit_read"),
+  refusal: entry("refusal", RefusalSchema, (record2) => record2.payload.refusalId, "transition_evidence", "audit_read"),
+  receipt: entry("receipt", ReceiptSchema, (record2) => record2.payload.receiptId, "receipt_evidence", "audit_read"),
+  receipt_export: entry("receipt_export", ReceiptExportSchema, (record2) => record2.payload.receiptExportId, "receipt_evidence", "audit_read"),
+  recovery_recommendation: entry("recovery_recommendation", RecoveryRecommendationSchema, (record2) => record2.payload.recoveryRecommendationId, "transition_evidence", "audit_read"),
+  recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
+  contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
+};
+var protocolRecordSchemas = Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema]));
+function getObjectId(record2) {
+  return protocolObjectRegistry[record2.objectType].idSelector(record2);
+}
+function isolationScopeRefsForContract(contract) {
+  return uniqueIsolationScopeRefs([
+    isolationScopeRef(contract, "tenant", contract.tenantId),
+    isolationScopeRef(contract, "organization", contract.organizationId),
+    isolationScopeRef(contract, "agent", contract.agentId),
+    isolationScopeRef(contract, "run", contract.runId),
+    isolationScopeRef(contract, "envelope", contract.envelopeId),
+    isolationScopeRef(contract, "action_class", contract.actionClass),
+    isolationScopeRef(contract, "gateway", contract.gatewayId),
+    ...contract.gatewayCredentialRefs.map((ref) => isolationScopeRef(contract, "credential_ref", ref.gatewayCredentialRefId)),
+    ...contract.delegatedAuthorityRefs.map((ref) => isolationScopeRef(contract, "authority_ref", ref.delegatedAuthorityRefId)),
+    isolationScopeRef(contract, "resource", contract.resourceRef)
+  ]);
+}
+function isolationScopeRefsForGreenlight(greenlight) {
+  return uniqueIsolationScopeRefs([
+    isolationScopeRef(greenlight, "tenant", greenlight.tenantId),
+    isolationScopeRef(greenlight, "organization", greenlight.organizationId),
+    isolationScopeRef(greenlight, "gateway", greenlight.gatewayId),
+    isolationScopeRef(greenlight, "action_class", greenlight.actionClass),
+    isolationScopeRef(greenlight, "resource", greenlight.resourceRef)
+  ]);
+}
+function isolationScopeRef(source, scopeType, scopeId) {
+  return {
+    tenantId: source.tenantId,
+    organizationId: source.organizationId,
+    scopeType,
+    scopeId
+  };
+}
+function uniqueIsolationScopeRefs(scopeRefs) {
+  const seen = new Set;
+  const unique3 = [];
+  for (const scopeRef of scopeRefs) {
+    const key = `${scopeRef.tenantId}:${scopeRef.organizationId}:${scopeRef.scopeType}:${scopeRef.scopeId}`;
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    unique3.push(scopeRef);
+  }
+  return unique3;
+}
+function entry(objectType, schema, idSelector, exportPosture, rawReadPosture) {
+  return {
+    objectType,
+    schema,
+    idSelector: (record2) => idSelector(record2),
+    exportPosture,
+    rawReadPosture
+  };
+}
+
+// src/protocol/evidence-projections/assembly.ts
+async function assembleAgentTransactionEnvelopeInput(store, contract) {
+  return (await assembleAgentTransactionEnvelope(store, contract)).input;
+}
+async function assembleAgentTransactionEnvelope(store, contract) {
+  const scope2 = { tenantId: contract.tenantId, organizationId: contract.organizationId };
+  const [
+    policyDecisionRecords,
+    greenlightRecords,
+    gateAttemptRecords,
+    mutationAttemptRecords,
+    receiptRecords,
+    reconciliationRecords,
+    authorityCertificateRecords,
+    credentialResolutionEvidenceRecords2,
+    recoveryRecommendationRecords,
+    recoveryRecommendationStatusTransitionRecords
+  ] = await Promise.all([
+    store.listRecordsByActionContract("policy_decision", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("greenlight", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("gateway_check_attempt", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("mutation_attempt", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("receipt", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("surface_operation_reconciliation", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("authority_certificate", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("credential_resolution_evidence", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("recovery_recommendation", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("recovery_recommendation_status_transition", contract.actionContractId, scope2)
+  ]);
+  const receipts = latestFirst(receiptRecords.map((record2) => record2.payload)).filter((receipt2) => receipt2.actionContractId === contract.actionContractId);
+  const receipt = receipts[0] ?? null;
+  const policyDecision = (receipt ? await recordPayload(store, "policy_decision", receipt.policyDecisionId) : latestFirst(policyDecisionRecords.map((record2) => record2.payload)).find((decision) => decision.actionContractId === contract.actionContractId)) ?? null;
+  if (!policyDecision) {
+    throw new HandshakeProtocolError("policy_decision_missing", "Agent transaction envelope requires policy evidence.", 404, {
+      retryability: "terminal",
+      commitState: "not_applicable"
+    });
+  }
+  const greenlight = (receipt?.greenlightId ? await recordPayload(store, "greenlight", receipt.greenlightId) : latestFirst(greenlightRecords.map((record2) => record2.payload)).find((record2) => record2.actionContractId === contract.actionContractId)) ?? null;
+  const gateAttempt = (receipt?.gateAttemptId ? await recordPayload(store, "gateway_check_attempt", receipt.gateAttemptId) : latestFirst(gateAttemptRecords.map((record2) => record2.payload)).find((record2) => record2.actionContractId === contract.actionContractId)) ?? null;
+  const mutationAttempt = (receipt?.mutationAttemptId ? await recordPayload(store, "mutation_attempt", receipt.mutationAttemptId) : latestFirst(mutationAttemptRecords.map((record2) => record2.payload)).find((record2) => record2.actionContractId === contract.actionContractId)) ?? null;
+  const ledger = await store.getCurrentIdempotencyLedgerEntry(await idempotencyLedgerKeyDigest(idempotencyLedgerKey(contract)));
+  const proofGaps = await scopedProofGaps(store, contract);
+  const refusals = scopedPayloads(await store.listRecordsByActionContract("refusal", contract.actionContractId, scope2), (refusal) => refusal.actionContractId === contract.actionContractId);
+  const credentialResolutionEvidence = scopedRecords(credentialResolutionEvidenceRecords2, (record2) => record2.payload.actionContractId === contract.actionContractId);
+  const recoveryRecommendations = scopedRecords(recoveryRecommendationRecords, (record2) => record2.payload.sourceActionContractId === contract.actionContractId);
+  const recoveryStatusTransitions = scopedRecords(recoveryRecommendationStatusTransitionRecords, (record2) => record2.payload.sourceActionContractId === contract.actionContractId);
+  const isolationStates = await store.listIsolationStates(isolationScopeRefsForContract(contract));
+  const activeIsolationStateIds = new Set(isolationStates.filter((state) => state.clearedAt === null).map((state) => state.isolationStateId));
+  const activeIsolationStateRecords = (await Promise.all([...activeIsolationStateIds].map((isolationStateId) => store.getRecord("isolation_state", isolationStateId)))).filter((record2) => record2 !== null);
+  const scopedReconciliationRecords = scopedRecords(reconciliationRecords, (record2) => record2.payload.actionContractId === contract.actionContractId);
+  return {
+    input: {
+      contract,
+      policyDecision,
+      greenlight,
+      gateAttempt,
+      mutationAttempt,
+      receipt,
+      proofGaps,
+      refusals,
+      reconciliations: scopedReconciliationRecords.map((record2) => record2.payload),
+      credentialResolutionEvidence: credentialResolutionEvidence.map((record2) => record2.payload),
+      ledger: ledger?.payload ?? null,
+      recoveryRefs: recoveryRefs(recoveryRecommendations, recoveryStatusTransitions),
+      isolationRefs: activeIsolationStateRecords.map((record2) => protocolObjectRef("isolation_state", record2.payload.isolationStateId)).filter(unique3),
+      authorityCertificates: authorityCertificateRecords.map((record2) => record2.payload)
+    },
+    supplementalRecords: [
+      ...credentialResolutionEvidence,
+      ...ledger ? [ledger] : [],
+      ...recoveryRecommendations,
+      ...recoveryStatusTransitions,
+      ...activeIsolationStateRecords,
+      ...scopedReconciliationRecords
+    ]
+  };
+}
+async function recordPayload(store, objectType, objectId) {
+  return (await store.getRecord(objectType, objectId))?.payload ?? null;
+}
+async function scopedProofGaps(store, contract) {
+  return (await store.listRecordsByActionContract("proof_gap", contract.actionContractId, {
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId
+  })).map((record2) => record2.payload).filter((proofGap) => proofGap.affectedObjectRefs.includes(contract.actionContractId));
+}
+function scopedPayloads(records2, predicate) {
+  return records2.map((record2) => record2.payload).filter(predicate);
+}
+function scopedRecords(records2, predicate) {
+  return records2.filter(predicate);
+}
+function recoveryRefs(recommendations, statusTransitions) {
+  return [
+    ...recommendations.map((record2) => protocolObjectRef("recovery_recommendation", record2.payload.recoveryRecommendationId)),
+    ...statusTransitions.map((record2) => protocolObjectRef("recovery_recommendation_status_transition", record2.payload.recoveryRecommendationStatusTransitionId))
+  ].filter(unique3);
+}
+function latestFirst(values) {
+  return values.map((value, index) => ({ value, index })).sort((left, right) => Date.parse(right.value.createdAt) - Date.parse(left.value.createdAt) || right.index - left.index).map((entry2) => entry2.value);
+}
+function unique3(value, index, values) {
+  return values.indexOf(value) === index;
+}
+// src/protocol/areas/action-contract/inputs.ts
+var ProposeActionContractInputSchema = exports_external.strictObject({
+  intentCompilationId: exports_external.string().min(1),
+  candidateActionId: exports_external.string().min(1),
+  candidateDigest: DigestSchema,
+  signingSecret: exports_external.string().min(1).optional()
+});
+// src/protocol/areas/action-contract/guards.ts
+function guardActionProposal(input) {
+  if (input.compilation.uncertaintyMarkers.length > 0 || input.compilation.overreachReasonCodes.length > 0) {
+    return fail("intent_compilation_not_contractable", "Intent compilation has uncertainty or overreach markers; no action contract may be emitted.");
+  }
+  if (input.compilation.operatingEnvelopeId !== input.envelope.envelopeId || input.envelopeId !== input.envelope.envelopeId) {
+    return fail("invalid_transition_envelope_mismatch", "Action contract must use the envelope pinned by the intent compilation.");
+  }
+  if (input.gateway.gatewayId !== input.gatewayId) {
+    return fail("gateway_registry_mismatch", "Action contract gateway must match the durable gateway registry entry.");
+  }
+  if (input.gateway.receiptCapabilityStatus !== "available" || input.gateway.isolationCheckCapabilityStatus !== "available") {
+    return fail("gateway_not_enforcing", "Gateway registry entry does not prove receipt and isolation check capability.");
+  }
+  if (input.tenantId !== input.compilation.tenantId || input.tenantId !== input.envelope.tenantId || input.tenantId !== input.gateway.tenantId || input.organizationId !== input.compilation.organizationId || input.organizationId !== input.envelope.organizationId || input.organizationId !== input.gateway.organizationId) {
+    return fail("invalid_transition_scope_mismatch", "Action contract scope must match compilation, envelope, and gateway scope.");
+  }
+  if (input.principalId !== input.compilation.principalId || input.principalId !== input.envelope.principalId || input.agentId !== input.compilation.agentId || input.agentId !== input.envelope.agentId || input.runId !== input.compilation.runId) {
+    return fail("invalid_transition_actor_mismatch", "Action contract actor bindings must match compilation and envelope.");
+  }
+  return ok();
+}
+// src/protocol/events/chains.ts
+async function buildEventChain(store, descriptors) {
+  const tails = new Map;
+  const events = [];
+  for (const descriptor of descriptors) {
+    for (const binding of streamBindings(descriptor)) {
+      const tailKey = `${binding.streamId}:${binding.partitionKey}`;
+      let tail = tails.get(tailKey);
+      if (!tail) {
+        const storedTail = await store.getStreamTail(binding.streamId, binding.partitionKey);
+        tail = storedTail ? { offset: storedTail.offset, digest: storedTail.eventDigest } : { offset: -1, digest: null };
+      }
+      const event = await buildEventAt(descriptor.source, descriptor.eventType, descriptor.objectRefs, descriptor.payload, binding.streamId, binding.streamScope, binding.partitionKey, tail.offset + 1, tail.digest);
+      events.push(event);
+      tails.set(tailKey, { offset: event.offset, digest: event.eventDigest });
+    }
+  }
+  return events;
+}
+function actionLifecycleStreamRefs(contract) {
+  return {
+    actionContractId: contract.actionContractId,
+    runId: contract.runId,
+    gatewayId: contract.gatewayId,
+    resourceRef: contract.resourceRef
+  };
+}
+function receiptStreamReferencesForEvents(events) {
+  const references = new Map;
+  for (const event of events) {
+    const key = `${event.streamId}:${event.partitionKey}`;
+    const existing = references.get(key);
+    if (!existing || event.offset > existing.offsetEnd) {
+      references.set(key, {
+        streamId: event.streamId,
+        streamScope: event.streamScope,
+        partitionKey: event.partitionKey,
+        offsetStart: existing?.offsetStart ?? 0,
+        offsetEnd: event.offset,
+        terminalEventDigest: event.eventDigest
+      });
+    }
+  }
+  return [...references.values()];
+}
+function streamBindings(descriptor) {
+  const streamId = organizationStreamId(descriptor.source);
+  const bindings = [
+    {
+      streamId,
+      streamScope: "organization",
+      partitionKey: streamPartitionKey(descriptor.eventType, descriptor.objectRefs, descriptor.streamRefs)
+    }
+  ];
+  if (descriptor.streamRefs) {
+    bindings.push({
+      streamId,
+      streamScope: "run",
+      partitionKey: `run:${descriptor.streamRefs.runId}`
+    }, {
+      streamId,
+      streamScope: "protected_surface_resource",
+      partitionKey: `protected_surface_resource:${descriptor.streamRefs.gatewayId}:${descriptor.streamRefs.resourceRef}`
+    });
+  }
+  return dedupeBindings(bindings);
+}
+function organizationStreamId(source) {
+  return `stream_${source.tenantId}_${source.organizationId}`;
+}
+function streamPartitionKey(eventType, objectRefs, streamRefs) {
+  if (streamRefs)
+    return `action:${streamRefs.actionContractId}`;
+  const actionRef = objectRefs.find((ref) => ref.startsWith("act_"));
+  if (actionRef)
+    return `action:${actionRef}`;
+  if (eventType === "isolation_changed" && objectRefs[1] && objectRefs[2]) {
+    return `isolation:${objectRefs[1]}:${objectRefs[2]}`;
+  }
+  if (eventType === "isolation_changed")
+    return `isolation:${objectRefs[1] ?? objectRefs[0] ?? "unknown"}`;
+  if (eventType === "intent_compiled")
+    return `intent:${objectRefs[0] ?? "unknown"}`;
+  return `object:${objectRefs[0] ?? "unknown"}`;
+}
+function dedupeBindings(bindings) {
+  const seen = new Set;
+  const deduped = [];
+  for (const binding of bindings) {
+    const key = `${binding.streamId}:${binding.partitionKey}`;
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    deduped.push(binding);
+  }
+  return deduped;
+}
+async function buildEventAt(source, eventType, objectRefs, payload, streamId, streamScope, partitionKey, offset, previousEventDigest) {
+  const eventTime = nowIso();
+  const eventSeed = {
+    streamId,
+    streamScope,
+    partitionKey,
+    offset,
+    eventType,
+    eventTime,
+    objectRefs,
+    previousEventDigest,
+    payload
+  };
+  return ContractStreamEventSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: source.tenantId,
+    organizationId: source.organizationId,
+    createdAt: eventTime,
+    streamEventId: createId("evt"),
+    streamId,
+    streamScope,
+    offset,
+    partitionKey,
+    eventType,
+    eventTime,
+    producerRef: "handshake-kernel",
+    objectRefs,
+    previousEventDigest,
+    eventDigest: await digestCanonical(eventSeed),
+    payload
+  });
+}
+// src/protocol/areas/delegated-authority/inputs.ts
+var RegisterDelegatedAuthorityRefInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  delegatedAuthorityRefId: exports_external.string().min(1).optional(),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  gatewayId: exports_external.string().min(1),
+  gatewayRegistryEntryId: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  actionClasses: DelegatedAuthorityRefSchema.shape.actionClasses,
+  resourceRefs: DelegatedAuthorityRefSchema.shape.resourceRefs,
+  authorityKind: DelegatedAuthorityRefSchema.shape.authorityKind,
+  grantStatus: DelegatedAuthorityRefSchema.shape.grantStatus.default("active"),
+  policyPackRef: DelegatedAuthorityRefSchema.shape.policyPackRef,
+  policyPackVersion: exports_external.string().min(1),
+  amountParameterName: DelegatedAuthorityRefSchema.shape.amountParameterName,
+  maxAtomicAmountPerAction: DelegatedAuthorityRefSchema.shape.maxAtomicAmountPerAction,
+  evidenceExpectationRefs: DelegatedAuthorityRefSchema.shape.evidenceExpectationRefs,
+  issuedAt: exports_external.string().datetime({ offset: true }).optional(),
+  expiresAt: exports_external.string().datetime({ offset: true })
+});
+var TransitionDelegatedAuthorityStatusInputSchema = exports_external.strictObject({
+  delegatedAuthorityRefId: exports_external.string().min(1),
+  nextGrantStatus: DelegatedAuthorityTerminalGrantStatusSchema,
+  reasonCode: exports_external.string().min(2),
+  reasonSummary: exports_external.string().min(1),
+  changedByRef: exports_external.string().min(1),
+  isolationExpiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+// src/protocol/areas/isolation-breaker/inputs.ts
+var CreateIsolationInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  scopeType: IsolationStateSchema.shape.scopeType,
+  scopeId: exports_external.string().min(1),
+  state: IsolationStateSchema.shape.state,
+  reasonCode: exports_external.string().min(2),
+  reasonSummary: exports_external.string().min(1),
+  sourceDecisionRef: exports_external.string().min(1),
+  observedStreamOffsets: exports_external.array(StreamWatermarkSchema).default([]),
+  expiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+var CreateBreakerDecisionInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  listenerId: exports_external.string().min(1),
+  listenerVersion: exports_external.string().min(1),
+  rulePackRef: exports_external.string().min(1),
+  rulePackVersion: exports_external.string().min(1),
+  observedStreamOffsets: exports_external.array(StreamWatermarkSchema).min(1),
+  decision: BreakerIsolationDecisionSchema,
+  decisionReasonCode: exports_external.string().min(2),
+  decisionReason: exports_external.string().min(1),
+  targetScopeType: IsolationStateSchema.shape.scopeType,
+  targetScopeId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1).nullable().default(null),
+  runId: exports_external.string().min(1).nullable().default(null),
+  gatewayId: exports_external.string().min(1).nullable().default(null),
+  resourceRef: exports_external.string().min(1).nullable().default(null),
+  actionClass: exports_external.string().min(1).nullable().default(null),
+  matchedBreakerRuleIds: exports_external.array(exports_external.string().min(1)).default([]),
+  supportingEventRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  missingEventRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  decisionExpiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+// src/protocol/areas/isolation-breaker/isolation-states.ts
+async function createIsolationState(recorder, inputValue) {
+  const input = CreateIsolationInputSchema.parse(inputValue);
+  const context = buildIsolationStateContext(input);
+  const state = buildIsolationState(context);
+  await commitIsolationState(recorder, state);
+  return state;
+}
+function buildIsolationStateContext(input) {
+  return {
+    input,
+    now: nowIso(),
+    isolationStateId: createId("iso")
+  };
+}
+function buildIsolationState(context) {
+  const { input, now, isolationStateId } = context;
+  return IsolationStateSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: now,
+    isolationStateId,
+    scopeType: input.scopeType,
+    scopeId: input.scopeId,
+    state: input.state,
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    sourceDecisionRef: input.sourceDecisionRef,
+    effectiveAt: now,
+    expiresAt: input.expiresAt,
+    clearedAt: null,
+    observedStreamOffsets: input.observedStreamOffsets,
+    version: 1
+  });
+}
+async function commitIsolationState(recorder, state) {
+  await recorder.commitRecordsWithEvents(isolationStateRecords(state), isolationStateEvents(state), {
+    isolationStateIndexEntries: [isolationStateIndexEntry(state)]
+  });
+}
+function isolationStateRecords(state) {
+  return [{ objectType: "isolation_state", payload: state }];
+}
+function isolationStateEvents(state) {
+  return [
+    {
+      source: state,
+      eventType: "isolation_changed",
+      objectRefs: [state.isolationStateId, state.scopeType, state.scopeId],
+      payload: {
+        state: state.state,
+        reasonCode: state.reasonCode,
+        observedStreamOffsets: state.observedStreamOffsets
+      }
+    }
+  ];
+}
+function isolationStateIndexEntry(state) {
+  return {
+    isolationScopeKey: isolationScopeKey2(state),
+    isolationStateId: state.isolationStateId,
+    tenantId: state.tenantId,
+    organizationId: state.organizationId,
+    scopeType: state.scopeType,
+    scopeId: state.scopeId,
+    state: state.state,
+    updatedAt: state.createdAt
+  };
+}
+function isolationScopeKey2(scopeRef) {
+  return `${scopeRef.tenantId}:${scopeRef.organizationId}:${scopeRef.scopeType}:${scopeRef.scopeId}`;
+}
+
+// src/protocol/areas/isolation-breaker/breaker-decisions.ts
+async function createBreakerDecision(store, recorder, inputValue) {
+  const input = CreateBreakerDecisionInputSchema.parse(inputValue);
+  const context = await getBreakerDecisionContext(store, input);
+  const result = buildBreakerDecisionResult(context);
+  await commitBreakerDecision(recorder, result);
+  return result;
+}
+async function getBreakerDecisionContext(store, input) {
+  await assertObservedWatermarks(store, input.observedStreamOffsets);
+  const observedWindowDigest = await digestCanonical({
+    observedStreamOffsets: input.observedStreamOffsets,
+    supportingEventRefs: input.supportingEventRefs,
+    missingEventRefs: input.missingEventRefs,
+    proofGapRefs: input.proofGapRefs
+  });
+  return {
+    input,
+    breakerDecisionId: createId("brk"),
+    isolationStateId: createId("iso"),
+    observedWindowDigest,
+    now: nowIso()
+  };
+}
+function buildBreakerDecisionResult(context) {
+  const { input, breakerDecisionId, isolationStateId, observedWindowDigest, now } = context;
+  const breakerDecision = BreakerDecisionSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: now,
+    breakerDecisionId,
+    listenerId: input.listenerId,
+    listenerVersion: input.listenerVersion,
+    rulePackRef: input.rulePackRef,
+    rulePackVersion: input.rulePackVersion,
+    observedStreamOffsets: input.observedStreamOffsets,
+    observedWindowDigest,
+    decision: input.decision,
+    decisionReasonCode: input.decisionReasonCode,
+    decisionReason: input.decisionReason,
+    targetScopeType: input.targetScopeType,
+    targetScopeId: input.targetScopeId,
+    createdIsolationStateId: isolationStateId,
+    agentId: input.agentId,
+    runId: input.runId,
+    gatewayId: input.gatewayId,
+    resourceRef: input.resourceRef,
+    actionClass: input.actionClass,
+    sequenceRiskScore: sequenceRiskScoreFor(input.decision),
+    matchedBreakerRuleIds: input.matchedBreakerRuleIds,
+    supportingEventRefs: input.supportingEventRefs,
+    missingEventRefs: input.missingEventRefs,
+    proofGapRefs: input.proofGapRefs,
+    decisionEffectiveAt: now,
+    decisionExpiresAt: input.decisionExpiresAt,
+    watermarkAtDecision: now
+  });
+  const isolationState = IsolationStateSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: now,
+    isolationStateId,
+    scopeType: input.targetScopeType,
+    scopeId: input.targetScopeId,
+    state: input.decision,
+    reasonCode: input.decisionReasonCode,
+    reasonSummary: input.decisionReason,
+    sourceDecisionRef: breakerDecisionId,
+    effectiveAt: now,
+    expiresAt: input.decisionExpiresAt,
+    clearedAt: null,
+    observedStreamOffsets: input.observedStreamOffsets,
+    version: 1
+  });
+  return { breakerDecision, isolationState };
+}
+async function commitBreakerDecision(recorder, result) {
+  await recorder.commitRecordsWithEvents(breakerDecisionRecords(result), breakerDecisionEvents(result), {
+    isolationStateIndexEntries: [isolationStateIndexEntry(result.isolationState)]
+  });
+}
+function breakerDecisionRecords(result) {
+  return [
+    { objectType: "breaker_decision", payload: result.breakerDecision },
+    { objectType: "isolation_state", payload: result.isolationState }
+  ];
+}
+function breakerDecisionEvents(result) {
+  const { breakerDecision, isolationState } = result;
+  return [
+    {
+      source: breakerDecision,
+      eventType: "breaker_decision_recorded",
+      objectRefs: [breakerDecision.breakerDecisionId, isolationState.isolationStateId],
+      payload: {
+        decision: breakerDecision.decision,
+        decisionReasonCode: breakerDecision.decisionReasonCode,
+        targetScopeType: breakerDecision.targetScopeType,
+        targetScopeId: breakerDecision.targetScopeId,
+        observedWindowDigest: breakerDecision.observedWindowDigest
+      }
+    },
+    {
+      source: isolationState,
+      eventType: "isolation_changed",
+      objectRefs: [isolationState.isolationStateId, isolationState.scopeType, isolationState.scopeId],
+      payload: {
+        state: isolationState.state,
+        reasonCode: isolationState.reasonCode,
+        sourceDecisionRef: isolationState.sourceDecisionRef,
+        observedStreamOffsets: isolationState.observedStreamOffsets
+      }
+    }
+  ];
+}
+function sequenceRiskScoreFor(decision) {
+  if (decision === "halted" || decision === "revoked")
+    return 1;
+  if (decision === "quarantined")
+    return 0.8;
+  if (decision === "state_suspect")
+    return 0.6;
+  if (decision === "review_only")
+    return 0.4;
+  return 0.35;
+}
+async function assertObservedWatermarks(store, watermarks) {
+  for (const watermark of watermarks) {
+    if (!watermark.observedEventDigest) {
+      throw new HandshakeProtocolError("breaker_watermark_digest_missing", "Breaker decision watermarks must bind to a durable stream event digest.", 409);
+    }
+    const event = await store.getStreamEvent(watermark.streamId, watermark.partitionKey, watermark.observedOffsetEnd);
+    if (!event) {
+      throw new HandshakeProtocolError("breaker_watermark_event_missing", `No durable stream event exists for ${watermark.streamId}/${watermark.partitionKey} at offset ${watermark.observedOffsetEnd}.`, 404);
+    }
+    if (event.eventDigest !== watermark.observedEventDigest) {
+      throw new HandshakeProtocolError("breaker_watermark_digest_mismatch", "Breaker decision observedEventDigest does not match the durable stream event at observedOffsetEnd.", 409);
+    }
+  }
+}
+// src/protocol/areas/delegated-authority/transitions.ts
+async function registerDelegatedAuthorityRef(recorder, inputValue) {
+  const input = RegisterDelegatedAuthorityRefInputSchema.parse(inputValue);
+  const record2 = await buildDelegatedAuthorityRef(input);
+  await recorder.commitRecordsWithEvents(delegatedAuthorityRefRecords(record2), delegatedAuthorityRefEvents(record2));
+  return record2;
+}
+async function transitionDelegatedAuthorityStatus(recorder, inputValue) {
+  const input = TransitionDelegatedAuthorityStatusInputSchema.parse(inputValue);
+  const record2 = await recorder.requiredRecord("delegated_authority_ref", input.delegatedAuthorityRefId, "delegated_authority_ref_missing");
+  const statusChange = await buildDelegatedAuthorityStatusChange(input, record2.payload, nowIso());
+  await recorder.commitRecordsWithEvents(delegatedAuthorityStatusChangeRecords(statusChange), delegatedAuthorityStatusChangeEvents(statusChange), { isolationStateIndexEntries: [isolationStateIndexEntry(statusChange.isolationState)] });
+  return statusChange.statusTransition;
+}
+async function evaluateDelegatedAuthorityBindings(store, contract, now) {
+  const records2 = [];
+  const policyInput = [];
+  for (const binding of contract.delegatedAuthorityRefs) {
+    const record2 = await store.getRecord("delegated_authority_ref", binding.delegatedAuthorityRefId);
+    const ref = record2?.payload ?? null;
+    if (record2)
+      records2.push(record2);
+    policyInput.push(delegatedAuthorityBindingPolicyInput(binding, ref, contract, now));
+    const failure2 = evaluateDelegatedAuthorityBinding(contract, binding, ref, now);
+    if (failure2)
+      return { ok: false, records: records2, policyInput, ...failure2 };
+  }
+  return { ok: true, records: records2, policyInput };
+}
+async function buildDelegatedAuthorityStatusChange(input, ref, now) {
+  assertDelegatedAuthorityStatusTransition(ref, input, now);
+  const statusTransitionId = createId("dat");
+  const isolationStateId = createId("iso");
+  const transitionDigest = await digestCanonical({
+    delegatedAuthorityStatusTransitionId: statusTransitionId,
+    delegatedAuthorityRefId: ref.delegatedAuthorityRefId,
+    delegatedAuthorityRefDigest: ref.delegatedAuthorityRefDigest,
+    previousGrantStatus: ref.grantStatus,
+    nextGrantStatus: input.nextGrantStatus,
+    reasonCode: input.reasonCode,
+    changedByRef: input.changedByRef,
+    changedAt: now,
+    isolationStateId
+  });
+  const statusTransition = DelegatedAuthorityStatusTransitionSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: ref.tenantId,
+    organizationId: ref.organizationId,
+    createdAt: now,
+    delegatedAuthorityStatusTransitionId: statusTransitionId,
+    delegatedAuthorityRefId: ref.delegatedAuthorityRefId,
+    delegatedAuthorityRefDigest: ref.delegatedAuthorityRefDigest,
+    previousGrantStatus: ref.grantStatus,
+    nextGrantStatus: input.nextGrantStatus,
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    changedByRef: input.changedByRef,
+    changedAt: now,
+    isolationStateId,
+    transitionDigest
+  });
+  const isolationState = IsolationStateSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: ref.tenantId,
+    organizationId: ref.organizationId,
+    createdAt: now,
+    isolationStateId,
+    scopeType: "authority_ref",
+    scopeId: ref.delegatedAuthorityRefId,
+    state: "revoked",
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    sourceDecisionRef: statusTransitionId,
+    effectiveAt: now,
+    expiresAt: input.isolationExpiresAt,
+    clearedAt: null,
+    observedStreamOffsets: [],
+    version: 1
+  });
+  return { statusTransition, isolationState };
+}
+function assertDelegatedAuthorityStatusTransition(ref, input, now) {
+  if (ref.grantStatus !== "active") {
+    throw new HandshakeProtocolError("delegated_authority_already_terminal", "Delegated authority status transitions require an active authority ref.", 409);
+  }
+  if (input.nextGrantStatus === "expired" && Date.parse(ref.expiresAt) > Date.parse(now)) {
+    throw new HandshakeProtocolError("delegated_authority_not_expired", "Delegated authority cannot transition to expired before expiresAt.", 409);
+  }
+}
+function evaluateDelegatedAuthorityBinding(contract, binding, ref, now) {
+  if (!ref) {
+    return {
+      reasonCode: "delegated_authority_ref_missing",
+      reason: "Action contract references a delegated authority ref that is not stored."
+    };
+  }
+  if (ref.delegatedAuthorityRefDigest !== binding.delegatedAuthorityRefDigest) {
+    return {
+      reasonCode: "delegated_authority_ref_digest_mismatch",
+      reason: "Stored delegated authority ref digest does not match the contract binding."
+    };
+  }
+  if (ref.tenantId !== contract.tenantId || ref.organizationId !== contract.organizationId) {
+    return {
+      reasonCode: "delegated_authority_ref_scope_mismatch",
+      reason: "Delegated authority ref tenant or organization does not match the action contract."
+    };
+  }
+  if (ref.principalId !== contract.principalId || ref.agentId !== contract.agentId || ref.runtimeAdapterId !== contract.runtimeAdapterId || ref.operatingEnvelopeId !== contract.envelopeId || ref.gatewayId !== contract.gatewayId || ref.gatewayRegistryEntryId !== contract.gatewayRegistryEntryId || ref.protectedSurfaceKind !== contract.protectedSurfaceKind || !ref.actionClasses.includes(contract.actionClass) || !ref.resourceRefs.includes("*") && !ref.resourceRefs.includes(contract.resourceRef)) {
+    return {
+      reasonCode: "delegated_authority_ref_scope_mismatch",
+      reason: "Delegated authority ref does not bind to the same principal, runtime, envelope, gateway, action, or resource."
+    };
+  }
+  if (ref.authorityKind !== binding.authorityKind || ref.policyPackRef !== binding.policyPackRef || ref.policyPackVersion !== binding.policyPackVersion) {
+    return {
+      reasonCode: "delegated_authority_ref_policy_drift",
+      reason: "Delegated authority ref policy material drifted from the contract binding."
+    };
+  }
+  if (ref.grantStatus !== binding.requiredGrantStatus) {
+    return {
+      reasonCode: "delegated_authority_ref_not_active",
+      reason: "Delegated authority ref is not in the required active grant state."
+    };
+  }
+  if (Date.parse(ref.expiresAt) <= Date.parse(now)) {
+    return {
+      reasonCode: "delegated_authority_ref_stale",
+      reason: "Delegated authority ref is stale."
+    };
+  }
+  const amountFailure = evaluateDelegatedAmountBound(contract, ref);
+  if (amountFailure)
+    return amountFailure;
+  return null;
+}
+function evaluateDelegatedAmountBound(contract, ref) {
+  if (ref.authorityKind !== "spend")
+    return null;
+  if (ref.amountParameterName === null || ref.maxAtomicAmountPerAction === null)
+    return null;
+  const value = contract.parameters[ref.amountParameterName];
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)$/.test(value)) {
+    return {
+      reasonCode: "delegated_authority_amount_missing",
+      reason: "Spend authority requires an atomic amount parameter bound into the action contract."
+    };
+  }
+  if (compareAtomic2(value, ref.maxAtomicAmountPerAction) > 0) {
+    return {
+      reasonCode: "delegated_authority_amount_exceeds_action_bound",
+      reason: "Action contract amount exceeds the delegated per-action authority bound."
+    };
+  }
+  return null;
+}
+function delegatedAuthorityBindingPolicyInput(binding, ref, contract, now) {
+  const amountParameterName = ref?.amountParameterName ?? null;
+  const requestedAtomicAmount = amountParameterName && typeof contract.parameters[amountParameterName] === "string" ? contract.parameters[amountParameterName] : null;
+  return {
+    authorityUseName: binding.authorityUseName,
+    delegatedAuthorityRefId: binding.delegatedAuthorityRefId,
+    delegatedAuthorityRefDigest: binding.delegatedAuthorityRefDigest,
+    authorityKind: binding.authorityKind,
+    grantStatus: ref?.grantStatus ?? null,
+    requiredGrantStatus: binding.requiredGrantStatus,
+    freshness: authorityFreshness(ref, now),
+    amountParameterName,
+    maxAtomicAmountPerAction: ref?.maxAtomicAmountPerAction ?? null,
+    requestedAtomicAmount
+  };
+}
+function authorityFreshness(ref, now) {
+  if (!ref)
+    return "missing";
+  return Date.parse(ref.expiresAt) > Date.parse(now) ? "fresh" : "stale";
+}
+async function buildDelegatedAuthorityRef(input) {
+  const createdAt = nowIso();
+  const issuedAt = input.issuedAt ?? createdAt;
+  const delegatedAuthorityRefId = input.delegatedAuthorityRefId ?? createId("dar");
+  const delegatedAuthorityRefDigest = await digestCanonical(delegatedAuthorityRefDigestMaterial(input, delegatedAuthorityRefId, issuedAt));
+  return DelegatedAuthorityRefSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    delegatedAuthorityRefId,
+    delegatedAuthorityRefDigest,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    gatewayId: input.gatewayId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    actionClasses: input.actionClasses,
+    resourceRefs: input.resourceRefs,
+    authorityKind: input.authorityKind,
+    grantStatus: input.grantStatus,
+    policyPackRef: input.policyPackRef,
+    policyPackVersion: input.policyPackVersion,
+    amountParameterName: input.amountParameterName,
+    maxAtomicAmountPerAction: input.maxAtomicAmountPerAction,
+    evidenceExpectationRefs: input.evidenceExpectationRefs,
+    redactionProfileRef: "delegated-authority-ref:v0.2-redacted",
+    secretMaterialIncluded: false,
+    mutationAuthorityCreated: false,
+    greenlightCreated: false,
+    issuedAt,
+    expiresAt: input.expiresAt
+  });
+}
+function delegatedAuthorityRefDigestMaterial(input, delegatedAuthorityRefId, issuedAt) {
+  return {
+    delegatedAuthorityRefId,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    gatewayId: input.gatewayId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    actionClasses: input.actionClasses,
+    resourceRefs: input.resourceRefs,
+    authorityKind: input.authorityKind,
+    grantStatus: input.grantStatus,
+    policyPackRef: input.policyPackRef,
+    policyPackVersion: input.policyPackVersion,
+    amountParameterName: input.amountParameterName,
+    maxAtomicAmountPerAction: input.maxAtomicAmountPerAction,
+    evidenceExpectationRefs: input.evidenceExpectationRefs,
+    issuedAt,
+    expiresAt: input.expiresAt
+  };
+}
+function delegatedAuthorityRefRecords(record2) {
+  return [{ objectType: "delegated_authority_ref", payload: record2 }];
+}
+function delegatedAuthorityRefEvents(record2) {
+  return [
+    {
+      source: record2,
+      eventType: "delegated_authority_ref_registered",
+      objectRefs: [record2.delegatedAuthorityRefId, record2.delegatedAuthorityRefDigest, record2.gatewayId],
+      payload: {
+        gatewayId: record2.gatewayId,
+        authorityKind: record2.authorityKind,
+        grantStatus: record2.grantStatus,
+        policyPackRef: record2.policyPackRef
+      }
+    }
+  ];
+}
+function delegatedAuthorityStatusChangeRecords(statusChange) {
+  return [
+    { objectType: "delegated_authority_status_transition", payload: statusChange.statusTransition },
+    { objectType: "isolation_state", payload: statusChange.isolationState }
+  ];
+}
+function delegatedAuthorityStatusChangeEvents(statusChange) {
+  return [
+    {
+      source: statusChange.statusTransition,
+      eventType: "delegated_authority_status_changed",
+      objectRefs: [
+        statusChange.statusTransition.delegatedAuthorityRefId,
+        statusChange.statusTransition.delegatedAuthorityStatusTransitionId,
+        statusChange.statusTransition.isolationStateId
+      ],
+      payload: {
+        previousGrantStatus: statusChange.statusTransition.previousGrantStatus,
+        nextGrantStatus: statusChange.statusTransition.nextGrantStatus,
+        reasonCode: statusChange.statusTransition.reasonCode,
+        changedByRef: statusChange.statusTransition.changedByRef,
+        transitionDigest: statusChange.statusTransition.transitionDigest
+      }
+    },
+    {
+      source: statusChange.isolationState,
+      eventType: "isolation_changed",
+      objectRefs: [
+        statusChange.isolationState.isolationStateId,
+        statusChange.isolationState.scopeType,
+        statusChange.isolationState.scopeId
+      ],
+      payload: {
+        state: statusChange.isolationState.state,
+        reasonCode: statusChange.isolationState.reasonCode,
+        observedStreamOffsets: statusChange.isolationState.observedStreamOffsets
+      }
+    }
+  ];
+}
+function compareAtomic2(left, right) {
+  const leftValue = BigInt(left);
+  const rightValue = BigInt(right);
+  return leftValue === rightValue ? 0 : leftValue > rightValue ? 1 : -1;
+}
+// src/protocol/areas/recovery/inputs.ts
+var CreateRecoveryRecommendationInputSchema = exports_external.strictObject({
+  sourceReceiptId: exports_external.string().min(1),
+  sourceRefusalOrGapRef: exports_external.string().min(1).optional(),
+  recommendedPath: RecoveryRecommendedPathSchema,
+  allowedNextActionClasses: exports_external.array(exports_external.string().min(1)).default([]),
+  requiredNewEvidence: exports_external.array(exports_external.string().min(1)).default([]),
+  requiresHumanReview: exports_external.boolean().default(true),
+  reasonCode: exports_external.string().min(2),
+  reasonSummary: exports_external.string().min(1),
+  reviewDecisionRef: exports_external.string().min(1).nullable().default(null),
+  policyChangeRef: exports_external.string().min(1).nullable().default(null),
+  recoveryExpiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null),
+  reviewDueAt: exports_external.string().datetime({ offset: true }).nullable().default(null),
+  retryNotBefore: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+var TransitionRecoveryRecommendationStatusInputSchema = exports_external.strictObject({
+  recoveryRecommendationId: exports_external.string().min(1),
+  nextStatus: RecoveryRecommendationTerminalStatusSchema,
+  reasonCode: exports_external.string().min(2),
+  reasonSummary: exports_external.string().min(1),
+  changedByRef: exports_external.string().min(1),
+  supersededByActionContractId: exports_external.string().min(1).nullable().default(null)
+});
+var ResolveRecoveryTerminalConflictInputSchema = exports_external.strictObject({
+  proofGapId: exports_external.string().min(1),
+  recoveryRecommendationStatusTransitionId: exports_external.string().min(1),
+  observedByRef: exports_external.string().min(1)
+});
+// src/protocol/areas/recovery/follow-up/action-linkage.ts
+async function loadRecoveryActionLinkage(recorder, recoveryRecommendationId) {
+  if (!recoveryRecommendationId)
+    return null;
+  const recommendationRecord = await recorder.requiredRecord("recovery_recommendation", recoveryRecommendationId, "recovery_recommendation_missing");
+  const sourceContractRecord = await recorder.requiredRecord("action_contract", recommendationRecord.payload.sourceActionContractId, "recovery_source_contract_missing");
+  return {
+    recommendation: recommendationRecord.payload,
+    sourceContract: sourceContractRecord.payload
+  };
+}
+function assertRecoveryActionLinkage(input, linkage, now) {
+  if (!linkage)
+    return;
+  const { recommendation, sourceContract } = linkage;
+  assertContractablePath(recommendation.recommendedPath);
+  if (recommendation.recommendationStatus !== "open") {
+    throw new HandshakeProtocolError("recovery_recommendation_not_open", "Action contract may link only to an open recovery recommendation.", 409);
+  }
+  if (recommendation.recoveryExpiresAt && Date.parse(recommendation.recoveryExpiresAt) <= Date.parse(now)) {
+    throw new HandshakeProtocolError("recovery_recommendation_expired", "Action contract may not link to an expired recovery recommendation.", 409);
+  }
+  if (recommendation.retryNotBefore && Date.parse(recommendation.retryNotBefore) > Date.parse(now)) {
+    throw new HandshakeProtocolError("recovery_retry_not_before", "Action contract may not be proposed before the recovery retry window opens.", 409);
+  }
+  if (input.sequenceNumber <= sourceContract.sequenceNumber) {
+    throw new HandshakeProtocolError("recovery_followup_not_later", "Recovery follow-up action contract must have a later sequence number than the source action contract.", 409);
+  }
+  if (!recommendation.allowedNextActionClasses.includes(input.actionClass)) {
+    throw new HandshakeProtocolError("recovery_action_class_not_allowed", "Recovery follow-up action class must be named by allowedNextActionClasses.", 409);
+  }
+  const missingEvidence = recommendation.requiredNewEvidence.filter((evidenceRef) => !input.evidenceRefs.includes(evidenceRef));
+  if (missingEvidence.length > 0) {
+    throw new HandshakeProtocolError("recovery_required_evidence_missing", `Recovery follow-up action contract is missing required new evidence: ${missingEvidence.join(", ")}.`, 409);
+  }
+  if (input.tenantId !== recommendation.tenantId || input.organizationId !== recommendation.organizationId || input.principalId !== recommendation.principalId || input.agentId !== recommendation.agentId || input.runId !== recommendation.runId || input.gatewayId !== recommendation.gatewayId || input.resourceRef !== recommendation.resourceRef) {
+    throw new HandshakeProtocolError("recovery_followup_scope_mismatch", "Recovery follow-up action contract must match the recommendation scope.", 409);
+  }
+}
+function assertContractablePath(recommendedPath) {
+  if (recommendedPath === "narrower_action_contract_required" || recommendedPath === "compensating_action_contract_required") {
+    return;
+  }
+  throw new HandshakeProtocolError("recovery_path_not_contractable", "Recovery path does not permit a follow-up action contract.", 409);
+}
+// src/protocol/areas/recovery/recommendations.ts
+async function createRecoveryRecommendation(recorder, inputValue) {
+  const input = CreateRecoveryRecommendationInputSchema.parse(inputValue);
+  const context = await getRecoveryRecommendationContext(recorder, input);
+  const recommendation = await buildRecoveryRecommendation(context);
+  await commitRecoveryRecommendation(recorder, context, recommendation);
+  return recommendation;
+}
+async function getRecoveryRecommendationContext(recorder, input) {
+  const receiptRecord = await recorder.requiredRecord("receipt", input.sourceReceiptId, "receipt_missing");
+  const receipt = receiptRecord.payload;
+  assertReceiptDigestMaterial(receipt);
+  await assertReceiptDigests(receipt);
+  const proofGaps = await loadProofGaps(recorder, receipt, input.sourceRefusalOrGapRef);
+  assertRecoverableReceipt(receipt, proofGaps);
+  const contractRecord = await recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing");
+  const sourceRefusalOrGapRef = input.sourceRefusalOrGapRef ?? defaultSourceRefusalOrGapRef(receipt, proofGaps);
+  assertSourceRefBelongsToReceipt(receipt, proofGaps, sourceRefusalOrGapRef);
+  assertRecommendationScope(input.recommendedPath, input.allowedNextActionClasses);
+  return {
+    input,
+    receipt,
+    proofGaps,
+    contract: contractRecord.payload,
+    sourceRefusalOrGapRef,
+    recoveryRecommendationId: createId("rec"),
+    now: nowIso()
+  };
+}
+async function buildRecoveryRecommendation(context) {
+  const { input, receipt, proofGaps, contract, sourceRefusalOrGapRef, recoveryRecommendationId, now } = context;
+  const recommendationDigest = await digestCanonical(buildRecoveryRecommendationBinding(context));
+  return RecoveryRecommendationSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: receipt.tenantId,
+    organizationId: receipt.organizationId,
+    createdAt: now,
+    recoveryRecommendationId,
+    sourceReceiptId: receipt.receiptId,
+    sourceActionContractId: receipt.actionContractId,
+    sourcePolicyDecisionId: receipt.policyDecisionId,
+    sourceGreenlightId: receipt.greenlightId,
+    sourceGateAttemptId: receipt.gateAttemptId,
+    sourceMutationAttemptId: receipt.mutationAttemptId,
+    sourceRefusalOrGapRef,
+    sourceFinalityStatus: receipt.finalityStatus,
+    sourceGatewayCheckStatus: receipt.gatewayCheckStatus,
+    sourceMutationAttemptStatus: receipt.mutationAttemptStatus,
+    sourceDownstreamExecutionStatus: receipt.downstreamExecutionStatus,
+    recommendedPath: input.recommendedPath,
+    allowedNextActionClasses: input.allowedNextActionClasses,
+    requiredNewEvidence: input.requiredNewEvidence,
+    requiresHumanReview: input.requiresHumanReview,
+    safeRetryAvailable: safeRetryAvailable(input.recommendedPath, input.requiresHumanReview, input.allowedNextActionClasses),
+    scopeNarrowingRequired: scopeNarrowingRequired(input.recommendedPath),
+    policyUpdateCandidate: policyUpdateCandidate(input.recommendedPath, input.reasonCode),
+    agentInstructionUpdateCandidate: agentInstructionUpdateCandidate(input.reasonCode),
+    principalId: contract.principalId,
+    agentId: contract.agentId,
+    runId: contract.runId,
+    gatewayId: receipt.gatewayId,
+    resourceRef: contract.resourceRef,
+    actionClass: contract.actionClass,
+    failureReceiptRef: receipt.receiptId,
+    proofGapIds: proofGaps.map((proofGap) => proofGap.proofGapId),
+    missingEvidenceRefs: proofGaps.map((proofGap) => proofGap.missingOrInvalidEvidenceRef),
+    reviewDecisionRef: input.reviewDecisionRef,
+    policyChangeRef: input.policyChangeRef,
+    sourceReceiptDigest: receipt.receiptDigest,
+    sourceAuditChainDigest: receipt.auditChainDigest,
+    sourceStreamOffsets: receipt.streamOffsets,
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    recommendedAt: now,
+    recoveryExpiresAt: input.recoveryExpiresAt,
+    reviewDueAt: input.reviewDueAt,
+    retryNotBefore: input.retryNotBefore,
+    mustCreateNewActionContract: true,
+    mayReuseGreenlight: false,
+    mayMutateProtectedSurface: false,
+    recommendationStatus: "open",
+    statusChangedAt: null,
+    statusChangedByRef: null,
+    statusReasonCode: null,
+    statusReasonSummary: null,
+    supersededByActionContractId: null,
+    recommendationDigest
+  });
+}
+function buildRecoveryRecommendationBinding(context) {
+  const { input, receipt, sourceRefusalOrGapRef, recoveryRecommendationId, now } = context;
+  const recommendationBinding = {
+    recoveryRecommendationId,
+    sourceReceiptId: receipt.receiptId,
+    sourceRefusalOrGapRef,
+    sourceActionContractId: receipt.actionContractId,
+    sourceReceiptDigest: receipt.receiptDigest,
+    sourceAuditChainDigest: receipt.auditChainDigest,
+    recommendedPath: input.recommendedPath,
+    allowedNextActionClasses: input.allowedNextActionClasses,
+    requiredNewEvidence: input.requiredNewEvidence,
+    requiresHumanReview: input.requiresHumanReview,
+    mustCreateNewActionContract: true,
+    mayReuseGreenlight: false,
+    mayMutateProtectedSurface: false,
+    recommendedAt: now
+  };
+  return recommendationBinding;
+}
+async function commitRecoveryRecommendation(recorder, context, recommendation) {
+  await recorder.commitRecordsWithEvents(recoveryRecommendationRecords(recommendation), recoveryRecommendationEvents(context, recommendation));
+}
+function recoveryRecommendationRecords(recommendation) {
+  return [{ objectType: "recovery_recommendation", payload: recommendation }];
+}
+function recoveryRecommendationEvents(context, recommendation) {
+  return [
+    {
+      source: recommendation,
+      eventType: "recovery_recommended",
+      objectRefs: [
+        recommendation.recoveryRecommendationId,
+        recommendation.sourceReceiptId,
+        recommendation.sourceActionContractId,
+        recommendation.sourceRefusalOrGapRef
+      ],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        sourceReceiptId: recommendation.sourceReceiptId,
+        sourceRefusalOrGapRef: recommendation.sourceRefusalOrGapRef,
+        recommendedPath: recommendation.recommendedPath,
+        mustCreateNewActionContract: true,
+        mayReuseGreenlight: false,
+        mayMutateProtectedSurface: false,
+        recommendationDigest: recommendation.recommendationDigest
+      }
+    }
+  ];
+}
+function assertRecoverableReceipt(receipt, proofGaps) {
+  const hasRecoverableStatus = proofGaps.length > 0 || receipt.gatewayCheckStatus === "refused" || receipt.gatewayCheckStatus === "proof_gap" || receipt.mutationAttemptStatus === "downstream_refused" || receipt.mutationAttemptStatus === "failed" || receipt.mutationAttemptStatus === "unknown" || receipt.downstreamExecutionStatus === "refused" || receipt.downstreamExecutionStatus === "failed" || receipt.downstreamExecutionStatus === "unknown" || receipt.finalityStatus === "suspect" || receipt.finalityStatus === "unknown";
+  if (!hasRecoverableStatus) {
+    throw new HandshakeProtocolError("recovery_source_not_recoverable", "Recovery recommendation requires a refusal, proof gap, failed, unknown, or suspect receipt.", 409);
+  }
+}
+function assertReceiptDigestMaterial(receipt) {
+  if (!receipt.receiptDigest || !receipt.auditChainDigest) {
+    throw new HandshakeProtocolError("recovery_receipt_digest_missing", "Recovery recommendation requires receiptDigest and auditChainDigest.", 409);
+  }
+  if (receipt.streamOffsets.length === 0 || receipt.streamEventIds.length === 0) {
+    throw new HandshakeProtocolError("recovery_receipt_stream_offsets_missing", "Recovery recommendation requires stream event references and stream offset windows.", 409);
+  }
+}
+async function assertReceiptDigests(receipt) {
+  const expectedReceiptDigest = await digestCanonical({
+    ...receipt,
+    receiptDigest: null,
+    auditChainDigest: null
+  });
+  if (receipt.receiptDigest !== expectedReceiptDigest) {
+    throw new HandshakeProtocolError("recovery_receipt_digest_mismatch", "Stored receiptDigest does not match the receipt body.", 409);
+  }
+  const expectedAuditChainDigest = await digestCanonical({
+    receiptDigest: receipt.receiptDigest,
+    streamOffsets: receipt.streamOffsets,
+    proofGapIds: receipt.proofGapIds,
+    finalityStatus: receipt.finalityStatus
+  });
+  if (receipt.auditChainDigest !== expectedAuditChainDigest) {
+    throw new HandshakeProtocolError("recovery_audit_chain_digest_mismatch", "Stored auditChainDigest does not match the receipt stream and proof-gap evidence.", 409);
+  }
+}
+function defaultSourceRefusalOrGapRef(receipt, proofGaps) {
+  if (proofGaps[0])
+    return proofGaps[0].proofGapId;
+  if (receipt.gatewayCheckStatus === "refused")
+    return receipt.gateAttemptId ?? receipt.receiptId;
+  if (receipt.mutationAttemptStatus !== "not_attempted")
+    return receipt.mutationAttemptId ?? receipt.gateAttemptId ?? receipt.receiptId;
+  return receipt.gateAttemptId ?? receipt.receiptId;
+}
+function assertSourceRefBelongsToReceipt(receipt, proofGaps, sourceRefusalOrGapRef) {
+  const allowedRefs = new Set([
+    receipt.receiptId,
+    receipt.gateAttemptId,
+    receipt.mutationAttemptId,
+    ...proofGaps.map((proofGap) => proofGap.proofGapId)
+  ].filter((ref) => ref !== null));
+  if (!allowedRefs.has(sourceRefusalOrGapRef)) {
+    throw new HandshakeProtocolError("recovery_source_ref_mismatch", "sourceRefusalOrGapRef must reference the source receipt, gate attempt, mutation attempt, or proof gap.", 409);
+  }
+}
+function assertRecommendationScope(recommendedPath, allowedNextActionClasses) {
+  const pathNeedsFutureContract = recommendedPath === "narrower_action_contract_required" || recommendedPath === "compensating_action_contract_required";
+  if (pathNeedsFutureContract && allowedNextActionClasses.length === 0) {
+    throw new HandshakeProtocolError("recovery_next_action_class_missing", "Recovery path that can lead to future mutation must name allowed next action classes.", 400);
+  }
+  if (recommendedPath === "halt_without_retry" && allowedNextActionClasses.length > 0) {
+    throw new HandshakeProtocolError("recovery_halt_has_next_action_classes", "halt_without_retry cannot declare allowed next action classes.", 400);
+  }
+}
+function safeRetryAvailable(recommendedPath, requiresHumanReview, allowedNextActionClasses) {
+  return recommendedPath === "narrower_action_contract_required" && !requiresHumanReview && allowedNextActionClasses.length > 0;
+}
+function scopeNarrowingRequired(recommendedPath) {
+  return recommendedPath === "narrower_action_contract_required" || recommendedPath === "compensating_action_contract_required";
+}
+function policyUpdateCandidate(recommendedPath, reasonCode) {
+  return recommendedPath === "human_review_required" || reasonCode.includes("policy");
+}
+function agentInstructionUpdateCandidate(reasonCode) {
+  return reasonCode.includes("agent") || reasonCode.includes("compiler") || reasonCode.includes("overreach");
+}
+async function loadProofGaps(recorder, receipt, sourceRefusalOrGapRef) {
+  const proofGapIds = new Set(receipt.proofGapIds);
+  if (sourceRefusalOrGapRef?.startsWith("gap_"))
+    proofGapIds.add(sourceRefusalOrGapRef);
+  const proofGaps = [];
+  for (const proofGapId of [...proofGapIds]) {
+    const proofGap = await recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing");
+    assertProofGapBelongsToReceipt(receipt, proofGap.payload);
+    proofGaps.push(proofGap.payload);
+  }
+  return proofGaps;
+}
+function assertProofGapBelongsToReceipt(receipt, proofGap) {
+  const refs = new Set([proofGap.receiptId, proofGap.gateAttemptId, proofGap.mutationAttemptId, ...proofGap.affectedObjectRefs].filter((ref) => ref !== null));
+  if (refs.has(receipt.receiptId) || receipt.gateAttemptId !== null && refs.has(receipt.gateAttemptId) || receipt.mutationAttemptId !== null && refs.has(receipt.mutationAttemptId)) {
+    return;
+  }
+  throw new HandshakeProtocolError("recovery_source_ref_mismatch", "Proof gap used for recovery must reference the source receipt, gate attempt, or mutation attempt.", 409);
+}
+// src/protocol/areas/proof-gap/transitions.ts
+function buildProofGap(contract, gapPhase, expectedEvidenceType, reasonCode, refs) {
+  return ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: nowIso(),
+    proofGapId: createId("gap"),
+    gapPhase,
+    expectedEvidenceType,
+    missingOrInvalidEvidenceRef: expectedEvidenceType,
+    affectedObjectRefs: [
+      contract.actionContractId,
+      ...Object.values(refs).filter((value) => value !== null)
+    ],
+    gateAttemptId: refs.gateAttemptId,
+    mutationAttemptId: refs.mutationAttemptId,
+    receiptId: refs.receiptId,
+    reasonCode,
+    finalityImpact: "unknown",
+    recoveryRequirement: "Reconcile downstream surface operation before treating receipt as final.",
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+}
+async function resolveProofGaps(recorder, proofGapIds, reconciliation, now) {
+  const resolved = [];
+  for (const proofGapId of proofGapIds) {
+    const proofGapRecord = await recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing");
+    if (proofGapRecord.payload.mutationAttemptId !== reconciliation.mutationAttemptId) {
+      throw new HandshakeProtocolError("invalid_transition_proof_gap_mismatch", "Reconciliation may resolve only proof gaps tied to the same mutation attempt.", 409);
+    }
+    resolved.push(ProofGapSchema.parse({
+      ...proofGapRecord.payload,
+      resolvedAt: now,
+      resolvedByRef: reconciliation.reconciliationId
+    }));
+  }
+  return resolved;
+}
+// src/protocol/areas/recovery/terminal/terminal-conflicts.ts
+async function recordRecoveryTerminalConflictProofGap(recorder, input) {
+  const context = buildRecoveryTerminalConflictContext(input);
+  const proofGap = buildRecoveryTerminalConflictProofGap(context);
+  await commitRecoveryTerminalConflictProofGap(recorder, context, proofGap);
+  return proofGap;
+}
+function buildRecoveryTerminalConflictContext(input) {
+  return {
+    input,
+    now: nowIso(),
+    proofGapId: createId("gap")
+  };
+}
+function buildRecoveryTerminalConflictProofGap(context) {
+  const { input, now, proofGapId } = context;
+  return ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.recommendation.tenantId,
+    organizationId: input.recommendation.organizationId,
+    createdAt: now,
+    proofGapId,
+    gapPhase: "recovery",
+    expectedEvidenceType: "single_recovery_terminal_claim",
+    missingOrInvalidEvidenceRef: `recovery_terminal_claim:${input.recommendation.recoveryRecommendationId}`,
+    affectedObjectRefs: [
+      input.recommendation.recoveryRecommendationId,
+      input.recommendation.sourceReceiptId,
+      input.recommendation.sourceActionContractId,
+      input.attemptedObjectRef
+    ],
+    gateAttemptId: null,
+    mutationAttemptId: null,
+    receiptId: input.recommendation.sourceReceiptId,
+    reasonCode: "recovery_terminal_conflict",
+    finalityImpact: "none",
+    recoveryRequirement: "Load the terminal recovery transition before proposing another follow-up action contract.",
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+}
+async function commitRecoveryTerminalConflictProofGap(recorder, context, proofGap) {
+  await recorder.commitRecordsWithEvents(recoveryTerminalConflictProofGapRecords(proofGap), recoveryTerminalConflictProofGapEvents(context, proofGap));
+}
+function recoveryTerminalConflictProofGapRecords(proofGap) {
+  return [{ objectType: "proof_gap", payload: proofGap }];
+}
+function recoveryTerminalConflictProofGapEvents(context, proofGap) {
+  const { input } = context;
+  return [
+    {
+      source: proofGap,
+      eventType: "proof_gap_recorded",
+      objectRefs: [
+        proofGap.proofGapId,
+        input.recommendation.recoveryRecommendationId,
+        input.recommendation.sourceReceiptId,
+        input.attemptedObjectRef
+      ],
+      streamRefs: actionLifecycleStreamRefs(input.sourceContract),
+      payload: {
+        reasonCode: proofGap.reasonCode,
+        finalityImpact: proofGap.finalityImpact,
+        recoveryRecommendationId: input.recommendation.recoveryRecommendationId,
+        attemptedObjectRef: input.attemptedObjectRef,
+        changedByRef: input.changedByRef
+      }
+    }
+  ];
+}
+
+// src/protocol/areas/recovery/status.ts
+async function transitionRecoveryRecommendationStatus(recorder, inputValue) {
+  const input = TransitionRecoveryRecommendationStatusInputSchema.parse(inputValue);
+  const context = await getRecoveryRecommendationStatusContext(recorder, input);
+  const statusChange = await buildRecoveryRecommendationStatusChange(buildRecoveryRecommendationStatusChangeInput(context));
+  await commitRecoveryRecommendationStatusChange(recorder, context, statusChange);
+  return statusChange;
+}
+async function getRecoveryRecommendationStatusContext(recorder, input) {
+  const recommendationRecord = await recorder.requiredRecord("recovery_recommendation", input.recoveryRecommendationId, "recovery_recommendation_missing");
+  const sourceContractRecord = await recorder.requiredRecord("action_contract", recommendationRecord.payload.sourceActionContractId, "recovery_source_contract_missing");
+  const supersedingContract = input.supersededByActionContractId ? await recorder.requiredRecord("action_contract", input.supersededByActionContractId, "recovery_superseding_contract_missing") : null;
+  if (supersedingContract) {
+    assertSupersedingContract(recommendationRecord.payload, supersedingContract.payload);
+  }
+  return {
+    input,
+    recommendation: recommendationRecord.payload,
+    sourceContract: sourceContractRecord.payload,
+    now: nowIso()
+  };
+}
+function buildRecoveryRecommendationStatusChangeInput(context) {
+  const { input, recommendation, sourceContract, now } = context;
+  return {
+    recommendation,
+    sourceContract,
+    nextStatus: input.nextStatus,
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    changedByRef: input.changedByRef,
+    supersededByActionContractId: input.supersededByActionContractId,
+    now
+  };
+}
+async function commitRecoveryRecommendationStatusChange(recorder, context, statusChange) {
+  await recorder.commitRecordsWithEvents(statusChangeRecords(statusChange), statusChangeEvents(statusChange, context.sourceContract), { recoveryTerminalClaims: [statusChange.terminalClaim] }).catch(async (error51) => {
+    if (isRecoveryTerminalConflict(error51)) {
+      const proofGap = await recordRecoveryTerminalConflictProofGap(recorder, {
+        recommendation: context.recommendation,
+        sourceContract: context.sourceContract,
+        attemptedObjectRef: statusChange.statusTransition.recoveryRecommendationStatusTransitionId,
+        changedByRef: context.input.changedByRef
+      });
+      throw new HandshakeProtocolError(error51.code, error51.message, error51.status, {
+        ...error51.metadata,
+        retryability: "recoverable",
+        commitState: "committed",
+        proofRef: proofGap.proofGapId
+      });
+    }
+    throw error51;
+  });
+}
+async function buildRecoveryRecommendationStatusChange(input) {
+  assertStatusTransitionInput(input);
+  const transitionId = createId("rst");
+  const transitionBinding = {
+    recoveryRecommendationStatusTransitionId: transitionId,
+    recoveryRecommendationId: input.recommendation.recoveryRecommendationId,
+    previousStatus: input.recommendation.recommendationStatus,
+    nextStatus: input.nextStatus,
+    recommendationDigest: input.recommendation.recommendationDigest,
+    reasonCode: input.reasonCode,
+    changedByRef: input.changedByRef,
+    changedAt: input.now,
+    supersededByActionContractId: input.supersededByActionContractId
+  };
+  const transitionDigest = await digestCanonical(transitionBinding);
+  const recoveryRecommendation = RecoveryRecommendationSchema.parse({
+    ...input.recommendation,
+    recommendationStatus: input.nextStatus,
+    statusChangedAt: input.now,
+    statusChangedByRef: input.changedByRef,
+    statusReasonCode: input.reasonCode,
+    statusReasonSummary: input.reasonSummary,
+    supersededByActionContractId: input.supersededByActionContractId
+  });
+  const statusTransition = RecoveryRecommendationStatusTransitionSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.recommendation.tenantId,
+    organizationId: input.recommendation.organizationId,
+    createdAt: input.now,
+    recoveryRecommendationStatusTransitionId: transitionId,
+    recoveryRecommendationId: input.recommendation.recoveryRecommendationId,
+    sourceReceiptId: input.recommendation.sourceReceiptId,
+    sourceActionContractId: input.recommendation.sourceActionContractId,
+    previousStatus: input.recommendation.recommendationStatus,
+    nextStatus: input.nextStatus,
+    recommendationDigest: input.recommendation.recommendationDigest,
+    reasonCode: input.reasonCode,
+    reasonSummary: input.reasonSummary,
+    changedByRef: input.changedByRef,
+    changedAt: input.now,
+    supersededByActionContractId: input.supersededByActionContractId,
+    transitionDigest
+  });
+  return {
+    recoveryRecommendation,
+    statusTransition,
+    terminalClaim: {
+      recoveryRecommendationId: input.recommendation.recoveryRecommendationId,
+      statusTransitionId: transitionId,
+      nextStatus: input.nextStatus,
+      claimedAt: input.now
+    }
+  };
+}
+function statusChangeRecords(statusChange) {
+  return [
+    { objectType: "recovery_recommendation", payload: statusChange.recoveryRecommendation },
+    { objectType: "recovery_recommendation_status_transition", payload: statusChange.statusTransition }
+  ];
+}
+function statusChangeEvents(statusChange, sourceContract) {
+  const { recoveryRecommendation, statusTransition } = statusChange;
+  return [
+    {
+      source: statusTransition,
+      eventType: "recovery_status_changed",
+      objectRefs: [
+        recoveryRecommendation.recoveryRecommendationId,
+        statusTransition.recoveryRecommendationStatusTransitionId,
+        recoveryRecommendation.sourceReceiptId,
+        ...statusTransition.supersededByActionContractId ? [statusTransition.supersededByActionContractId] : []
+      ],
+      streamRefs: actionLifecycleStreamRefs(sourceContract),
+      payload: {
+        previousStatus: statusTransition.previousStatus,
+        nextStatus: statusTransition.nextStatus,
+        reasonCode: statusTransition.reasonCode,
+        changedByRef: statusTransition.changedByRef,
+        supersededByActionContractId: statusTransition.supersededByActionContractId,
+        transitionDigest: statusTransition.transitionDigest
+      }
+    }
+  ];
+}
+function assertStatusTransitionInput(input) {
+  if (input.recommendation.recommendationStatus !== "open") {
+    throw new HandshakeProtocolError("recovery_recommendation_not_open", "Recovery recommendation status can change only from open.", 409);
+  }
+  if (input.nextStatus === "superseded" && !input.supersededByActionContractId) {
+    throw new HandshakeProtocolError("recovery_superseding_contract_missing", "Superseding a recovery recommendation requires a follow-up action contract reference.", 409);
+  }
+  if (input.nextStatus === "expired" && input.supersededByActionContractId) {
+    throw new HandshakeProtocolError("recovery_expired_has_superseding_contract", "Expired recovery recommendations cannot name a superseding action contract.", 409);
+  }
+  if (input.nextStatus === "expired") {
+    if (!input.recommendation.recoveryExpiresAt || Date.parse(input.recommendation.recoveryExpiresAt) > Date.parse(input.now)) {
+      throw new HandshakeProtocolError("recovery_not_expired", "Recovery recommendation cannot transition to expired before recoveryExpiresAt.", 409);
+    }
+  }
+}
+function assertSupersedingContract(recommendation, contract) {
+  if (contract.recoveryRecommendationId !== recommendation.recoveryRecommendationId || contract.recoverySourceReceiptId !== recommendation.sourceReceiptId || contract.recoveryRecommendationDigest !== recommendation.recommendationDigest) {
+    throw new HandshakeProtocolError("recovery_superseding_contract_mismatch", "Superseding action contract must be linked to the recovery recommendation.", 409);
+  }
+}
+function isRecoveryTerminalConflict(error51) {
+  return error51 instanceof HandshakeProtocolError && error51.code === "recovery_terminal_conflict";
+}
+// src/protocol/areas/recovery/terminal/terminal-conflict-resolutions.ts
+async function resolveRecoveryTerminalConflictProofGap(recorder, inputValue) {
+  const input = ResolveRecoveryTerminalConflictInputSchema.parse(inputValue);
+  const context = await getRecoveryTerminalConflictResolutionContext(recorder, input);
+  const resolution = buildRecoveryTerminalConflictResolution(context);
+  await commitRecoveryTerminalConflictResolution(recorder, context, resolution);
+  return resolution;
+}
+async function getRecoveryTerminalConflictResolutionContext(recorder, input) {
+  const proofGapRecord = await recorder.requiredRecord("proof_gap", input.proofGapId, "proof_gap_missing");
+  const statusTransitionRecord = await recorder.requiredRecord("recovery_recommendation_status_transition", input.recoveryRecommendationStatusTransitionId, "recovery_terminal_transition_missing");
+  const recoveryRecommendationRecord = await recorder.requiredRecord("recovery_recommendation", statusTransitionRecord.payload.recoveryRecommendationId, "recovery_recommendation_missing");
+  const sourceContractRecord = await recorder.requiredRecord("action_contract", statusTransitionRecord.payload.sourceActionContractId, "recovery_source_contract_missing");
+  assertRecoveryTerminalConflictResolution(proofGapRecord.payload, statusTransitionRecord.payload, recoveryRecommendationRecord.payload);
+  return {
+    input,
+    proofGap: proofGapRecord.payload,
+    statusTransition: statusTransitionRecord.payload,
+    recoveryRecommendation: recoveryRecommendationRecord.payload,
+    sourceContract: sourceContractRecord.payload,
+    now: nowIso()
+  };
+}
+function buildRecoveryTerminalConflictResolution(context) {
+  return {
+    proofGap: ProofGapSchema.parse({
+      ...context.proofGap,
+      resolvedAt: context.now,
+      resolvedByRef: context.statusTransition.recoveryRecommendationStatusTransitionId
+    }),
+    statusTransition: context.statusTransition,
+    recoveryRecommendation: context.recoveryRecommendation
+  };
+}
+async function commitRecoveryTerminalConflictResolution(recorder, context, resolution) {
+  await recorder.commitRecordsWithEvents(recoveryTerminalConflictResolutionRecords(resolution), recoveryTerminalConflictResolutionEvents(context, resolution));
+}
+function recoveryTerminalConflictResolutionRecords(resolution) {
+  return [{ objectType: "proof_gap", payload: resolution.proofGap }];
+}
+function recoveryTerminalConflictResolutionEvents(context, resolution) {
+  const { input, statusTransition, sourceContract } = context;
+  const { proofGap } = resolution;
+  return [
+    {
+      source: proofGap,
+      eventType: "proof_gap_resolved",
+      objectRefs: [
+        proofGap.proofGapId,
+        statusTransition.recoveryRecommendationStatusTransitionId,
+        statusTransition.recoveryRecommendationId,
+        statusTransition.sourceReceiptId,
+        statusTransition.sourceActionContractId
+      ],
+      streamRefs: actionLifecycleStreamRefs(sourceContract),
+      payload: {
+        gapPhase: proofGap.gapPhase,
+        reasonCode: proofGap.reasonCode,
+        finalityImpact: proofGap.finalityImpact,
+        recoveryRecommendationId: statusTransition.recoveryRecommendationId,
+        recoveryRecommendationStatusTransitionId: statusTransition.recoveryRecommendationStatusTransitionId,
+        nextStatus: statusTransition.nextStatus,
+        transitionDigest: statusTransition.transitionDigest,
+        resolvedByRef: proofGap.resolvedByRef,
+        observedByRef: input.observedByRef
+      }
+    }
+  ];
+}
+function assertRecoveryTerminalConflictResolution(proofGap, statusTransition, recoveryRecommendation) {
+  if (proofGap.resolvedAt || proofGap.resolvedByRef) {
+    throw new HandshakeProtocolError("proof_gap_already_resolved", "Recovery terminal conflict proof gap is already resolved.", 409);
+  }
+  if (proofGap.gapPhase !== "recovery" || proofGap.reasonCode !== "recovery_terminal_conflict" || proofGap.expectedEvidenceType !== "single_recovery_terminal_claim") {
+    throw new HandshakeProtocolError("recovery_terminal_conflict_gap_mismatch", "Only recovery terminal conflict proof gaps can be resolved by a recovery terminal transition.", 409);
+  }
+  if (proofGap.tenantId !== statusTransition.tenantId || proofGap.organizationId !== statusTransition.organizationId || recoveryRecommendation.tenantId !== statusTransition.tenantId || recoveryRecommendation.organizationId !== statusTransition.organizationId) {
+    throw new HandshakeProtocolError("recovery_terminal_conflict_scope_mismatch", "Recovery terminal conflict proof gap, recommendation, and transition must share tenant and organization scope.", 409);
+  }
+  if (proofGap.missingOrInvalidEvidenceRef !== `recovery_terminal_claim:${statusTransition.recoveryRecommendationId}`) {
+    throw new HandshakeProtocolError("recovery_terminal_conflict_claim_mismatch", "Recovery terminal conflict proof gap must name the same terminal claim as the winning transition.", 409);
+  }
+  if (proofGap.receiptId !== statusTransition.sourceReceiptId || !proofGap.affectedObjectRefs.includes(statusTransition.recoveryRecommendationId) || !proofGap.affectedObjectRefs.includes(statusTransition.sourceReceiptId) || !proofGap.affectedObjectRefs.includes(statusTransition.sourceActionContractId)) {
+    throw new HandshakeProtocolError("recovery_terminal_conflict_evidence_mismatch", "Recovery terminal conflict proof gap does not bind to the winning transition's source evidence.", 409);
+  }
+  if (recoveryRecommendation.recoveryRecommendationId !== statusTransition.recoveryRecommendationId || recoveryRecommendation.sourceReceiptId !== statusTransition.sourceReceiptId || recoveryRecommendation.sourceActionContractId !== statusTransition.sourceActionContractId || recoveryRecommendation.recommendationDigest !== statusTransition.recommendationDigest || recoveryRecommendation.recommendationStatus !== statusTransition.nextStatus || recoveryRecommendation.statusChangedAt !== statusTransition.changedAt || recoveryRecommendation.statusChangedByRef !== statusTransition.changedByRef || recoveryRecommendation.supersededByActionContractId !== statusTransition.supersededByActionContractId) {
+    throw new HandshakeProtocolError("recovery_terminal_transition_not_current", "Recovery terminal conflict proof gap can resolve only against the current terminal recommendation transition.", 409);
+  }
+}
+// src/protocol/areas/action-contract/contract-record.ts
+async function buildActionContractRecord(context) {
+  const { input, candidate, compilation, recoveryLinkage } = context;
+  const createdAt = nowIso();
+  assertRecoveryActionLinkage({
+    tenantId: compilation.tenantId,
+    organizationId: compilation.organizationId,
+    principalId: compilation.principalId,
+    agentId: compilation.agentId,
+    runId: compilation.runId,
+    sequenceNumber: candidate.sequenceNumber,
+    actionClass: candidate.actionClass,
+    gatewayId: candidate.gatewayId,
+    resourceRef: candidate.resourceRef,
+    evidenceRefs: candidate.evidenceRefs
+  }, recoveryLinkage, createdAt);
+  const contractBinding = buildContractBinding({ ...context, createdAt });
+  const actionContractDigest = await digestCanonical(contractBinding);
+  const contractSignature = input.signingSecret ? await signCanonicalHmac(contractBinding, input.signingSecret) : null;
+  const contract = ActionContractSchema.parse({
+    ...contractBinding,
+    schemaVersion: PROTOCOL_VERSION,
+    createdAt,
+    actionContractId: createId("act"),
+    parameters: candidate.parameters,
+    nonSecretParamsSummary: candidate.nonSecretParamsSummary,
+    secretRefs: candidate.secretRefs,
+    gatewayCredentialRefs: candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: candidate.delegatedAuthorityRefs,
+    rollbackHint: candidate.rollbackHint,
+    actionContractDigest,
+    contractSignature,
+    signaturePosture: input.signingSecret ? "local_hmac" : "unsigned",
+    keyIdentityRef: input.signingSecret ? "local:hmac" : null,
+    verificationPolicyRef: input.signingSecret ? "local-hmac-only" : null
+  });
+  return { createdAt, contractBinding, contract };
+}
+function buildContractBinding(args) {
+  const { input, candidate, compilation, envelope, gateway, actionType, recoveryLinkage, createdAt } = args;
+  return {
+    tenantId: compilation.tenantId,
+    organizationId: compilation.organizationId,
+    intentCompilationId: input.intentCompilationId,
+    candidateActionId: candidate.candidateActionId,
+    candidateDigest: input.candidateDigest,
+    envelopeId: envelope.envelopeId,
+    operatingEnvelopeDigest: candidate.operatingEnvelopeDigest,
+    agentId: compilation.agentId,
+    principalId: compilation.principalId,
+    participantIdentityBindings: envelope.participantIdentityBindings,
+    runId: compilation.runId,
+    runtimeAdapterId: compilation.runtimeAdapterId,
+    sequenceNumber: candidate.sequenceNumber,
+    requiredPriorActionContractIds: candidate.requiredPriorActionContractIds,
+    recoveryRecommendationId: recoveryLinkage?.recommendation.recoveryRecommendationId ?? null,
+    recoverySourceReceiptId: recoveryLinkage?.recommendation.sourceReceiptId ?? null,
+    recoveryRecommendationDigest: recoveryLinkage?.recommendation.recommendationDigest ?? null,
+    issuedAt: createdAt,
+    expiresAt: candidate.expiresAt,
+    gatewayRegistryEntryId: gateway.gatewayRegistryEntryId,
+    gatewayRegistryDigest: candidate.gatewayRegistryDigest,
+    gatewayRegistryVersion: gateway.gatewayRegistryVersion,
+    gatewayId: gateway.gatewayId,
+    gatewayPolicyContractId: gateway.gatewayPolicyContractId,
+    gatewayPolicyVersion: gateway.gatewayPolicyVersion,
+    credentialCustodyStatus: gateway.credentialCustodyStatus,
+    enforcementMode: gateway.enforcementMode,
+    mutationCredentialHolderRef: gateway.mutationCredentialHolderRef,
+    gatewayAuthorityHolderRef: gateway.gatewayAuthorityHolderRef,
+    toolCapabilityId: candidate.toolCapabilityId,
+    toolCapabilityDigest: candidate.toolCapabilityDigest,
+    actionTypeId: candidate.actionTypeId,
+    actionTypeDigest: candidate.actionTypeDigest,
+    actionClass: candidate.actionClass,
+    protectedSurfaceKind: actionType.protectedSurfaceKind,
+    resourceRef: candidate.resourceRef,
+    requiredProtectedPathState: envelope.requiredProtectedPathState,
+    runtimeExecutionId: candidate.runtimeExecutionId,
+    runtimeExecutionDigest: candidate.runtimeExecutionDigest,
+    generatedExecutionGraphId: candidate.generatedExecutionGraphId,
+    generatedExecutionGraphDigest: candidate.generatedExecutionGraphDigest,
+    generatedExecutionCoverageStatus: candidate.generatedExecutionCoverageStatus,
+    generatedExecutionNodeId: candidate.generatedExecutionNodeId,
+    generatedExecutionNodeDigest: candidate.generatedExecutionNodeDigest,
+    generatedExecutionCatalogSnapshotDigest: candidate.generatedExecutionCatalogSnapshotDigest,
+    generatedExecutionGatewayRegistrySnapshotDigest: candidate.generatedExecutionGatewayRegistrySnapshotDigest,
+    generatedExecutionRegistryBindingSetDigest: candidate.generatedExecutionRegistryBindingSetDigest,
+    generatedExecutionNodeGatewayBindingDigest: candidate.generatedExecutionNodeGatewayBindingDigest,
+    gatewayCredentialRefs: candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: candidate.delegatedAuthorityRefs,
+    paramsDigest: candidate.paramsDigest,
+    purposeCode: candidate.purposeCode,
+    expectedSideEffectCodes: candidate.expectedSideEffectCodes,
+    evidenceRefs: candidate.evidenceRefs,
+    clearingEvidenceRefs: clearingEvidenceRefsJson2(candidate.clearingEvidenceRefs),
+    bounds: candidate.bounds,
+    idempotencyKey: candidate.idempotencyKey,
+    canonicalizerVersion: CANONICALIZER_VERSION
+  };
+}
+function clearingEvidenceRefsJson2(refs) {
+  const json2 = {};
+  if (refs.correlationRef !== undefined)
+    json2.correlationRef = refs.correlationRef;
+  if (refs.obligationRef !== undefined)
+    json2.obligationRef = refs.obligationRef;
+  if (refs.counterpartyRef !== undefined)
+    json2.counterpartyRef = refs.counterpartyRef;
+  return json2;
+}
+
+// src/protocol/areas/action-contract/transitions.ts
+async function proposeActionContract(store, recorder, inputValue) {
+  const input = ProposeActionContractInputSchema.parse(inputValue);
+  const context = await getActionContractProposalContext(recorder, input);
+  await assertActionContractProposalContext(context);
+  const buildPlan = await buildActionContractPlan(input, context);
+  await assertGatewayCredentialBindings(store, buildPlan.contract);
+  await assertDelegatedAuthorityBindings(store, buildPlan.contract);
+  const commitPlan = await buildActionContractCommitPlan(buildPlan);
+  await commitActionContractPlan(recorder, commitPlan);
+  return buildPlan.contract;
+}
+async function assertGatewayCredentialBindings(store, contract) {
+  const evaluation = await evaluateGatewayCredentialBindings(store, contract, contract.issuedAt);
+  if (!evaluation.ok) {
+    throw new HandshakeProtocolError(evaluation.reasonCode, evaluation.reason, 409);
+  }
+}
+async function assertDelegatedAuthorityBindings(store, contract) {
+  const evaluation = await evaluateDelegatedAuthorityBindings(store, contract, contract.issuedAt);
+  if (!evaluation.ok) {
+    throw new HandshakeProtocolError(evaluation.reasonCode, evaluation.reason, 409);
+  }
+}
+async function getActionContractProposalContext(recorder, input) {
+  const compilation = await recorder.requiredRecord("intent_compilation", input.intentCompilationId, "intent_compilation_missing");
+  const candidate = compilation.payload.candidateAction;
+  assertCandidateMatchesProposal(candidate, input.candidateActionId, input.candidateDigest);
+  const [
+    envelopeRecord,
+    gatewayRecord,
+    toolRecord,
+    actionTypeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord
+  ] = await Promise.all([
+    recorder.requiredRecord("operating_envelope", candidate.operatingEnvelopeId, "envelope_missing"),
+    recorder.requiredRecord("gateway_registry_entry", candidate.gatewayRegistryEntryId, "gateway_registry_entry_missing"),
+    recorder.requiredRecord("tool_capability", candidate.toolCapabilityId, "tool_capability_missing"),
+    recorder.requiredRecord("action_type", candidate.actionTypeId, "action_type_missing"),
+    candidate.runtimeExecutionId ? recorder.requiredRecord("runtime_execution", candidate.runtimeExecutionId, "runtime_execution_missing") : Promise.resolve(null),
+    candidate.generatedExecutionGraphId ? recorder.requiredRecord("generated_execution_graph", candidate.generatedExecutionGraphId, "generated_execution_graph_missing") : Promise.resolve(null)
+  ]);
+  const recoveryLinkage = await loadRecoveryActionLinkage(recorder, candidate.recoveryRecommendationId);
+  return {
+    input,
+    compilationRecord: compilation,
+    candidate,
+    envelopeRecord,
+    gatewayRecord,
+    toolRecord,
+    actionTypeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord,
+    recoveryLinkage
+  };
+}
+async function assertActionContractProposalContext(context) {
+  const { candidate, compilationRecord, envelopeRecord, gatewayRecord, toolRecord, actionTypeRecord } = context;
+  assertPinnedDigest("operating_envelope", envelopeRecord.canonicalDigest, candidate.operatingEnvelopeDigest);
+  assertPinnedDigest("gateway_registry_entry", gatewayRecord.canonicalDigest, candidate.gatewayRegistryDigest);
+  assertPinnedDigest("tool_capability", toolRecord.canonicalDigest, candidate.toolCapabilityDigest);
+  assertPinnedDigest("action_type", actionTypeRecord.canonicalDigest, candidate.actionTypeDigest);
+  assertRuntimeExecutionPinned(candidate, context.runtimeExecutionRecord);
+  assertGeneratedExecutionGraphRecordPinned(candidate, context.generatedExecutionGraphRecord);
+  const recomputedParamsDigest = await protectedActionParamsDigest({
+    parameters: candidate.parameters,
+    secretRefs: candidate.secretRefs,
+    gatewayCredentialRefs: candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: candidate.delegatedAuthorityRefs
+  });
+  if (recomputedParamsDigest !== candidate.paramsDigest) {
+    throw new HandshakeProtocolError("candidate_params_digest_mismatch", "Candidate params digest no longer matches stored candidate parameter material.", 409);
+  }
+  const envelope = envelopeRecord.payload;
+  const gateway = gatewayRecord.payload;
+  assertTransition(guardActionProposal({
+    tenantId: compilationRecord.payload.tenantId,
+    organizationId: compilationRecord.payload.organizationId,
+    principalId: compilationRecord.payload.principalId,
+    agentId: compilationRecord.payload.agentId,
+    runId: compilationRecord.payload.runId,
+    envelopeId: candidate.operatingEnvelopeId,
+    gatewayId: candidate.gatewayId,
+    compilation: compilationRecord.payload,
+    envelope,
+    gateway
+  }));
+}
+async function buildActionContractPlan(input, context) {
+  const { candidate, compilationRecord, envelopeRecord, gatewayRecord, actionTypeRecord, recoveryLinkage } = context;
+  const recordPlan = await buildActionContractRecord({
+    input,
+    candidate,
+    compilation: compilationRecord.payload,
+    envelope: envelopeRecord.payload,
+    gateway: gatewayRecord.payload,
+    actionType: actionTypeRecord.payload,
+    recoveryLinkage
+  });
+  return { context, ...recordPlan };
+}
+async function buildActionContractCommitPlan(buildPlan) {
+  const { contract, context, createdAt } = buildPlan;
+  const { recoveryLinkage } = context;
+  const recoveryObjectRefs = contract.recoveryRecommendationId && contract.recoverySourceReceiptId ? [contract.recoveryRecommendationId, contract.recoverySourceReceiptId] : [];
+  const recoveryStatusChange = recoveryLinkage ? await buildRecoveryRecommendationStatusChange({
+    recommendation: recoveryLinkage.recommendation,
+    sourceContract: recoveryLinkage.sourceContract,
+    nextStatus: "superseded",
+    reasonCode: "followup_action_contract_proposed",
+    reasonSummary: "Recovery recommendation was superseded by a linked follow-up action contract.",
+    changedByRef: contract.actionContractId,
+    supersededByActionContractId: contract.actionContractId,
+    now: createdAt
+  }) : null;
+  const recoveryStatusEvents = recoveryStatusChange && recoveryLinkage ? statusChangeEvents(recoveryStatusChange, recoveryLinkage.sourceContract) : [];
+  return { ...buildPlan, recoveryObjectRefs, recoveryStatusChange, recoveryStatusEvents };
+}
+async function commitActionContractPlan(recorder, plan) {
+  const { contract, context, recoveryObjectRefs, recoveryStatusChange, recoveryStatusEvents } = plan;
+  const { recoveryLinkage } = context;
+  try {
+    await recorder.commitRecordsWithEvents([
+      { objectType: "action_contract", payload: contract },
+      ...recoveryStatusChange ? statusChangeRecords(recoveryStatusChange) : []
+    ], [
+      {
+        source: contract,
+        eventType: "action_proposed",
+        objectRefs: [contract.actionContractId, ...recoveryObjectRefs],
+        streamRefs: actionLifecycleStreamRefs(contract),
+        payload: {
+          actionClass: contract.actionClass,
+          gatewayId: contract.gatewayId,
+          resourceRef: contract.resourceRef,
+          recoveryRecommendationId: contract.recoveryRecommendationId
+        }
+      },
+      ...recoveryStatusEvents
+    ], { recoveryTerminalClaims: recoveryStatusChange ? [recoveryStatusChange.terminalClaim] : [] });
+  } catch (error51) {
+    if (isRecoveryTerminalConflict2(error51) && recoveryLinkage) {
+      const proofGap = await recordRecoveryTerminalConflictProofGap(recorder, {
+        recommendation: recoveryLinkage.recommendation,
+        sourceContract: recoveryLinkage.sourceContract,
+        attemptedObjectRef: contract.actionContractId,
+        changedByRef: contract.actionContractId
+      });
+      throw new HandshakeProtocolError(error51.code, error51.message, error51.status, {
+        ...error51.metadata,
+        retryability: "recoverable",
+        commitState: "committed",
+        proofRef: proofGap.proofGapId
+      });
+    }
+    throw error51;
+  }
+}
+function assertCandidateMatchesProposal(candidate, candidateActionId, candidateDigest) {
+  if (candidate.candidateActionId !== candidateActionId) {
+    throw new HandshakeProtocolError("candidate_action_mismatch", "Proposal candidateActionId must match the candidate embedded in the intent compilation record.", 409);
+  }
+  if (candidate.candidateStatus !== "contractable") {
+    throw new HandshakeProtocolError("intent_compilation_not_contractable", "Candidate is rejected; no action contract may be emitted.", 409);
+  }
+  if (!candidate.candidateDigest || candidate.candidateDigest !== candidateDigest) {
+    throw new HandshakeProtocolError("candidate_digest_mismatch", "Proposal candidateDigest must match the candidate embedded in the intent compilation record.", 409);
+  }
+}
+function assertPinnedDigest(objectType, currentDigest, candidateDigest) {
+  if (!candidateDigest) {
+    throw new HandshakeProtocolError("candidate_digest_missing", `Candidate is missing the pinned ${objectType} digest.`, 409);
+  }
+  if (currentDigest !== candidateDigest) {
+    throw new HandshakeProtocolError("candidate_catalog_digest_drift", `Candidate pinned ${objectType} digest does not match the durable record now loaded for proposal.`, 409);
+  }
+}
+function assertRuntimeExecutionPinned(candidate, runtimeExecutionRecord) {
+  if (!runtimeExecutionRecord)
+    return;
+  assertPinnedDigest("runtime_execution", runtimeExecutionRecord.payload.runtimeExecutionDigest, candidate.runtimeExecutionDigest);
+}
+function assertGeneratedExecutionGraphRecordPinned(candidate, generatedExecutionGraphRecord) {
+  if (!generatedExecutionGraphRecord)
+    return;
+  assertGeneratedExecutionGraphPinned(candidate, generatedExecutionGraphRecord.payload);
+}
+function assertGeneratedExecutionGraphPinned(candidate, graph) {
+  assertPinnedDigest("generated_execution_graph", graph.graphDigest, candidate.generatedExecutionGraphDigest);
+  if (graph.runtimeExecutionId !== candidate.runtimeExecutionId || graph.runtimeExecutionDigest !== candidate.runtimeExecutionDigest) {
+    throw new HandshakeProtocolError("candidate_generated_execution_graph_runtime_mismatch", "Candidate generated execution graph is not bound to the same runtime execution as the candidate.", 409);
+  }
+  if (graph.coverageStatus !== "fully_covered_no_unsupported_nodes") {
+    throw new HandshakeProtocolError("candidate_generated_execution_graph_not_contractable", "Generated execution graph must be fully covered before an action contract can be proposed.", 409);
+  }
+  if (candidate.generatedExecutionCoverageStatus !== graph.coverageStatus) {
+    throw new HandshakeProtocolError("candidate_generated_execution_graph_status_mismatch", "Candidate generated execution graph coverage status no longer matches the stored graph.", 409);
+  }
+  const node = graph.nodes.find((entry2) => entry2.nodeId === candidate.generatedExecutionNodeId) ?? null;
+  if (!node) {
+    throw new HandshakeProtocolError("candidate_generated_execution_node_missing", "Candidate generated execution node was not found in the stored graph.", 409);
+  }
+  if (node.nodeDigest !== candidate.generatedExecutionNodeDigest) {
+    throw new HandshakeProtocolError("candidate_generated_execution_node_digest_mismatch", "Candidate generated execution node digest no longer matches the stored graph node.", 409);
+  }
+  if (node.nodeGatewayBindingDigest !== candidate.generatedExecutionNodeGatewayBindingDigest) {
+    throw new HandshakeProtocolError("candidate_generated_execution_node_gateway_binding_mismatch", "Candidate generated execution node gateway binding no longer matches the stored graph node.", 409);
+  }
+}
+function assertTransition(result) {
+  if (!result.ok) {
+    throw new HandshakeProtocolError(result.code, result.message, result.status);
+  }
+}
+function isRecoveryTerminalConflict2(error51) {
+  return error51 instanceof HandshakeProtocolError && error51.code === "recovery_terminal_conflict";
+}
+// src/protocol/areas/authority-certificate/transitions.ts
+async function createAuthorityCertificate(store, recorder, inputValue) {
+  const input = CreateAuthorityCertificateInputSchema.parse(inputValue);
+  const context = await loadTerminalContext(store, recorder, input);
+  const certificate = await buildAuthorityCertificate(store, context, input);
+  await recorder.commitRecordsWithEvents([{ objectType: "authority_certificate", payload: certificate }], [
+    {
+      source: certificate,
+      eventType: "authority_certificate_emitted",
+      objectRefs: [
+        certificate.authorityCertificateId,
+        certificate.terminal.terminalObjectRef,
+        certificate.terminal.actionContractId
+      ],
+      streamRefs: actionLifecycleStreamRefs(context.contractRecord.payload),
+      payload: {
+        terminalKind: certificate.terminal.terminalKind,
+        signingInputDigest: certificate.signingInputDigest
+      }
+    }
+  ]);
+  return certificate;
+}
+async function buildAuthorityCertificate(store, context, input) {
+  const contract = context.contractRecord.payload;
+  const receipt = context.receiptRecord?.payload ?? null;
+  const assembly2 = await assembleAgentTransactionEnvelope(store, contract);
+  const envelope = await projectAgentTransactionEnvelope({
+    ...assembly2.input,
+    contract,
+    policyDecision: context.policyDecisionRecord.payload,
+    greenlight: context.greenlightRecord?.payload ?? null,
+    gateAttempt: context.gateAttemptRecord?.payload ?? null,
+    mutationAttempt: context.mutationAttemptRecord?.payload ?? null,
+    receipt,
+    proofGaps: [...assembly2.input.proofGaps ?? [], ...context.proofGapRecords.map((record2) => record2.payload)].filter(uniqueById("proofGapId")),
+    refusals: [...assembly2.input.refusals ?? [], ...context.refusalRecords.map((record2) => record2.payload)].filter(uniqueById("refusalId"))
+  });
+  const artifacts = artifactsForContext(context, assembly2.supplementalRecords);
+  const gatewayAdmissionRequired = Boolean(context.gateAttemptRecord);
+  const certificateSeed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: nowIso(),
+    authorityCertificateId: createId("cert"),
+    authorityCertificateVersion: "1.0.0",
+    canonicalizerVersion: CANONICALIZER_VERSION,
+    terminalizedAt: context.terminalizedAt,
+    terminal: {
+      terminalKind: context.terminalKind,
+      terminalObjectRef: context.terminalObjectRef,
+      actionContractId: contract.actionContractId,
+      policyDecisionId: context.policyDecisionRecord.payload.policyDecisionId,
+      greenlightId: context.greenlightRecord?.payload.greenlightId ?? null,
+      gatewayId: contract.gatewayId
+    },
+    envelope,
+    envelopeDigest: envelope.envelopeDigest,
+    artifacts,
+    verificationPolicy: {
+      verificationPolicyId: `authority-cert:${context.terminalKind}:v1`,
+      terminalKind: context.terminalKind,
+      actionClass: contract.actionClass,
+      gatewayAdmissionRequired,
+      requiredSignerRoles: requiredSignerRoles(gatewayAdmissionRequired),
+      requiredArtifactKinds: requiredArtifactKinds(artifacts)
+    },
+    signatures: [],
+    consumerBindings: input.consumerBindings,
+    extensions: input.extensions,
+    emittedAt: nowIso(),
+    signingInputDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  };
+  const signingInputDigest = await authorityCertificateSigningInputDigest(certificateSeed);
+  const signingInput = buildAuthorityCertificateSigningInput(certificateSeed);
+  const signatures = await Promise.all(input.signers.map((signer) => signAuthorityCertificateSigningInput(signingInput, signingInputDigest, signer)));
+  return AuthorityCertificateSchema.parse({
+    ...certificateSeed,
+    signatures,
+    signingInputDigest
+  });
+}
+async function loadTerminalContext(store, recorder, input) {
+  const terminalRef = parseTerminalObjectRef(input.terminalObjectRef);
+  if (terminalRef.objectType === "receipt") {
+    const receiptRecord = await recorder.requiredRecord("receipt", terminalRef.objectId, "receipt_missing");
+    return loadReceiptTerminalContext(store, recorder, receiptRecord);
+  }
+  if (terminalRef.objectType === "refusal") {
+    const refusalRecord = await recorder.requiredRecord("refusal", terminalRef.objectId, "refusal_missing");
+    return loadRefusalTerminalContext(store, recorder, refusalRecord);
+  }
+  if (terminalRef.objectType === "proof_gap") {
+    const proofGapRecord = await recorder.requiredRecord("proof_gap", terminalRef.objectId, "proof_gap_missing");
+    return loadProofGapTerminalContext(store, recorder, proofGapRecord);
+  }
+  throw new HandshakeProtocolError("invalid_authority_certificate_terminal", "AuthorityCertificate may be minted only for receipt, refusal, proof_gap, or replay receipt terminals.", 409);
+}
+async function loadReceiptTerminalContext(store, recorder, receiptRecord) {
+  const receipt = receiptRecord.payload;
+  const contractRecord = await recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing");
+  const policyDecisionRecord = await recorder.requiredRecord("policy_decision", receipt.policyDecisionId, "policy_decision_missing");
+  const greenlightRecord = receipt.greenlightId ? await recorder.requiredRecord("greenlight", receipt.greenlightId, "greenlight_missing") : null;
+  const gateAttemptRecord = receipt.gateAttemptId ? await recorder.requiredRecord("gateway_check_attempt", receipt.gateAttemptId, "gateway_check_attempt_missing") : null;
+  const mutationAttemptRecord = receipt.mutationAttemptId ? await recorder.requiredRecord("mutation_attempt", receipt.mutationAttemptId, "mutation_attempt_missing") : null;
+  const proofGapRecords = await loadProofGapRecords(recorder, receipt.proofGapIds);
+  const refusalRecords = await scopedRefusals2(store, contractRecord.payload);
+  return {
+    terminalKind: receipt.greenlightConsumptionStatus === "replayed" ? "replay_refusal" : "receipt",
+    terminalObjectRef: protocolObjectRef("receipt", receipt.receiptId),
+    terminalizedAt: receipt.emittedAt,
+    contractRecord,
+    policyDecisionRecord,
+    greenlightRecord,
+    gateAttemptRecord,
+    mutationAttemptRecord,
+    receiptRecord,
+    proofGapRecords,
+    refusalRecords,
+    terminalRecord: receiptRecord
+  };
+}
+async function loadRefusalTerminalContext(store, recorder, refusalRecord) {
+  const refusal = refusalRecord.payload;
+  if (!refusal.actionContractId || !refusal.policyDecisionId) {
+    throw new HandshakeProtocolError("invalid_authority_certificate_terminal", "Durable refusal certificates require an action contract and policy decision.", 409);
+  }
+  const contractRecord = await recorder.requiredRecord("action_contract", refusal.actionContractId, "contract_missing");
+  const policyDecisionRecord = await recorder.requiredRecord("policy_decision", refusal.policyDecisionId, "policy_decision_missing");
+  const greenlightRecord = refusal.greenlightId ? await recorder.requiredRecord("greenlight", refusal.greenlightId, "greenlight_missing") : null;
+  const gateAttemptRecord = refusal.gateAttemptId ? await recorder.requiredRecord("gateway_check_attempt", refusal.gateAttemptId, "gateway_check_attempt_missing") : null;
+  return {
+    terminalKind: "durable_refusal",
+    terminalObjectRef: protocolObjectRef("refusal", refusal.refusalId),
+    terminalizedAt: refusal.refusedAt,
+    contractRecord,
+    policyDecisionRecord,
+    greenlightRecord,
+    gateAttemptRecord,
+    mutationAttemptRecord: null,
+    receiptRecord: null,
+    proofGapRecords: [],
+    refusalRecords: [refusalRecord],
+    terminalRecord: refusalRecord
+  };
+}
+async function loadProofGapTerminalContext(store, recorder, proofGapRecord) {
+  const proofGap = proofGapRecord.payload;
+  if (!proofGap.receiptId) {
+    throw new HandshakeProtocolError("invalid_authority_certificate_terminal", "Proof-gap certificates require a terminal receipt reference for offline reconstruction.", 409);
+  }
+  const receiptRecord = await recorder.requiredRecord("receipt", proofGap.receiptId, "receipt_missing");
+  const context = await loadReceiptTerminalContext(store, recorder, receiptRecord);
+  const proofGapRecords = [proofGapRecord, ...context.proofGapRecords].filter(uniqueRecordById);
+  return {
+    ...context,
+    terminalKind: "proof_gap",
+    terminalObjectRef: protocolObjectRef("proof_gap", proofGap.proofGapId),
+    terminalizedAt: proofGap.createdAt,
+    proofGapRecords,
+    terminalRecord: proofGapRecord
+  };
+}
+function artifactsForContext(context, supplementalRecords) {
+  return [
+    artifactForRecord(context.contractRecord, "action_contract"),
+    artifactForRecord(context.policyDecisionRecord, "policy_decision"),
+    context.greenlightRecord ? artifactForRecord(context.greenlightRecord, "greenlight") : null,
+    context.gateAttemptRecord ? artifactForRecord(context.gateAttemptRecord, "gateway_check_attempt") : null,
+    context.mutationAttemptRecord ? artifactForRecord(context.mutationAttemptRecord, "mutation_attempt") : null,
+    context.receiptRecord ? artifactForRecord(context.receiptRecord, "receipt") : null,
+    ...context.proofGapRecords.map((record2) => artifactForRecord(record2, "proof_gap")),
+    ...context.refusalRecords.map((record2) => artifactForRecord(record2, "refusal")),
+    ...supplementalRecords.map((record2) => artifactForRecord(record2, record2.objectType)),
+    artifactForRecord(context.terminalRecord, context.terminalRecord.objectType)
+  ].filter((artifact) => artifact !== null).filter(uniqueArtifact);
+}
+function artifactForRecord(record2, kind) {
+  return {
+    kind,
+    objectRef: protocolObjectRef(record2.objectType, record2.objectId),
+    digest: record2.canonicalDigest
+  };
+}
+function requiredSignerRoles(gatewayAdmissionRequired) {
+  return gatewayAdmissionRequired ? ["operator_policy", "gateway"] : ["operator_policy"];
+}
+function requiredArtifactKinds(artifacts) {
+  return artifacts.map((artifact) => artifact.kind).filter((kind, index, values) => values.indexOf(kind) === index);
+}
+async function loadProofGapRecords(recorder, proofGapIds) {
+  return Promise.all(proofGapIds.map((proofGapId) => recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing")));
+}
+async function scopedRefusals2(store, contract) {
+  const refusals = await store.listRecordsByType("refusal", {
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId
+  });
+  return refusals.filter((record2) => record2.payload.actionContractId === contract.actionContractId);
+}
+function parseTerminalObjectRef(ref) {
+  const separatorIndex = ref.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === ref.length - 1) {
+    throw new HandshakeProtocolError("invalid_authority_certificate_terminal_ref", "AuthorityCertificate terminalObjectRef must use object_type:object_id form.", 409);
+  }
+  return { objectType: ref.slice(0, separatorIndex), objectId: ref.slice(separatorIndex + 1) };
+}
+function uniqueArtifact(artifact, index, artifacts) {
+  return artifacts.findIndex((candidate) => candidate.objectRef === artifact.objectRef) === index;
+}
+function uniqueRecordById(record2, index, records2) {
+  return records2.findIndex((candidate) => candidate.objectId === record2.objectId) === index;
+}
+function uniqueById(idField) {
+  return (value, index, values) => values.findIndex((candidate) => candidate[idField] === value[idField]) === index;
+}
+// src/protocol/areas/gateway-gate/inputs.ts
+var GatewayCheckInputSchema = exports_external.strictObject({
+  actionContractId: exports_external.string().min(1),
+  greenlightId: exports_external.string().min(1),
+  observedParameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  surfaceOperationRef: exports_external.string().min(1).optional()
+});
+// src/protocol/areas/policy-greenlight/inputs.ts
+var EvaluatePolicyInputSchema = exports_external.strictObject({
+  actionContractId: exports_external.string().min(1),
+  envelopeId: exports_external.string().min(1),
+  policyEvaluatorVersion: exports_external.string().min(1).default("handshake-policy-0.2"),
+  signingSecret: exports_external.string().min(1).optional(),
+  reviewDecisionId: exports_external.string().min(1).optional()
+});
+// src/protocol/areas/policy-greenlight/guards.ts
+function guardPolicyEvaluation(contract, envelope) {
+  if (contract.envelopeId !== envelope.envelopeId) {
+    return fail("invalid_transition_envelope_mismatch", "Policy may evaluate only the envelope pinned by the action contract.");
+  }
+  if (contract.tenantId !== envelope.tenantId || contract.organizationId !== envelope.organizationId || contract.principalId !== envelope.principalId || contract.agentId !== envelope.agentId) {
+    return fail("invalid_transition_scope_mismatch", "Policy envelope scope must match the action contract scope.");
+  }
+  return ok();
+}
+// src/protocol/areas/policy-greenlight/policy.ts
+function evaluateDeterministicPolicy(contract, envelope, isolationStates, now) {
+  const blockingIsolation = isolationStates.find((state) => ["quarantined", "halted", "revoked", "state_suspect"].includes(state.state));
+  if (blockingIsolation) {
+    return {
+      decision: blockingIsolation.state === "halted" ? "halt" : "quarantine",
+      reasonCode: `isolation_${blockingIsolation.state}`,
+      reason: `Current isolation state blocks this action at ${blockingIsolation.scopeType}:${blockingIsolation.scopeId}.`,
+      matchedRuleIds: ["isolation_state_blocks_action"]
+    };
+  }
+  if (isolationStates.some((state) => state.state === "review_only")) {
+    return {
+      decision: "review_required",
+      reasonCode: "isolation_review_only",
+      reason: "Current isolation state requires review before greenlight.",
+      matchedRuleIds: ["isolation_state_requires_review"]
+    };
+  }
+  if (Date.parse(contract.expiresAt) <= Date.parse(now)) {
+    return {
+      decision: "refuse",
+      reasonCode: "contract_expired",
+      reason: "Action contract is expired.",
+      matchedRuleIds: ["freshness"]
+    };
+  }
+  if (envelope.revokedAt !== null || Date.parse(envelope.expiresAt) <= Date.parse(now)) {
+    return {
+      decision: "refuse",
+      reasonCode: "envelope_not_active",
+      reason: "Operating envelope is expired or revoked.",
+      matchedRuleIds: ["envelope_active"]
+    };
+  }
+  if (!envelope.allowedActionClasses.includes(contract.actionClass)) {
+    return {
+      decision: "refuse",
+      reasonCode: "action_class_outside_envelope",
+      reason: "Action class is outside the operating envelope.",
+      matchedRuleIds: ["action_class_allowed"]
+    };
+  }
+  if (!envelope.allowedGateways.includes(contract.gatewayId)) {
+    return {
+      decision: "refuse",
+      reasonCode: "gateway_outside_envelope",
+      reason: "Gateway is outside the operating envelope.",
+      matchedRuleIds: ["gateway_allowed"]
+    };
+  }
+  if (!envelope.allowedResources.includes("*") && !envelope.allowedResources.includes(contract.resourceRef)) {
+    return {
+      decision: "refuse",
+      reasonCode: "resource_outside_envelope",
+      reason: "Resource is outside the operating envelope.",
+      matchedRuleIds: ["resource_allowed"]
+    };
+  }
+  return {
+    decision: "greenlight",
+    reasonCode: "policy_passed",
+    reason: "Exact contract is inside envelope and no isolation blocks it.",
+    matchedRuleIds: ["envelope_bounds", "isolation_clear"]
+  };
+}
+function reviewDecisionAllowsGreenlight(reviewDecision, contract, policyInputDigest, now) {
+  return reviewDecision.decision === "approve" && Date.parse(reviewDecision.decisionExpiresAt) > Date.parse(now) && reviewDecision.actionContractId === contract.actionContractId && reviewDecision.actionContractDigest === contract.actionContractDigest && reviewDecision.policyInputDigest === policyInputDigest && reviewDecision.gatewayPolicyVersion === contract.gatewayPolicyVersion;
+}
+function isolationSnapshotRef(states) {
+  if (states.length === 0)
+    return "isolation:none";
+  return `isolation:${states.map((state) => `${state.tenantId}:${state.organizationId}:${state.scopeType}:${state.scopeId}:${state.isolationStateId}:${state.version}`).sort().join("|")}`;
+}
+// src/protocol/areas/policy-greenlight/sequence-dependencies.ts
+async function loadSequenceDependencyStates(store, contract) {
+  if (contract.requiredPriorActionContractIds.length === 0)
+    return [];
+  const [policyDecisionRecords, greenlightRecords] = await Promise.all([
+    store.listRecordsByType("policy_decision", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    }),
+    store.listRecordsByType("greenlight", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    })
+  ]);
+  const policyDecisionsByActionContractId = indexByActionContractId(policyDecisionRecords.map((record2) => record2.payload));
+  const greenlightsByActionContractId = indexByActionContractId(greenlightRecords.map((record2) => record2.payload));
+  const states = [];
+  for (const requiredPriorActionContractId of contract.requiredPriorActionContractIds) {
+    const requiredContract = await store.getRecord("action_contract", requiredPriorActionContractId);
+    if (!requiredContract || !sameProtocolScope(contract, requiredContract.payload)) {
+      states.push({
+        requiredPriorActionContractId,
+        status: "missing",
+        policyDecisionId: null,
+        policyDecisionValue: null,
+        greenlightId: null
+      });
+      continue;
+    }
+    const greenlight = greenlightsByActionContractId.get(requiredPriorActionContractId) ?? null;
+    const policyDecision = policyDecisionsByActionContractId.get(requiredPriorActionContractId) ?? null;
+    states.push({
+      requiredPriorActionContractId,
+      status: greenlight ? "greenlit" : policyDecision?.decision === "refuse" ? "refused" : "not_greenlit",
+      policyDecisionId: policyDecision?.policyDecisionId ?? null,
+      policyDecisionValue: policyDecision?.decision ?? null,
+      greenlightId: greenlight?.greenlightId ?? null
+    });
+  }
+  return states;
+}
+function evaluateSequenceDependencies(states) {
+  const failedState = states.find((state) => state.status !== "greenlit");
+  if (!failedState)
+    return null;
+  return {
+    decision: "refuse",
+    reasonCode: `prior_action_${failedState.status}`,
+    reason: `Required prior action contract ${failedState.requiredPriorActionContractId} is ${failedState.status}.`,
+    matchedRuleIds: ["sequence_dependency_greenlit"]
+  };
+}
+async function loadGatewayCheckSequenceDependencyStates(store, contract) {
+  if (contract.requiredPriorActionContractIds.length === 0)
+    return [];
+  const [policyDecisionRecords, greenlightRecords, receiptRecords, reconciliationRecords] = await Promise.all([
+    store.listRecordsByType("policy_decision", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    }),
+    store.listRecordsByType("greenlight", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    }),
+    store.listRecordsByType("receipt", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    }),
+    store.listRecordsByType("surface_operation_reconciliation", {
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId
+    })
+  ]);
+  const policyDecisionsByActionContractId = indexByActionContractId(policyDecisionRecords.map((record2) => record2.payload));
+  const greenlightsByActionContractId = indexByActionContractId(greenlightRecords.map((record2) => record2.payload));
+  const receiptsByActionContractId = groupByActionContractId(receiptRecords.map((record2) => record2.payload));
+  const reconciliationsByMutationAttemptId = groupByMutationAttemptId(reconciliationRecords.map((record2) => record2.payload));
+  const states = [];
+  for (const requiredPriorActionContractId of contract.requiredPriorActionContractIds) {
+    const requiredContract = await store.getRecord("action_contract", requiredPriorActionContractId);
+    if (!requiredContract || !sameProtocolScope(contract, requiredContract.payload)) {
+      states.push(gatewayCheckSequenceState(requiredPriorActionContractId, "missing"));
+      continue;
+    }
+    const greenlight = greenlightsByActionContractId.get(requiredPriorActionContractId) ?? null;
+    const policyDecision = policyDecisionsByActionContractId.get(requiredPriorActionContractId) ?? null;
+    if (!greenlight) {
+      states.push(gatewayCheckSequenceState(requiredPriorActionContractId, policyDecision?.decision === "refuse" ? "refused" : "not_greenlit", policyDecision ?? null, null, null));
+      continue;
+    }
+    const receipts = receiptsByActionContractId.get(requiredPriorActionContractId) ?? [];
+    const finalPassedReceipt = receipts.find((receipt) => receipt.gatewayCheckStatus === "passed" && (receipt.finalityStatus === "final" || hasFinalReconciliation(receipt, reconciliationsByMutationAttemptId)));
+    if (finalPassedReceipt) {
+      states.push(gatewayCheckSequenceState(requiredPriorActionContractId, "ready", policyDecision ?? null, greenlight, finalPassedReceipt));
+      continue;
+    }
+    const latestReceipt = receipts.at(-1) ?? null;
+    const latestReconciliation = latestReceipt?.mutationAttemptId ? reconciliationsByMutationAttemptId.get(latestReceipt.mutationAttemptId)?.at(-1) ?? null : null;
+    states.push(gatewayCheckSequenceState(requiredPriorActionContractId, latestReceipt ? latestReceipt.gatewayCheckStatus === "refused" ? "gate_refused" : "not_final" : "not_receipted", policyDecision ?? null, greenlight, latestReceipt, latestReconciliation));
+  }
+  return states;
+}
+function gatewayCheckSequenceDependencyRefusalReason(states) {
+  const failedState = states.find((state) => state.status !== "ready");
+  if (!failedState)
+    return null;
+  return `prior_action_${failedState.status}`;
+}
+function gatewayCheckSequenceState(requiredPriorActionContractId, status2, policyDecision = null, greenlight = null, receipt = null, reconciliation = null) {
+  return {
+    requiredPriorActionContractId,
+    status: status2,
+    policyDecisionId: policyDecision?.policyDecisionId ?? null,
+    policyDecisionValue: policyDecision?.decision ?? null,
+    greenlightId: greenlight?.greenlightId ?? null,
+    receiptId: receipt?.receiptId ?? null,
+    gatewayCheckStatus: receipt?.gatewayCheckStatus ?? null,
+    finalityStatus: reconciliation?.finalityStatus ?? receipt?.finalityStatus ?? null
+  };
+}
+function sameProtocolScope(contract, priorContract) {
+  return contract.tenantId === priorContract.tenantId && contract.organizationId === priorContract.organizationId;
+}
+function indexByActionContractId(records2) {
+  const index = new Map;
+  for (const record2 of records2)
+    index.set(record2.actionContractId, record2);
+  return index;
+}
+function groupByActionContractId(records2) {
+  const groups = new Map;
+  for (const record2 of records2) {
+    const group = groups.get(record2.actionContractId) ?? [];
+    group.push(record2);
+    groups.set(record2.actionContractId, group);
+  }
+  return groups;
+}
+function groupByMutationAttemptId(records2) {
+  const groups = new Map;
+  for (const record2 of records2) {
+    const group = groups.get(record2.mutationAttemptId) ?? [];
+    group.push(record2);
+    groups.set(record2.mutationAttemptId, group);
+  }
+  return groups;
+}
+function hasFinalReconciliation(receipt, reconciliationsByMutationAttemptId) {
+  return receipt.mutationAttemptId !== null && (reconciliationsByMutationAttemptId.get(receipt.mutationAttemptId) ?? []).some((reconciliation) => reconciliation.finalityStatus === "final");
+}
+// src/protocol/areas/negotiation/transitions.ts
+async function recordNegotiationSession(recorder, inputValue) {
+  const session = NegotiationSessionSchema.parse(inputValue);
+  await commitNegotiationRecord(recorder, { objectType: "negotiation_session", payload: session }, {
+    eventType: "negotiation_session_recorded",
+    objectRefs: [session.negotiationSessionId],
+    payload: {
+      negotiationSessionId: session.negotiationSessionId,
+      subjectResourceRef: session.subjectResourceRef,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "recorded_only"
+    }
+  });
+  return session;
+}
+async function recordNegotiationOffer(store, recorder, inputValue) {
+  const offer = NegotiationOfferSchema.parse(inputValue);
+  const session = await requiredSession(store, offer.negotiationSessionId, offer);
+  assertFresh(session.payload.expiresAt, offer.createdAt, "negotiation_session_expired", "Negotiation session expired before offer recording.");
+  assertPartyInSession(session.payload, offer.offeredByPartyId);
+  await assertOfferVersionUnique(store, offer);
+  await assertReferencedOfferVersion(store, offer, offer.previousOfferVersionId, "negotiation_offer_missing");
+  await assertReferencedOfferVersion(store, offer, offer.supersedesOfferVersionId, "negotiation_offer_missing");
+  await commitNegotiationRecord(recorder, { objectType: "negotiation_offer", payload: offer }, {
+    eventType: "negotiation_offer_recorded",
+    objectRefs: [offer.negotiationOfferId, offer.negotiationSessionId],
+    payload: {
+      negotiationSessionId: offer.negotiationSessionId,
+      negotiationOfferId: offer.negotiationOfferId,
+      offerVersionId: offer.offerVersionId,
+      offerSequence: offer.offerSequence,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "recorded_only"
+    }
+  });
+  return offer;
+}
+async function recordNegotiationDecision(store, recorder, inputValue) {
+  const decision = NegotiationDecisionSchema.parse(inputValue);
+  const session = await requiredSession(store, decision.negotiationSessionId, decision);
+  assertFresh(session.payload.expiresAt, decision.createdAt, "negotiation_session_expired", "Negotiation session expired before decision recording.");
+  assertPartyInSession(session.payload, decision.decidedByPartyId);
+  const offer = await requiredOfferByVersion(store, decision.negotiationSessionId, decision.decidedOfferVersionId, decision);
+  assertFresh(offer.payload.expiresAt, decision.createdAt, "negotiation_offer_expired", "Negotiation offer expired before decision recording.");
+  if (offer.payload.offerSequence !== decision.decidedOfferSequence) {
+    throw protocolError("negotiation_offer_sequence_mismatch", "Negotiation decision must bind to the exact offer sequence it decided.");
+  }
+  if (decision.decision === "accept")
+    await assertOfferIsCurrent(store, offer.payload);
+  if (decision.decision === "counter") {
+    const counter = await requiredOfferByVersion(store, decision.negotiationSessionId, decision.counterOfferVersionId ?? "", decision);
+    assertFresh(counter.payload.expiresAt, decision.createdAt, "negotiation_offer_expired", "Counter offer expired before decision recording.");
+    if (counter.payload.offerSequence <= offer.payload.offerSequence) {
+      throw protocolError("negotiation_counter_offer_stale", "Counter decisions must bind a later offer version.");
+    }
+  }
+  await commitNegotiationRecord(recorder, { objectType: "negotiation_decision", payload: decision }, {
+    eventType: "negotiation_decision_recorded",
+    objectRefs: [decision.negotiationDecisionId, decision.negotiationSessionId, offer.payload.negotiationOfferId],
+    payload: {
+      negotiationSessionId: decision.negotiationSessionId,
+      negotiationDecisionId: decision.negotiationDecisionId,
+      decidedOfferVersionId: decision.decidedOfferVersionId,
+      decision: decision.decision,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "recorded_only"
+    }
+  });
+  return decision;
+}
+async function recordLinkedAgreement(store, recorder, inputValue) {
+  const agreement = LinkedAgreementSchema.parse(inputValue);
+  const session = await requiredSession(store, agreement.negotiationSessionId, agreement);
+  assertFresh(session.payload.expiresAt, agreement.createdAt, "negotiation_session_expired", "Negotiation session expired before linked agreement recording.");
+  const decision = await requiredDecision(store, agreement.acceptedNegotiationDecisionId, agreement);
+  if (decision.payload.negotiationSessionId !== agreement.negotiationSessionId) {
+    throw protocolError("negotiation_decision_session_mismatch", "Linked agreement decision must belong to its session.");
+  }
+  if (decision.payload.decision !== "accept") {
+    throw protocolError("negotiation_decision_not_accept", "Linked agreements can only derive from accept decisions.");
+  }
+  const offer = await requiredOfferByVersion(store, agreement.negotiationSessionId, agreement.acceptedOfferVersionId, agreement);
+  assertFresh(offer.payload.expiresAt, agreement.createdAt, "negotiation_offer_expired", "Negotiation offer expired before linked agreement recording.");
+  if (decision.payload.decidedOfferVersionId !== agreement.acceptedOfferVersionId) {
+    throw protocolError("linked_agreement_offer_mismatch", "Linked agreement must bind the accepted decision offer.");
+  }
+  if (offer.payload.offerSequence !== agreement.acceptedOfferSequence || decision.payload.decidedOfferSequence !== agreement.acceptedOfferSequence) {
+    throw protocolError("linked_agreement_offer_mismatch", "Linked agreement must bind the exact accepted offer sequence.");
+  }
+  if (offer.payload.offerContentDigest !== agreement.acceptedOfferContentDigest) {
+    throw protocolError("linked_agreement_digest_mismatch", "Linked agreement must pin the accepted offer content digest.");
+  }
+  if (decision.payload.decidedByPartyId !== agreement.acceptedByPartyId) {
+    throw protocolError("linked_agreement_party_mismatch", "Linked agreement must name the accepting party.");
+  }
+  const acceptedParty = partyById(session.payload, agreement.acceptedByPartyId);
+  if (acceptedParty.agentRef !== agreement.counterpartyRef) {
+    throw protocolError("linked_agreement_counterparty_mismatch", "Linked agreement counterparty ref must bind to the accepting party agent ref.");
+  }
+  await assertLinkedAgreementUnique(store, agreement);
+  await commitNegotiationRecord(recorder, { objectType: "linked_agreement", payload: agreement }, {
+    eventType: "linked_agreement_recorded",
+    objectRefs: [
+      agreement.linkedAgreementId,
+      agreement.negotiationSessionId,
+      agreement.acceptedNegotiationDecisionId,
+      offer.payload.negotiationOfferId
+    ],
+    payload: {
+      linkedAgreementId: agreement.linkedAgreementId,
+      negotiationSessionId: agreement.negotiationSessionId,
+      acceptedOfferVersionId: agreement.acceptedOfferVersionId,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "local_evidence_only"
+    }
+  });
+  return agreement;
+}
+async function recordAgreementObligationBinding(store, recorder, inputValue) {
+  const binding = AgreementObligationBindingSchema.parse(inputValue);
+  const agreement = await requiredLinkedAgreement(store, binding.linkedAgreementId, binding);
+  if (agreement.payload.negotiationSessionId !== binding.negotiationSessionId) {
+    throw protocolError("linked_agreement_session_mismatch", "Obligation binding must belong to its agreement session.");
+  }
+  const status2 = await currentAgreementStatus(store, agreement.payload);
+  if (status2 !== "active") {
+    throw protocolError("agreement_not_active", "Only active linked agreements may be bound to an action contract.");
+  }
+  const contract = await store.getRecord("action_contract", binding.actionContractId);
+  if (!contract) {
+    throw protocolError("agreement_obligation_contract_missing", "Agreement obligation binding requires an action contract.");
+  }
+  assertSameScope(contract.payload, binding, "agreement_obligation_contract_scope_mismatch");
+  assertBindingMatchesContract(binding, contract.payload);
+  assertBindingMatchesAgreement(binding, agreement.payload);
+  await assertAgreementBindingUnique(store, binding);
+  await commitNegotiationRecord(recorder, { objectType: "agreement_obligation_binding", payload: binding }, {
+    eventType: "agreement_obligation_binding_recorded",
+    objectRefs: [binding.agreementObligationBindingId, binding.linkedAgreementId, binding.actionContractId],
+    payload: {
+      agreementObligationBindingId: binding.agreementObligationBindingId,
+      linkedAgreementId: binding.linkedAgreementId,
+      actionContractId: binding.actionContractId,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "local_evidence_only"
+    }
+  });
+  return binding;
+}
+async function transitionAgreementStatus(store, recorder, inputValue) {
+  const transition = AgreementStatusTransitionSchema.parse(inputValue);
+  const agreement = await requiredLinkedAgreement(store, transition.linkedAgreementId, transition);
+  if (agreement.payload.negotiationSessionId !== transition.negotiationSessionId) {
+    throw protocolError("linked_agreement_session_mismatch", "Agreement status transition must belong to its session.");
+  }
+  const current = await currentAgreementStatus(store, agreement.payload);
+  if (current !== transition.fromStatus) {
+    throw protocolError("agreement_status_stale", "Agreement status transition must start from the current status.");
+  }
+  if (!isAllowedStatusTransition(transition.fromStatus, transition.toStatus)) {
+    throw protocolError("agreement_status_transition_invalid", "Agreement status transition is not allowed.");
+  }
+  await commitNegotiationRecord(recorder, { objectType: "agreement_status_transition", payload: transition }, {
+    eventType: "agreement_status_transition_recorded",
+    objectRefs: [transition.agreementStatusTransitionId, transition.linkedAgreementId],
+    payload: {
+      agreementStatusTransitionId: transition.agreementStatusTransitionId,
+      linkedAgreementId: transition.linkedAgreementId,
+      fromStatus: transition.fromStatus,
+      toStatus: transition.toStatus,
+      authorityCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      evidencePosture: "recorded_only"
+    }
+  });
+  return transition;
+}
+async function currentAgreementStatus(store, agreement) {
+  const transitions9 = await store.listRecordsByType("agreement_status_transition", {
+    tenantId: agreement.tenantId,
+    organizationId: agreement.organizationId
+  });
+  const ordered = transitions9.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
+  return ordered.at(-1)?.transition.toStatus ?? "active";
+}
+async function commitNegotiationRecord(recorder, record2, descriptor) {
+  await recorder.commitRecordsWithEvents([record2], [
+    {
+      ...descriptor,
+      source: record2.payload
+    }
+  ], { recordConflictMode: "absent_or_same" });
+}
+async function requiredSession(store, negotiationSessionId, expectedScope) {
+  const session = await store.getRecord("negotiation_session", negotiationSessionId);
+  if (!session)
+    throw protocolError("negotiation_session_missing", "Negotiation session was not found.", 404);
+  assertSameScope(session.payload, expectedScope, "negotiation_scope_mismatch");
+  return session;
+}
+async function requiredDecision(store, negotiationDecisionId, expectedScope) {
+  const decision = await store.getRecord("negotiation_decision", negotiationDecisionId);
+  if (!decision)
+    throw protocolError("negotiation_decision_missing", "Negotiation decision was not found.", 404);
+  assertSameScope(decision.payload, expectedScope, "negotiation_scope_mismatch");
+  return decision;
+}
+async function requiredLinkedAgreement(store, linkedAgreementId, expectedScope) {
+  const agreement = await store.getRecord("linked_agreement", linkedAgreementId);
+  if (!agreement)
+    throw protocolError("linked_agreement_missing", "Linked agreement was not found.", 404);
+  assertSameScope(agreement.payload, expectedScope, "negotiation_scope_mismatch");
+  return agreement;
+}
+async function requiredOfferByVersion(store, negotiationSessionId, offerVersionId, expectedScope) {
+  const offers = await store.listRecordsByType("negotiation_offer", expectedScope);
+  const offer = offers.find((candidate) => candidate.payload.negotiationSessionId === negotiationSessionId && candidate.payload.offerVersionId === offerVersionId);
+  if (!offer)
+    throw protocolError("negotiation_offer_missing", "Negotiation offer version was not found.", 404);
+  return offer;
+}
+async function assertReferencedOfferVersion(store, offer, referencedOfferVersionId, code3) {
+  if (referencedOfferVersionId === null)
+    return;
+  const referenced = await requiredOfferByVersion(store, offer.negotiationSessionId, referencedOfferVersionId, offer);
+  if (referenced.payload.offerSequence >= offer.offerSequence) {
+    throw protocolError(code3, "Referenced offer version must precede the new offer.");
+  }
+}
+async function assertOfferVersionUnique(store, offer) {
+  const offers = await store.listRecordsByType("negotiation_offer", {
+    tenantId: offer.tenantId,
+    organizationId: offer.organizationId
+  });
+  const duplicate = offers.find((candidate) => candidate.payload.negotiationSessionId === offer.negotiationSessionId && candidate.payload.offerVersionId === offer.offerVersionId && candidate.payload.negotiationOfferId !== offer.negotiationOfferId);
+  if (duplicate) {
+    throw protocolError("negotiation_offer_version_conflict", "Offer version ids are unique within a session.");
+  }
+}
+async function assertOfferIsCurrent(store, offer) {
+  const offers = await store.listRecordsByType("negotiation_offer", {
+    tenantId: offer.tenantId,
+    organizationId: offer.organizationId
+  });
+  const laterOffer = offers.find((candidate) => candidate.payload.negotiationSessionId === offer.negotiationSessionId && candidate.payload.offerSequence > offer.offerSequence);
+  if (laterOffer)
+    throw protocolError("negotiation_offer_stale", "Accept decisions must bind the current offer.");
+}
+async function assertLinkedAgreementUnique(store, agreement) {
+  const agreements = await store.listRecordsByType("linked_agreement", {
+    tenantId: agreement.tenantId,
+    organizationId: agreement.organizationId
+  });
+  const duplicate = agreements.find((candidate) => candidate.payload.acceptedNegotiationDecisionId === agreement.acceptedNegotiationDecisionId && candidate.payload.linkedAgreementId !== agreement.linkedAgreementId);
+  if (duplicate) {
+    throw protocolError("linked_agreement_duplicate", "Each accepted decision may produce only one linked agreement.");
+  }
+}
+async function assertAgreementBindingUnique(store, binding) {
+  const bindings = await store.listRecordsByType("agreement_obligation_binding", {
+    tenantId: binding.tenantId,
+    organizationId: binding.organizationId
+  });
+  const duplicate = bindings.find((candidate) => (candidate.payload.actionContractId === binding.actionContractId && candidate.payload.obligationRef === binding.obligationRef || candidate.payload.linkedAgreementId === binding.linkedAgreementId && candidate.payload.obligationRef === binding.obligationRef && candidate.payload.counterpartyRef === binding.counterpartyRef) && candidate.payload.obligationRef === binding.obligationRef && candidate.payload.agreementObligationBindingId !== binding.agreementObligationBindingId);
+  if (duplicate) {
+    throw protocolError("agreement_obligation_reused", "Each linked agreement obligation may bind only one action contract.");
+  }
+}
+function assertPartyInSession(session, partyId) {
+  partyById(session, partyId);
+}
+function partyById(session, partyId) {
+  const party = session.parties.find((candidate) => candidate.partyId === partyId);
+  if (!party)
+    throw protocolError("negotiation_party_missing", "Negotiation party was not found in the session.", 404);
+  return party;
+}
+function assertBindingMatchesAgreement(binding, agreement) {
+  if (binding.counterpartyRef !== agreement.counterpartyRef) {
+    throw protocolError("agreement_obligation_counterparty_mismatch", "Agreement obligation binding counterparty does not match the linked agreement.");
+  }
+  if (binding.obligationRef !== agreement.clearingEvidenceRefs.obligationRef) {
+    throw protocolError("agreement_obligation_binding_mismatch", "Agreement obligation binding does not match the agreement obligation ref.");
+  }
+}
+function assertBindingMatchesContract(binding, contract) {
+  const obligationRef = contract.clearingEvidenceRefs.obligationRef ?? null;
+  const counterpartyRef = contract.clearingEvidenceRefs.counterpartyRef ?? null;
+  if (binding.obligationRef !== obligationRef) {
+    throw protocolError("agreement_obligation_binding_mismatch", "Agreement obligation binding must match ActionContract clearingEvidenceRefs.obligationRef.");
+  }
+  if (binding.counterpartyRef !== counterpartyRef) {
+    throw protocolError("agreement_obligation_counterparty_mismatch", "Agreement obligation binding must match ActionContract clearingEvidenceRefs.counterpartyRef.");
+  }
+  if (binding.actionContractDigest !== contract.actionContractDigest) {
+    throw protocolError("agreement_obligation_contract_mismatch", "Agreement obligation binding must pin the exact action contract digest.");
+  }
+  if (binding.paramsDigest !== contract.paramsDigest) {
+    throw protocolError("agreement_obligation_params_mismatch", "Agreement obligation binding must pin the exact action contract params digest.");
+  }
+  if (binding.actionTypeId !== contract.actionTypeId || binding.actionClass !== contract.actionClass || binding.resourceRef !== contract.resourceRef) {
+    throw protocolError("agreement_obligation_contract_mismatch", "Agreement obligation binding action fields must match the action contract.");
+  }
+  const hasActionContractEvidence = binding.localProtectedActionEvidenceRefs.some((ref) => ref.refKind === "action_contract" && refMatchesObjectId(ref.ref, "action_contract", contract.actionContractId) && (ref.digest === null || ref.digest === contract.actionContractDigest));
+  if (!hasActionContractEvidence) {
+    throw protocolError("agreement_obligation_contract_mismatch", "Agreement obligation binding must include local action-contract evidence.");
+  }
+}
+function refMatchesObjectId(ref, objectType, objectId) {
+  return ref === objectId || ref === `${objectType}:${objectId}`;
+}
+function assertSameScope(actual, expected, code3) {
+  if (actual.tenantId !== expected.tenantId || actual.organizationId !== expected.organizationId) {
+    throw protocolError(code3, "Negotiation evidence cannot cross tenant or organization scope.");
+  }
+}
+function assertFresh(expiresAt, now, code3, message) {
+  if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) {
+    throw protocolError(code3, message);
+  }
+}
+function isAllowedStatusTransition(from, to) {
+  if (from === "proposed")
+    return ["active", "expired", "superseded", "withdrawn"].includes(to);
+  if (from === "active")
+    return ["disputed", "expired", "resolved", "superseded", "withdrawn"].includes(to);
+  if (from === "disputed")
+    return ["resolved", "withdrawn"].includes(to);
+  return false;
+}
+function protocolError(code3, message, status2 = 409) {
+  return new HandshakeProtocolError(code3, message, status2);
+}
+// src/protocol/areas/negotiation/policy.ts
+async function evaluateAgreementObligationPolicy(store, contract, now) {
+  const obligationRef = contract.clearingEvidenceRefs.obligationRef ?? null;
+  const counterpartyRef = contract.clearingEvidenceRefs.counterpartyRef ?? null;
+  if (!obligationRef && !counterpartyRef)
+    return ok2(notApplicableInput());
+  if (!obligationRef || !counterpartyRef) {
+    return proofGap(baseInput({ obligationRef, counterpartyRef }), "agreement_obligation_binding_missing");
+  }
+  const bindings = (await store.listRecordsByActionContract("agreement_obligation_binding", contract.actionContractId, {
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId
+  })).map((record2) => record2.payload).filter((binding2) => binding2.actionContractId === contract.actionContractId && binding2.obligationRef === obligationRef);
+  if (bindings.length === 0) {
+    return proofGap(baseInput({ obligationRef, counterpartyRef }), "agreement_obligation_binding_missing");
+  }
+  if (bindings.length > 1) {
+    return proofGap(baseInput({ obligationRef, counterpartyRef }), "agreement_obligation_binding_ambiguous");
+  }
+  const binding = bindings[0];
+  if (!binding)
+    return proofGap(baseInput({ obligationRef, counterpartyRef }), "agreement_obligation_binding_missing");
+  if (!sameScope(binding, contract)) {
+    return refusal(baseInput({
+      obligationRef,
+      counterpartyRef,
+      agreementObligationBindingId: binding.agreementObligationBindingId,
+      linkedAgreementId: binding.linkedAgreementId,
+      actionContractDigest: binding.actionContractDigest,
+      paramsDigest: binding.paramsDigest
+    }), {
+      reasonCode: "agreement_obligation_scope_mismatch",
+      reason: "Agreement obligation binding scope does not match the action contract scope."
+    });
+  }
+  const agreementRecord = await store.getRecord("linked_agreement", binding.linkedAgreementId);
+  const agreement = agreementRecord?.payload ?? null;
+  const agreementStatus = agreement && sameScope(agreement, contract) ? await currentAgreementStatus(store, agreement) : null;
+  const session = agreement && sameScope(agreement, contract) ? await loadAgreementSession(store, agreement) : null;
+  const offer = agreement && sameScope(agreement, contract) ? await loadAgreementOffer(store, agreement) : null;
+  const policyInput = baseInput({
+    obligationRef,
+    counterpartyRef,
+    agreementObligationBindingId: binding.agreementObligationBindingId,
+    linkedAgreementId: binding.linkedAgreementId,
+    agreementStatus,
+    agreementExpiresAt: agreement?.expiresAt ?? null,
+    sessionExpiresAt: session?.expiresAt ?? null,
+    offerExpiresAt: offer?.expiresAt ?? null,
+    actionContractDigest: binding.actionContractDigest,
+    paramsDigest: binding.paramsDigest
+  });
+  if (!agreement)
+    return proofGap(policyInput, "agreement_missing");
+  if (!sameScope(agreement, contract)) {
+    return refusal(policyInput, {
+      reasonCode: "agreement_obligation_scope_mismatch",
+      reason: "Linked agreement scope does not match the action contract scope."
+    });
+  }
+  if (!session)
+    return proofGap(policyInput, "negotiation_session_missing");
+  if (!offer)
+    return proofGap(policyInput, "negotiation_offer_missing");
+  const bindingFailure = bindingFailureForContract(binding, agreement, contract);
+  if (bindingFailure)
+    return refusal(policyInput, bindingFailure);
+  const evidenceFreshnessFailure = evidenceFreshnessFailureForAgreement(agreement, session, offer, now);
+  if (evidenceFreshnessFailure)
+    return refusal(policyInput, evidenceFreshnessFailure);
+  const lifecycleFailure = lifecycleFailureForAgreement(agreement, agreementStatus, now);
+  if (lifecycleFailure)
+    return refusal(policyInput, lifecycleFailure);
+  return ok2({ ...policyInput, posture: "bound" });
+}
+function bindingFailureForContract(binding, agreement, contract) {
+  if (binding.counterpartyRef !== agreement.counterpartyRef) {
+    return {
+      reasonCode: "agreement_obligation_counterparty_mismatch",
+      reason: "Agreement obligation binding counterparty does not match the linked agreement."
+    };
+  }
+  if (binding.obligationRef !== agreement.clearingEvidenceRefs.obligationRef) {
+    return {
+      reasonCode: "agreement_obligation_binding_mismatch",
+      reason: "Agreement obligation binding does not match the linked agreement obligation ref."
+    };
+  }
+  if (binding.obligationRef !== contract.clearingEvidenceRefs.obligationRef) {
+    return {
+      reasonCode: "agreement_obligation_binding_mismatch",
+      reason: "Agreement obligation binding does not match ActionContract clearingEvidenceRefs.obligationRef."
+    };
+  }
+  if (binding.counterpartyRef !== contract.clearingEvidenceRefs.counterpartyRef) {
+    return {
+      reasonCode: "agreement_obligation_counterparty_mismatch",
+      reason: "Agreement obligation binding does not match ActionContract clearingEvidenceRefs.counterpartyRef."
+    };
+  }
+  if (binding.actionContractDigest !== contract.actionContractDigest) {
+    return {
+      reasonCode: "agreement_obligation_binding_mismatch",
+      reason: "Agreement obligation binding action contract digest drifted."
+    };
+  }
+  if (binding.paramsDigest !== contract.paramsDigest) {
+    return {
+      reasonCode: "agreement_obligation_params_mismatch",
+      reason: "Agreement obligation binding params digest drifted."
+    };
+  }
+  if (binding.actionTypeId !== contract.actionTypeId || binding.actionClass !== contract.actionClass || binding.resourceRef !== contract.resourceRef) {
+    return {
+      reasonCode: "agreement_obligation_binding_mismatch",
+      reason: "Agreement obligation binding action fields drifted from the action contract."
+    };
+  }
+  return null;
+}
+function lifecycleFailureForAgreement(agreement, agreementStatus, now) {
+  if (agreement.expiresAt && Date.parse(agreement.expiresAt) <= Date.parse(now)) {
+    return { reasonCode: "agreement_expired", reason: "Linked agreement expired before policy evaluation." };
+  }
+  if (agreementStatus === "withdrawn") {
+    return { reasonCode: "agreement_withdrawn", reason: "Linked agreement was withdrawn before policy evaluation." };
+  }
+  if (agreementStatus === "disputed") {
+    return { reasonCode: "agreement_disputed", reason: "Linked agreement was disputed before policy evaluation." };
+  }
+  if (agreementStatus === "superseded") {
+    return { reasonCode: "agreement_superseded", reason: "Linked agreement was superseded before policy evaluation." };
+  }
+  if (agreementStatus === "expired") {
+    return { reasonCode: "agreement_expired", reason: "Linked agreement status is expired." };
+  }
+  if (agreementStatus !== "active") {
+    return { reasonCode: "agreement_not_active", reason: "Linked agreement is not active." };
+  }
+  return null;
+}
+function evidenceFreshnessFailureForAgreement(agreement, session, offer, now) {
+  if (session.expiresAt && Date.parse(session.expiresAt) <= Date.parse(now)) {
+    return {
+      reasonCode: "negotiation_session_expired",
+      reason: "Negotiation session expired before policy evaluation."
+    };
+  }
+  if (offer.expiresAt && Date.parse(offer.expiresAt) <= Date.parse(now)) {
+    return {
+      reasonCode: "negotiation_offer_expired",
+      reason: "Negotiation offer expired before policy evaluation."
+    };
+  }
+  if (offer.offerContentDigest !== agreement.acceptedOfferContentDigest) {
+    return {
+      reasonCode: "linked_agreement_digest_mismatch",
+      reason: "Accepted offer digest drifted before policy evaluation."
+    };
+  }
+  return null;
+}
+async function loadAgreementSession(store, agreement) {
+  const record2 = await store.getRecord("negotiation_session", agreement.negotiationSessionId);
+  return record2 && sameScope(record2.payload, agreement) ? record2.payload : null;
+}
+async function loadAgreementOffer(store, agreement) {
+  const records2 = await store.listRecordsByType("negotiation_offer", {
+    tenantId: agreement.tenantId,
+    organizationId: agreement.organizationId
+  });
+  return records2.map((record2) => record2.payload).find((offer) => offer.negotiationSessionId === agreement.negotiationSessionId && offer.offerVersionId === agreement.acceptedOfferVersionId && offer.offerSequence === agreement.acceptedOfferSequence) ?? null;
+}
+function sameScope(left, right) {
+  return left.tenantId === right.tenantId && left.organizationId === right.organizationId;
+}
+function ok2(policyInput) {
+  return { ok: true, decision: "greenlight", reasonCode: null, reason: null, policyInput };
+}
+function refusal(policyInput, failure2) {
+  return {
+    ok: false,
+    decision: "refuse",
+    reasonCode: failure2.reasonCode,
+    reason: failure2.reason,
+    policyInput: { ...policyInput, posture: "refused" }
+  };
+}
+function proofGap(policyInput, reasonCode) {
+  return {
+    ok: false,
+    decision: "proof_gap",
+    reasonCode,
+    reason: "ActionContract declares agreement-backed clearing evidence, but exact local obligation binding evidence is missing or incomplete.",
+    policyInput: { ...policyInput, posture: "proof_gap" }
+  };
+}
+function notApplicableInput() {
+  return baseInput({ obligationRef: null, counterpartyRef: null, posture: "not_applicable" });
+}
+function baseInput(input) {
+  return {
+    posture: input.posture ?? "proof_gap",
+    obligationRef: input.obligationRef,
+    counterpartyRef: input.counterpartyRef,
+    agreementObligationBindingId: input.agreementObligationBindingId ?? null,
+    linkedAgreementId: input.linkedAgreementId ?? null,
+    agreementStatus: input.agreementStatus ?? null,
+    agreementExpiresAt: input.agreementExpiresAt ?? null,
+    sessionExpiresAt: input.sessionExpiresAt ?? null,
+    offerExpiresAt: input.offerExpiresAt ?? null,
+    actionContractDigest: input.actionContractDigest ?? null,
+    paramsDigest: input.paramsDigest ?? null
+  };
+}
+// src/protocol/areas/policy-greenlight/policy-record/index.ts
+async function buildPolicyDecision(input, contract, envelope, decisionValue, policyInputDigest, isolationSnapshot, now) {
+  const decisionId = createId("pol");
+  const decisionUnsigned = {
+    policyDecisionId: decisionId,
+    actionContractId: contract.actionContractId,
+    decision: decisionValue.decision,
+    decisionReasonCode: decisionValue.reasonCode,
+    policyInputDigest
+  };
+  const decisionSignature = input.signingSecret ? await signCanonicalHmac(decisionUnsigned, input.signingSecret) : null;
+  return PolicyDecisionSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    policyDecisionId: decisionId,
+    actionContractId: contract.actionContractId,
+    envelopeId: envelope.envelopeId,
+    policyPackRef: envelope.policyPackRef,
+    policyPackVersion: envelope.policyPackVersion,
+    policyEvaluatorVersion: input.policyEvaluatorVersion,
+    policyInputDigest,
+    decision: decisionValue.decision,
+    decisionReasonCode: decisionValue.reasonCode,
+    decisionReason: decisionValue.reason,
+    matchedRuleIds: decisionValue.matchedRuleIds,
+    requiredReceipt: "mutation",
+    isolationSnapshotRef: isolationSnapshot,
+    expiresAt: contract.expiresAt,
+    decisionSignature,
+    signaturePosture: input.signingSecret ? "local_hmac" : "unsigned",
+    keyIdentityRef: input.signingSecret ? "local:hmac" : null,
+    verificationPolicyRef: input.signingSecret ? "local-hmac-only" : null
+  });
+}
+function buildGreenlight(contract, decision, now, protectedPathPosture, idempotencyLedgerKeyDigest2, idempotencyKey = contract.idempotencyKey) {
+  return GreenlightSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    greenlightId: createId("grn"),
+    actionContractId: contract.actionContractId,
+    policyDecisionId: decision.policyDecisionId,
+    gatewayRegistryEntryId: contract.gatewayRegistryEntryId,
+    gatewayRegistryDigest: contract.gatewayRegistryDigest,
+    gatewayRegistryVersion: contract.gatewayRegistryVersion,
+    gatewayId: contract.gatewayId,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    policyVersionRef: stringParameter(contract, "policyVersionRef"),
+    policyVersionDigest: digestParameter(contract, "policyVersionDigest"),
+    gatewayReadinessRef: stringParameter(contract, "gatewayReadinessRef"),
+    gatewayReadinessDigest: digestParameter(contract, "gatewayReadinessDigest"),
+    actionClass: contract.actionClass,
+    resourceRef: contract.resourceRef,
+    requiredProtectedPathState: contract.requiredProtectedPathState,
+    protectedPathPostureId: protectedPathPosture?.payload.protectedPathPostureId ?? null,
+    protectedPathPostureDigest: protectedPathPosture?.payload.postureDigest ?? null,
+    gatewayCredentialRefIds: contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefId),
+    gatewayCredentialRefDigests: contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefDigest),
+    delegatedAuthorityRefIds: contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefId),
+    delegatedAuthorityRefDigests: contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefDigest),
+    paramsDigest: contract.paramsDigest,
+    contractDigest: contract.actionContractDigest,
+    idempotencyKey,
+    idempotencyLedgerKeyDigest: idempotencyLedgerKeyDigest2,
+    maxUses: 1,
+    issuedAt: now,
+    notBefore: now,
+    expiresAt: contract.expiresAt,
+    isolationSnapshotRef: decision.isolationSnapshotRef,
+    requiredReceipt: decision.requiredReceipt,
+    decisionSignature: decision.decisionSignature,
+    signaturePosture: decision.signaturePosture,
+    keyIdentityRef: decision.keyIdentityRef,
+    verificationPolicyRef: decision.verificationPolicyRef,
+    consumedAt: null,
+    consumedByGateAttemptId: null
+  });
+}
+async function commitPolicyEvaluation(recorder, plan) {
+  if (!plan.greenlight) {
+    const { refusal: refusal2, proofGap: proofGap2 } = await commitPolicyDecisionOnly(recorder, plan);
+    return { status: "committed", refusal: refusal2, proofGap: proofGap2 };
+  }
+  return commitGreenlightPolicyDecision(recorder, plan, plan.greenlight);
+}
+async function commitPolicyDecisionOnly(recorder, plan) {
+  const { contract, decision } = plan;
+  const refusal2 = decision.decision === "review_required" || decision.decision === "proof_gap" ? null : await buildRefusal({
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: plan.now,
+    phase: "policy",
+    actionContractId: contract.actionContractId,
+    policyDecisionId: decision.policyDecisionId,
+    refusedObjectRef: protocolObjectRef("policy_decision", decision.policyDecisionId),
+    reasonCode: decision.decisionReasonCode,
+    reason: decision.decisionReason,
+    evidenceRefs: [
+      protocolObjectRef("action_contract", contract.actionContractId),
+      protocolObjectRef("policy_decision", decision.policyDecisionId),
+      decision.policyInputDigest
+    ],
+    refusedAt: plan.now
+  });
+  const proofGap2 = decision.decision === "proof_gap" ? buildPolicyProofGap(contract, decision, plan.now) : null;
+  await recorder.commitRecordsWithEvents([
+    { objectType: "policy_decision", payload: decision },
+    ...refusal2 ? [{ objectType: "refusal", payload: refusal2 }] : [],
+    ...proofGap2 ? [{ objectType: "proof_gap", payload: proofGap2 }] : []
+  ], [
+    {
+      source: decision,
+      eventType: "policy_decision_recorded",
+      objectRefs: [decision.policyDecisionId, contract.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(contract),
+      payload: { decision: decision.decision, reasonCode: decision.decisionReasonCode }
+    },
+    {
+      source: proofGap2 ?? refusal2 ?? decision,
+      eventType: decision.decision === "review_required" ? "review_required" : decision.decision === "proof_gap" ? "proof_gap_recorded" : "action_refused",
+      objectRefs: [
+        ...refusal2 ? [refusal2.refusalId] : [],
+        ...proofGap2 ? [proofGap2.proofGapId] : [],
+        decision.policyDecisionId,
+        contract.actionContractId
+      ],
+      streamRefs: actionLifecycleStreamRefs(contract),
+      payload: proofGap2 ? { reasonCode: decision.decisionReasonCode, finalityImpact: proofGap2.finalityImpact } : { reasonCode: decision.decisionReasonCode }
+    }
+  ]);
+  return { refusal: refusal2, proofGap: proofGap2 };
+}
+async function commitGreenlightPolicyDecision(recorder, plan, greenlight) {
+  const { contract, decision } = plan;
+  const records2 = [
+    { objectType: "policy_decision", payload: decision },
+    { objectType: "greenlight", payload: greenlight },
+    ...plan.idempotencyLedgerEntry ? [{ objectType: "idempotency_ledger_entry", payload: plan.idempotencyLedgerEntry }] : []
+  ];
+  const commitResult = await recorder.tryCommitRecordsWithEvents([...records2], [
+    {
+      source: decision,
+      eventType: "policy_decision_recorded",
+      objectRefs: [decision.policyDecisionId, contract.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(contract),
+      payload: { decision: decision.decision, reasonCode: decision.decisionReasonCode }
+    },
+    {
+      source: greenlight,
+      eventType: "action_greenlit",
+      objectRefs: [greenlight.greenlightId, greenlight.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(contract),
+      payload: { gatewayId: greenlight.gatewayId, actionClass: greenlight.actionClass }
+    },
+    ...plan.idempotencyLedgerEntry ? [
+      {
+        source: plan.idempotencyLedgerEntry,
+        eventType: "idempotency_ledger_recorded",
+        objectRefs: [
+          plan.idempotencyLedgerEntry.idempotencyLedgerEntryId,
+          plan.idempotencyLedgerEntry.ledgerKeyDigest,
+          contract.actionContractId
+        ],
+        streamRefs: actionLifecycleStreamRefs(contract),
+        payload: {
+          ledgerState: plan.idempotencyLedgerEntry.ledgerState,
+          reasonCode: plan.idempotencyLedgerEntry.reasonCode
+        }
+      }
+    ] : []
+  ], {
+    greenlightIssuanceClaims: [
+      {
+        actionContractId: contract.actionContractId,
+        greenlightId: greenlight.greenlightId,
+        policyDecisionId: decision.policyDecisionId,
+        tenantId: contract.tenantId,
+        organizationId: contract.organizationId,
+        claimedAt: plan.now
+      }
+    ],
+    idempotencyLedgerReservationEntries: plan.idempotencyLedgerEntry ? [idempotencyLedgerIndexEntry(plan.idempotencyLedgerEntry)] : []
+  });
+  if (commitResult.status === "record_digest_conflict") {
+    throw new HandshakeProtocolError("bootstrap_record_digest_conflict", "Policy commit cannot replace an existing record with a different canonical digest.", 409);
+  }
+  return { status: commitResult.status, refusal: null, proofGap: null };
+}
+function buildPolicyProofGap(contract, decision, now) {
+  return ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    proofGapId: createId("gap"),
+    gapPhase: "policy",
+    expectedEvidenceType: "exact_protected_action_policy_binding",
+    missingOrInvalidEvidenceRef: decision.decisionReasonCode,
+    affectedObjectRefs: [contract.actionContractId, decision.policyDecisionId],
+    gateAttemptId: null,
+    mutationAttemptId: null,
+    receiptId: null,
+    reasonCode: decision.decisionReasonCode,
+    finalityImpact: "invalid",
+    recoveryRequirement: "Create a new exact action contract with trusted readiness, policy-version, credential, and idempotency bindings before policy can greenlight.",
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+}
+function stringParameter(contract, key) {
+  const value = contract.parameters[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function digestParameter(contract, key) {
+  const value = stringParameter(contract, key);
+  return value && /^sha256:[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
+// src/protocol/areas/policy-greenlight/transitions.ts
+async function evaluatePolicy(store, recorder, inputValue) {
+  const input = EvaluatePolicyInputSchema.parse(inputValue);
+  const context = await getPolicyEvaluationContext(recorder, input);
+  assertTransition2(guardPolicyEvaluation(context.contract, context.envelope));
+  const constraints = await derivePolicyConstraintEvaluation(store, context);
+  const decisionValue = await resolvePolicyDecisionValue(recorder, constraints);
+  const decision = await buildPolicyDecision(input, context.contract, context.envelope, decisionValue, constraints.policyInputDigest, constraints.isolationSnapshot, context.now);
+  const greenlight = decision.decision === "greenlight" ? buildGreenlightFromDecision(decision, constraints) : null;
+  const idempotencyLedgerEntry = greenlight ? await buildIdempotencyLedgerReservation({
+    contract: context.contract,
+    policyDecision: decision,
+    greenlight,
+    now: context.now,
+    ledgerKeyDigest: constraints.idempotencyLedgerKeyDigest,
+    idempotencyKey: constraints.idempotencyLedgerKey.idempotencyKey,
+    evidenceRefs: constraints.idempotencyLedgerEvidenceRefs
+  }) : null;
+  const plan = { ...constraints, decisionValue, decision, greenlight, idempotencyLedgerEntry };
+  const commitResult = await commitPolicyEvaluation(recorder, plan);
+  if (commitResult.status === "idempotency_ledger_conflict") {
+    return commitIdempotencyConflictRefusal(store, recorder, constraints);
+  }
+  if (commitResult.status === "greenlight_issuance_conflict") {
+    return commitGreenlightIssuanceConflictRefusal(recorder, constraints);
+  }
+  return policyEvaluationResponse(decision, greenlight, commitResult.refusal, commitResult.proofGap);
+}
+async function getPolicyEvaluationContext(recorder, input) {
+  const contract = await recorder.requiredRecord("action_contract", input.actionContractId, "contract_missing");
+  const envelope = await recorder.requiredRecord("operating_envelope", input.envelopeId, "envelope_missing");
+  return {
+    input,
+    contractRecord: contract,
+    envelopeRecord: envelope,
+    contract: contract.payload,
+    envelope: envelope.payload,
+    now: nowIso()
+  };
+}
+async function derivePolicyConstraintEvaluation(store, context) {
+  const isolationStates = await store.listIsolationStates(isolationScopeRefsForContract(context.contract));
+  const sequenceDependencyStates = await loadSequenceDependencyStates(store, context.contract);
+  const protectedPathPosture = await loadCurrentPostureForContract(store, context.contract);
+  const protectedPathEvaluation = evaluateRequiredProtectedPathPosture({
+    contract: context.contract,
+    gateway: context.contract,
+    posture: protectedPathPosture,
+    now: context.now
+  });
+  const gatewayCredentialBindingEvaluation = await evaluateGatewayCredentialBindings(store, context.contract, context.now);
+  const delegatedAuthorityBindingEvaluation = await evaluateDelegatedAuthorityBindings(store, context.contract, context.now);
+  const agreementObligationEvaluation = await evaluateAgreementObligationPolicy(store, context.contract, context.now);
+  const authorityLedger = await effectiveAuthorityLedger(context.contract, agreementObligationEvaluation);
+  const idempotencyLedgerEntry = await store.getCurrentIdempotencyLedgerEntry(authorityLedger.ledgerKeyDigest);
+  const policyInput = buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, authorityLedger.ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation);
+  const policyInputDigest = await digestCanonical(policyInput);
+  return {
+    ...context,
+    isolationStates,
+    sequenceDependencyStates,
+    protectedPathPosture,
+    idempotencyLedgerEntry,
+    idempotencyLedgerKey: authorityLedger.key,
+    idempotencyLedgerKeyDigest: authorityLedger.ledgerKeyDigest,
+    idempotencyLedgerEvidenceRefs: authorityLedger.evidenceRefs,
+    protectedPathEvaluation,
+    gatewayCredentialBindingEvaluation,
+    delegatedAuthorityBindingEvaluation,
+    agreementObligationEvaluation,
+    policyInput,
+    policyInputDigest,
+    isolationSnapshot: isolationSnapshotRef(isolationStates)
+  };
+}
+function buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation) {
+  return {
+    contractDigest: context.contract.actionContractDigest,
+    envelopeId: context.envelope.envelopeId,
+    envelopePolicyPackVersion: context.envelope.policyPackVersion,
+    isolationStateIds: isolationStates.map((state) => state.isolationStateId).sort(),
+    sequenceDependencyStates,
+    requiredProtectedPathState: context.contract.requiredProtectedPathState,
+    gatewayEnforcementMode: context.contract.enforcementMode,
+    credentialCustodyStatus: context.contract.credentialCustodyStatus,
+    gatewayCredentialRefs: gatewayCredentialBindingEvaluation.policyInput,
+    delegatedAuthorityRefs: delegatedAuthorityBindingEvaluation.policyInput,
+    agreementObligation: agreementObligationEvaluation.policyInput,
+    protectedPathPosture: protectedPathPolicyInput(protectedPathPosture, context.now),
+    idempotencyLedger: {
+      ledgerKeyDigest,
+      existingLedgerEntryId: idempotencyLedgerEntry?.payload.idempotencyLedgerEntryId ?? null,
+      existingLedgerState: idempotencyLedgerEntry?.payload.ledgerState ?? null,
+      paramsDigestMatch: idempotencyLedgerEntry ? idempotencyLedgerEntry.payload.paramsDigest === context.contract.paramsDigest : null
+    },
+    exactProtectedAction: exactProtectedActionPolicyInput(context.contract)
+  };
+}
+async function resolvePolicyDecisionValue(recorder, constraints) {
+  let decisionValue = evaluateDeterministicPolicy(constraints.contract, constraints.envelope, constraints.isolationStates, constraints.now);
+  if (decisionValue.decision === "greenlight") {
+    decisionValue = evaluateSequenceDependencies(constraints.sequenceDependencyStates) ?? decisionValue;
+  }
+  decisionValue = applyProtectedPathPolicy(decisionValue, constraints);
+  decisionValue = applyDelegatedAuthorityPolicy(decisionValue, constraints);
+  decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
+  decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
+  decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
+  decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
+  if (decisionValue.decision === "review_required" && constraints.input.reviewDecisionId) {
+    const reviewDecision = await recorder.requiredRecord("review_decision", constraints.input.reviewDecisionId, "review_decision_missing");
+    decisionValue = reviewDecisionAllowsGreenlight(reviewDecision.payload, constraints.contract, constraints.policyInputDigest, constraints.now) ? {
+      decision: "greenlight",
+      reasonCode: "review_approved",
+      reason: "Exact contract and policy input were approved by a bound review decision.",
+      matchedRuleIds: ["review_decision_approved"]
+    } : {
+      decision: "refuse",
+      reasonCode: "review_decision_invalid",
+      reason: "Review decision did not bind to the current exact contract and policy input.",
+      matchedRuleIds: ["review_decision_binding"]
+    };
+    decisionValue = applyProtectedPathPolicy(decisionValue, constraints);
+    decisionValue = applyDelegatedAuthorityPolicy(decisionValue, constraints);
+    decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
+    decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
+    decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
+    decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
+  }
+  return decisionValue;
+}
+function applyIdempotencyLedgerPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || !constraints.idempotencyLedgerEntry)
+    return decisionValue;
+  return idempotencyConflictDecisionValue(constraints.contract, constraints.idempotencyLedgerEntry.payload);
+}
+async function commitIdempotencyConflictRefusal(store, recorder, constraints) {
+  const current = await store.getCurrentIdempotencyLedgerEntry(constraints.idempotencyLedgerKeyDigest);
+  const decisionValue = current ? idempotencyConflictDecisionValue(constraints.contract, current.payload) : {
+    decision: "refuse",
+    reasonCode: "idempotency_duplicate_authority",
+    reason: "Idempotency ledger reservation raced with this policy evaluation; fresh authority is refused.",
+    matchedRuleIds: ["idempotency_ledger_duplicate_authority"]
+  };
+  const decision = await buildPolicyDecision(constraints.input, constraints.contract, constraints.envelope, decisionValue, constraints.policyInputDigest, constraints.isolationSnapshot, constraints.now);
+  const commitResult = await commitPolicyEvaluation(recorder, {
+    ...constraints,
+    decision,
+    greenlight: null,
+    idempotencyLedgerEntry: null
+  });
+  if (commitResult.status !== "committed") {
+    throw new HandshakeProtocolError("idempotency_refusal_commit_conflict", "Idempotency conflict refusal could not be committed.", 409, {
+      retryability: "retryable",
+      commitState: "not_committed"
+    });
+  }
+  return policyEvaluationResponse(decision, null, commitResult.refusal, commitResult.proofGap);
+}
+async function commitGreenlightIssuanceConflictRefusal(recorder, constraints) {
+  const decision = await buildPolicyDecision(constraints.input, constraints.contract, constraints.envelope, {
+    decision: "refuse",
+    reasonCode: "idempotency_duplicate_authority",
+    reason: "A greenlight issuance claim already exists for this action contract; fresh authority is refused.",
+    matchedRuleIds: ["greenlight_issuance_duplicate_authority"]
+  }, constraints.policyInputDigest, constraints.isolationSnapshot, constraints.now);
+  const commitResult = await commitPolicyEvaluation(recorder, {
+    ...constraints,
+    decision,
+    greenlight: null,
+    idempotencyLedgerEntry: null
+  });
+  if (commitResult.status !== "committed") {
+    throw new HandshakeProtocolError("greenlight_issuance_refusal_commit_conflict", "Greenlight issuance conflict refusal could not be committed.", 409, {
+      retryability: "retryable",
+      commitState: "not_committed"
+    });
+  }
+  return policyEvaluationResponse(decision, null, commitResult.refusal, commitResult.proofGap);
+}
+function policyEvaluationResponse(decision, greenlight, refusal2, proofGap2) {
+  const policyDecisionRef = protocolObjectRef("policy_decision", decision.policyDecisionId);
+  const greenlightObjectRef = greenlight ? protocolObjectRef("greenlight", greenlight.greenlightId) : null;
+  const refusalObjectRef = refusal2 ? protocolObjectRef("refusal", refusal2.refusalId) : null;
+  const proofGapObjectRef = proofGap2 ? protocolObjectRef("proof_gap", proofGap2.proofGapId) : null;
+  return {
+    decision,
+    greenlight,
+    authorityCreated: Boolean(greenlight),
+    gatewayCheckPerformed: false,
+    mutationAttempted: false,
+    policyDecisionRef,
+    greenlightRef: greenlight?.greenlightId ?? null,
+    refusalRef: refusal2?.refusalId ?? null,
+    refusalReasonCode: refusal2?.reasonCode ?? null,
+    proofGapRef: proofGap2?.proofGapId ?? null,
+    proofGapReasonCode: proofGap2?.reasonCode ?? null,
+    reviewRequired: decision.decision === "review_required",
+    nextAction: greenlight ? "use_greenlight_at_gateway" : decision.decision === "review_required" ? "request_review" : "read_evidence",
+    retryability: "not_retryable",
+    evidenceRefs: [
+      protocolObjectRef("action_contract", decision.actionContractId),
+      policyDecisionRef,
+      greenlightObjectRef,
+      refusalObjectRef,
+      proofGapObjectRef,
+      decision.policyInputDigest
+    ].filter((ref) => typeof ref === "string")
+  };
+}
+function applyProtectedPathPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || constraints.protectedPathEvaluation.ok) {
+    return decisionValue;
+  }
+  return {
+    decision: "refuse",
+    reasonCode: constraints.protectedPathEvaluation.reasonCode,
+    reason: constraints.protectedPathEvaluation.reason,
+    matchedRuleIds: ["protected_path_posture_required"]
+  };
+}
+function applyGatewayCredentialRefPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || constraints.gatewayCredentialBindingEvaluation.ok) {
+    return decisionValue;
+  }
+  return {
+    decision: "refuse",
+    reasonCode: constraints.gatewayCredentialBindingEvaluation.reasonCode,
+    reason: constraints.gatewayCredentialBindingEvaluation.reason,
+    matchedRuleIds: ["gateway_credential_ref_required"]
+  };
+}
+function applyDelegatedAuthorityPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || constraints.delegatedAuthorityBindingEvaluation.ok) {
+    return decisionValue;
+  }
+  return {
+    decision: "refuse",
+    reasonCode: constraints.delegatedAuthorityBindingEvaluation.reasonCode,
+    reason: constraints.delegatedAuthorityBindingEvaluation.reason,
+    matchedRuleIds: ["delegated_authority_ref_required"]
+  };
+}
+function applyAgreementObligationPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || constraints.agreementObligationEvaluation.ok) {
+    return decisionValue;
+  }
+  return {
+    decision: constraints.agreementObligationEvaluation.decision,
+    reasonCode: requirePolicyFailureValue(constraints.agreementObligationEvaluation.reasonCode),
+    reason: requirePolicyFailureValue(constraints.agreementObligationEvaluation.reason),
+    matchedRuleIds: ["agreement_obligation_binding_required"]
+  };
+}
+async function effectiveAuthorityLedger(contract, agreementObligationEvaluation) {
+  const key = idempotencyLedgerKey(contract);
+  const input = agreementObligationEvaluation.policyInput;
+  if (agreementObligationEvaluation.ok && input.linkedAgreementId && input.agreementObligationBindingId && input.obligationRef && input.counterpartyRef) {
+    const obligationUseDigest = await digestCanonical({
+      scope: "agreement_obligation_single_use_v1",
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId,
+      gatewayId: contract.gatewayId,
+      actionClass: contract.actionClass,
+      linkedAgreementId: input.linkedAgreementId,
+      obligationRef: input.obligationRef,
+      counterpartyRef: input.counterpartyRef
+    });
+    const scopedKey = {
+      ...key,
+      idempotencyKey: `agreement-obligation:${obligationUseDigest.slice("sha256:".length, "sha256:".length + 40)}`
+    };
+    return {
+      key: scopedKey,
+      ledgerKeyDigest: await idempotencyLedgerKeyDigest(scopedKey),
+      evidenceRefs: [
+        protocolObjectRef("linked_agreement", input.linkedAgreementId),
+        protocolObjectRef("agreement_obligation_binding", input.agreementObligationBindingId)
+      ]
+    };
+  }
+  return { key, ledgerKeyDigest: await idempotencyLedgerKeyDigest(key), evidenceRefs: [] };
+}
+function applyExactProtectedActionPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || !exactProtectedActionPolicyApplies(constraints.contract)) {
+    return decisionValue;
+  }
+  const failure2 = evaluateExactProtectedActionPolicyContract(constraints.contract);
+  if (!failure2)
+    return decisionValue;
+  return {
+    decision: failure2.decision,
+    reasonCode: failure2.reasonCode,
+    reason: failure2.reason,
+    matchedRuleIds: ["exact_protected_action_policy_binding"]
+  };
+}
+function evaluateExactProtectedActionPolicyContract(contract) {
+  if (contract.gatewayCredentialRefs.length !== 1) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_credential_binding_missing",
+      reason: "Exact protected-action policy requires exactly one bound gateway credential ref."
+    };
+  }
+  if (contract.delegatedAuthorityRefs.length !== 1) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_delegated_authority_missing",
+      reason: "Exact protected-action policy requires exactly one delegated authority ref."
+    };
+  }
+  const readinessRef = stringParameter2(contract.parameters, "gatewayReadinessRef");
+  const readinessDigest = digestParameter2(contract.parameters, "gatewayReadinessDigest");
+  const readinessBound = digestParameter2(contract.bounds, "gatewayReadinessDigest");
+  if (!readinessRef || !readinessDigest) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_readiness_binding_missing",
+      reason: "Exact protected-action policy requires trusted runtime-side gateway readiness ref and digest."
+    };
+  }
+  if (readinessBound && readinessBound !== readinessDigest) {
+    return {
+      decision: "refuse",
+      reasonCode: "protected_action_policy_readiness_binding_mismatch",
+      reason: "Exact protected-action readiness digest drifted between parameters and bounds."
+    };
+  }
+  const policyVersionRef = stringParameter2(contract.parameters, "policyVersionRef");
+  const policyVersionDigest = digestParameter2(contract.parameters, "policyVersionDigest");
+  const policyVersionBound = digestParameter2(contract.bounds, "policyVersionDigest");
+  if (!policyVersionRef || !policyVersionDigest) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_version_binding_missing",
+      reason: "Exact protected-action policy requires trusted runtime-side policy version ref and digest."
+    };
+  }
+  if (policyVersionBound && policyVersionBound !== policyVersionDigest) {
+    return {
+      decision: "refuse",
+      reasonCode: "protected_action_policy_version_binding_mismatch",
+      reason: "Exact protected-action policy-version digest drifted between parameters and bounds."
+    };
+  }
+  const paymentRequirementsDigest = digestParameter2(contract.parameters, "paymentRequirementsDigest");
+  if (!paymentRequirementsDigest) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_payment_requirement_binding_missing",
+      reason: "Exact protected-action policy requires payment requirement evidence to be digest-bound."
+    };
+  }
+  const selectedPaymentRequirementIndex = nonnegativeIntegerParameter(contract.parameters, "selectedPaymentRequirementIndex");
+  if (selectedPaymentRequirementIndex === null) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_selected_payment_requirement_index_missing",
+      reason: "Exact protected-action policy requires the selected payment requirement index to be bound."
+    };
+  }
+  const selectedPaymentRequirementDigest = digestParameter2(contract.parameters, "selectedPaymentRequirementDigest");
+  if (!selectedPaymentRequirementDigest) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_selected_payment_requirement_binding_missing",
+      reason: "Exact protected-action policy requires selected payment requirement evidence to be digest-bound."
+    };
+  }
+  const atomicAmount = atomicStringParameter(contract.parameters, "atomicAmount");
+  const maxAtomicAmountPerCall = atomicStringParameter(contract.bounds, "maxAtomicAmountPerCall");
+  if (!atomicAmount || !maxAtomicAmountPerCall) {
+    return {
+      decision: "proof_gap",
+      reasonCode: "protected_action_policy_amount_binding_missing",
+      reason: "Exact protected-action policy requires atomicAmount and maxAtomicAmountPerCall before greenlight."
+    };
+  }
+  if (compareAtomic3(atomicAmount, maxAtomicAmountPerCall) > 0) {
+    return {
+      decision: "refuse",
+      reasonCode: "protected_action_policy_amount_exceeds_action_bound",
+      reason: "Exact protected-action atomic amount exceeds the per-call policy bound."
+    };
+  }
+  return null;
+}
+function buildGreenlightFromDecision(decision, constraints) {
+  return buildGreenlight(constraints.contract, decision, constraints.now, constraints.protectedPathPosture, constraints.policyInput.idempotencyLedger.ledgerKeyDigest);
+}
+function exactProtectedActionPolicyInput(contract) {
+  if (!exactProtectedActionPolicyApplies(contract))
+    return null;
+  return {
+    actionTypeId: contract.actionTypeId,
+    actionTypeDigest: contract.actionTypeDigest,
+    actionClass: contract.actionClass,
+    protectedSurfaceKind: contract.protectedSurfaceKind,
+    gatewayRegistryDigest: contract.gatewayRegistryDigest,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    policyVersionRef: stringParameter2(contract.parameters, "policyVersionRef"),
+    policyVersionDigest: stringParameter2(contract.parameters, "policyVersionDigest"),
+    gatewayReadinessRef: stringParameter2(contract.parameters, "gatewayReadinessRef"),
+    gatewayReadinessDigest: stringParameter2(contract.parameters, "gatewayReadinessDigest"),
+    paymentRequirementsDigest: stringParameter2(contract.parameters, "paymentRequirementsDigest"),
+    selectedPaymentRequirementIndex: numberParameter(contract.parameters, "selectedPaymentRequirementIndex"),
+    selectedPaymentRequirementDigest: stringParameter2(contract.parameters, "selectedPaymentRequirementDigest"),
+    atomicAmount: stringParameter2(contract.parameters, "atomicAmount"),
+    maxAtomicAmountPerCall: stringParameter2(contract.bounds, "maxAtomicAmountPerCall"),
+    gatewayCredentialRefDigests: contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefDigest).sort(),
+    delegatedAuthorityRefDigests: contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefDigest).sort()
+  };
+}
+function exactProtectedActionPolicyApplies(contract) {
+  return contract.actionClass === "x402_payment.exact" || hasParameter(contract.parameters, "gatewayReadinessRef") || hasParameter(contract.parameters, "gatewayReadinessDigest") || hasParameter(contract.parameters, "policyVersionRef") || hasParameter(contract.parameters, "policyVersionDigest") || hasParameter(contract.parameters, "paymentRequirementsDigest") || hasParameter(contract.parameters, "selectedPaymentRequirementIndex") || hasParameter(contract.parameters, "selectedPaymentRequirementDigest");
+}
+function hasParameter(parameters, key) {
+  return Object.prototype.hasOwnProperty.call(parameters, key);
+}
+function stringParameter2(parameters, key) {
+  const value = parameters[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function digestParameter2(parameters, key) {
+  const value = stringParameter2(parameters, key);
+  return value && /^sha256:[a-f0-9]{64}$/.test(value) ? value : null;
+}
+function numberParameter(parameters, key) {
+  const value = parameters[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function nonnegativeIntegerParameter(parameters, key) {
+  const value = numberParameter(parameters, key);
+  return value !== null && Number.isInteger(value) && value >= 0 ? value : null;
+}
+function atomicStringParameter(parameters, key) {
+  const value = stringParameter2(parameters, key);
+  return value && /^(?:0|[1-9]\d*)$/.test(value) ? value : null;
+}
+function compareAtomic3(left, right) {
+  const leftValue = BigInt(left);
+  const rightValue = BigInt(right);
+  return leftValue === rightValue ? 0 : leftValue > rightValue ? 1 : -1;
+}
+function requirePolicyFailureValue(value) {
+  if (value === null)
+    throw new HandshakeProtocolError("agreement_obligation_binding_missing", "Policy failure missing reason.", 500);
+  return value;
+}
+function assertTransition2(result) {
+  if (!result.ok) {
+    throw new HandshakeProtocolError(result.code, result.message, result.status);
+  }
+}
+// src/protocol/areas/receipt-export/inputs.ts
+var CreateReceiptExportInputSchema = exports_external.strictObject({
+  receiptId: exports_external.string().min(1),
+  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
+  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
+  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+// src/protocol/areas/receipt-export/transitions.ts
+async function createReceiptExport(recorder, inputValue) {
+  const input = CreateReceiptExportInputSchema.parse(inputValue);
+  const context = await getReceiptExportContext(recorder, input);
+  const receiptExport = await buildReceiptExport(context);
+  await commitReceiptExport(recorder, context, receiptExport);
+  return receiptExport;
+}
+async function getReceiptExportContext(recorder, input) {
+  const receiptRecord = await recorder.requiredRecord("receipt", input.receiptId, "receipt_missing");
+  const receipt = receiptRecord.payload;
+  assertReceiptExportable(receipt);
+  await assertReceiptDigests2(receipt);
+  const [contractRecord, gateAttemptRecord] = await Promise.all([
+    recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing"),
+    receipt.gateAttemptId ? recorder.requiredRecord("gateway_check_attempt", receipt.gateAttemptId, "gateway_check_attempt_missing") : Promise.resolve(null)
+  ]);
+  const proofGaps = await loadProofGaps2(recorder, receipt.proofGapIds);
+  return {
+    input,
+    receipt,
+    contract: contractRecord.payload,
+    gateAttempt: gateAttemptRecord?.payload ?? null,
+    proofGaps,
+    receiptExportId: createId("rex"),
+    now: nowIso()
+  };
+}
+async function buildReceiptExport(context) {
+  const { input, receipt, contract, gateAttempt, proofGaps, receiptExportId, now } = context;
+  const exportDigest = await digestCanonical(buildReceiptExportBinding(context));
+  return ReceiptExportSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: receipt.tenantId,
+    organizationId: receipt.organizationId,
+    createdAt: now,
+    receiptExportId,
+    receiptId: receipt.receiptId,
+    actionContractId: receipt.actionContractId,
+    policyDecisionId: receipt.policyDecisionId,
+    greenlightId: receipt.greenlightId,
+    gateAttemptId: receipt.gateAttemptId,
+    mutationAttemptId: receipt.mutationAttemptId,
+    gatewayId: receipt.gatewayId,
+    principalId: contract.principalId,
+    agentId: contract.agentId,
+    runId: contract.runId,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    policyDecisionStatus: receipt.policyDecisionStatus,
+    gatewayCheckStatus: receipt.gatewayCheckStatus,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receipt),
+    gatewayCheckedAt: gateAttempt?.createdAt ?? null,
+    greenlightConsumptionStatus: receipt.greenlightConsumptionStatus,
+    mutationAttemptStatus: receipt.mutationAttemptStatus,
+    downstreamExecutionStatus: receipt.downstreamExecutionStatus,
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receipt),
+    proofGapStatus: receipt.proofGapIds.length > 0 ? "present" : "none",
+    proofGapIds: receipt.proofGapIds,
+    proofGapReasonCodes: proofGaps.map((proofGap2) => proofGap2.reasonCode),
+    finalityStatus: receipt.finalityStatus,
+    evidenceRefs: receipt.evidenceRefs,
+    streamOffsets: receipt.streamOffsets,
+    receiptDigest: receipt.receiptDigest,
+    auditChainDigest: receipt.auditChainDigest,
+    signaturePosture: contract.signaturePosture,
+    keyIdentityRef: contract.keyIdentityRef,
+    verificationPolicyRef: contract.verificationPolicyRef,
+    exportFormat: input.exportFormat,
+    redactionProfileRef: input.redactionProfileRef,
+    exportPurposeCode: input.exportPurposeCode,
+    requestedByRef: input.requestedByRef,
+    evidenceRetentionUntil: input.evidenceRetentionUntil,
+    exportedAt: now,
+    exportDigest
+  });
+}
+function buildReceiptExportBinding(context) {
+  const { input, receipt, receiptExportId, now } = context;
+  const exportBinding = {
+    receiptExportId,
+    receiptId: receipt.receiptId,
+    actionContractId: receipt.actionContractId,
+    receiptDigest: receipt.receiptDigest,
+    auditChainDigest: receipt.auditChainDigest,
+    streamOffsets: receipt.streamOffsets,
+    proofGapIds: receipt.proofGapIds,
+    finalityStatus: receipt.finalityStatus,
+    exportFormat: input.exportFormat,
+    redactionProfileRef: input.redactionProfileRef,
+    exportPurposeCode: input.exportPurposeCode,
+    requestedByRef: input.requestedByRef,
+    exportedAt: now
+  };
+  return exportBinding;
+}
+async function commitReceiptExport(recorder, context, receiptExport) {
+  await recorder.commitRecordsWithEvents(receiptExportRecords(receiptExport), receiptExportEvents(context, receiptExport));
+}
+function receiptExportRecords(receiptExport) {
+  return [{ objectType: "receipt_export", payload: receiptExport }];
+}
+function receiptExportEvents(context, receiptExport) {
+  return [
+    {
+      source: receiptExport,
+      eventType: "receipt_exported",
+      objectRefs: [receiptExport.receiptExportId, receiptExport.receiptId, receiptExport.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        receiptId: receiptExport.receiptId,
+        exportDigest: receiptExport.exportDigest,
+        finalityStatus: receiptExport.finalityStatus
+      }
+    }
+  ];
+}
+function assertReceiptExportable(receipt) {
+  if (!receipt.receiptDigest || !receipt.auditChainDigest) {
+    throw new HandshakeProtocolError("receipt_digest_missing", "Receipt export requires receiptDigest and auditChainDigest.", 409);
+  }
+  if (receipt.streamOffsets.length === 0 || receipt.streamEventIds.length === 0) {
+    throw new HandshakeProtocolError("receipt_stream_offsets_missing", "Receipt export requires stream event references and stream offset windows.", 409);
+  }
+}
+async function assertReceiptDigests2(receipt) {
+  const expectedReceiptDigest = await digestCanonical({
+    ...receipt,
+    receiptDigest: null,
+    auditChainDigest: null
+  });
+  if (receipt.receiptDigest !== expectedReceiptDigest) {
+    throw new HandshakeProtocolError("receipt_digest_mismatch", "Stored receiptDigest does not match the receipt body.", 409);
+  }
+  const expectedAuditChainDigest = await digestCanonical({
+    receiptDigest: receipt.receiptDigest,
+    streamOffsets: receipt.streamOffsets,
+    proofGapIds: receipt.proofGapIds,
+    finalityStatus: receipt.finalityStatus
+  });
+  if (receipt.auditChainDigest !== expectedAuditChainDigest) {
+    throw new HandshakeProtocolError("audit_chain_digest_mismatch", "Stored auditChainDigest does not match the receipt stream and proof-gap evidence.", 409);
+  }
+}
+async function loadProofGaps2(recorder, proofGapIds) {
+  const proofGaps = [];
+  for (const proofGapId of proofGapIds) {
+    const proofGap2 = await recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing");
+    proofGaps.push(proofGap2.payload);
+  }
+  return proofGaps;
+}
+// src/protocol/areas/operation-lifecycle/inputs.ts
+var ReconcileSurfaceOperationInputSchema = exports_external.strictObject({
+  mutationAttemptId: exports_external.string().min(1),
+  idempotencyKey: exports_external.string().min(1),
+  observedDownstreamStatus: exports_external.enum(["pending", "succeeded", "refused", "failed", "unknown"]),
+  downstreamRetryability: exports_external.enum(["retryable", "non_retryable", "unknown"]).default("unknown"),
+  observedSurfaceOperationRef: exports_external.string().min(1).nullable().default(null),
+  providerRequestRef: exports_external.string().min(1).nullable().default(null),
+  providerOperationRef: exports_external.string().min(1).nullable().default(null),
+  redactedDiagnosticsDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  traceRef: exports_external.string().min(1).nullable().default(null),
+  spanRef: exports_external.string().min(1).nullable().default(null),
+  diagnosticsRedactionPosture: exports_external.enum(["redacted", "digest_only", "none", "unknown"]).default("unknown"),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  resolvedProofGapIds: exports_external.array(exports_external.string().min(1)).default([]),
+  orphanIsolationRequested: exports_external.boolean().default(false)
+});
+// src/protocol/areas/operation-lifecycle/claims.ts
+function protectedSurfaceOperationClaimKey(contract) {
+  return {
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    gatewayId: contract.gatewayId,
+    protectedSurfaceKind: contract.protectedSurfaceKind,
+    actionClass: contract.actionClass,
+    resourceRef: contract.resourceRef
+  };
+}
+async function protectedSurfaceOperationClaimKeyDigest(key) {
+  return digestCanonical(key);
+}
+async function buildActiveProtectedSurfaceOperationClaim(input) {
+  return buildProtectedSurfaceOperationClaim({
+    contract: input.contract,
+    greenlight: input.greenlight,
+    gateAttemptId: input.gateAttemptId,
+    mutationAttemptId: input.mutationAttempt.mutationAttemptId,
+    claimState: "active",
+    claimedAt: input.now,
+    terminalAt: null,
+    terminalReasonCode: null,
+    releasedByRef: null
+  });
+}
+async function buildTerminalProtectedSurfaceOperationClaim(activeClaim, input) {
+  const claim = {
+    ...activeClaim,
+    claimState: input.claimState,
+    terminalAt: input.terminalAt,
+    terminalReasonCode: input.terminalReasonCode,
+    releasedByRef: input.releasedByRef,
+    claimDigest: null
+  };
+  const claimDigest = await digestCanonical(claim);
+  return ProtectedSurfaceOperationClaimSchema.parse({ ...claim, claimDigest });
+}
+async function buildProtectedSurfaceOperationClaim(input) {
+  const claimKeyDigest = await protectedSurfaceOperationClaimKeyDigest(protectedSurfaceOperationClaimKey(input.contract));
+  const seed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.contract.tenantId,
+    organizationId: input.contract.organizationId,
+    createdAt: input.claimedAt,
+    protectedSurfaceOperationClaimId: createId("opc"),
+    claimKeyDigest,
+    gatewayId: input.contract.gatewayId,
+    protectedSurfaceKind: input.contract.protectedSurfaceKind,
+    actionClass: input.contract.actionClass,
+    resourceRef: input.contract.resourceRef,
+    actionContractId: input.contract.actionContractId,
+    greenlightId: input.greenlight.greenlightId,
+    gateAttemptId: input.gateAttemptId,
+    mutationAttemptId: input.mutationAttemptId,
+    claimState: input.claimState,
+    claimedAt: input.claimedAt,
+    terminalAt: input.terminalAt,
+    terminalReasonCode: input.terminalReasonCode,
+    releasedByRef: input.releasedByRef,
+    claimDigest: null
+  };
+  const claimDigest = await digestCanonical(seed);
+  return ProtectedSurfaceOperationClaimSchema.parse({ ...seed, claimDigest });
+}
+// src/protocol/areas/operation-lifecycle/guards.ts
+function guardSurfaceOperationReconciliation(mutationAttempt, input) {
+  if (mutationAttempt.mutationAttemptId !== input.mutationAttemptId) {
+    return fail("invalid_transition_mutation_mismatch", "Reconciliation must target the exact mutation attempt.");
+  }
+  if (mutationAttempt.idempotencyKey !== input.idempotencyKey) {
+    return fail("invalid_transition_idempotency_mismatch", "Reconciliation idempotency key must match the original mutation attempt.");
+  }
+  if (!["submitted", "unknown"].includes(mutationAttempt.outcome)) {
+    return fail("invalid_transition_reconciliation_not_allowed", "Only pending or unknown downstream mutation attempts may be reconciled.");
+  }
+  if (mutationAttempt.surfaceOperationRef !== null && input.observedSurfaceOperationRef !== null && mutationAttempt.surfaceOperationRef !== input.observedSurfaceOperationRef) {
+    return fail("invalid_transition_surface_operation_mismatch", "Observed surface operation reference must match the original mutation attempt.");
+  }
+  return ok();
+}
+// src/protocol/areas/operation-lifecycle/lifecycle.ts
+var OPERATION_LIFECYCLE_MATRIX = {
+  pending: {
+    observedDownstreamStatus: "pending",
+    reconciliationStatus: "pending",
+    finalityStatus: "pending",
+    claimState: "active",
+    receiptDownstreamExecutionStatus: "pending",
+    receiptMutationAttemptStatus: "submitted",
+    proofGapReasonCode: null,
+    keepClaimBlocking: true,
+    createIsolation: false
+  },
+  succeeded: {
+    observedDownstreamStatus: "succeeded",
+    reconciliationStatus: "resolved",
+    finalityStatus: "final",
+    claimState: "terminal_succeeded",
+    receiptDownstreamExecutionStatus: "succeeded",
+    receiptMutationAttemptStatus: "succeeded",
+    proofGapReasonCode: null,
+    keepClaimBlocking: false,
+    createIsolation: false
+  },
+  refused: {
+    observedDownstreamStatus: "refused",
+    reconciliationStatus: "resolved",
+    finalityStatus: "suspect",
+    claimState: "terminal_refused",
+    receiptDownstreamExecutionStatus: "refused",
+    receiptMutationAttemptStatus: "downstream_refused",
+    proofGapReasonCode: null,
+    keepClaimBlocking: false,
+    createIsolation: false
+  },
+  failed: {
+    observedDownstreamStatus: "failed",
+    reconciliationStatus: "failed",
+    finalityStatus: "suspect",
+    claimState: "terminal_failed",
+    receiptDownstreamExecutionStatus: "failed",
+    receiptMutationAttemptStatus: "failed",
+    proofGapReasonCode: null,
+    keepClaimBlocking: false,
+    createIsolation: false
+  },
+  unknown: {
+    observedDownstreamStatus: "unknown",
+    reconciliationStatus: "still_unknown",
+    finalityStatus: "unknown",
+    claimState: "terminal_unknown",
+    receiptDownstreamExecutionStatus: "unknown",
+    receiptMutationAttemptStatus: "unknown",
+    proofGapReasonCode: "orphan_mitigation_required",
+    keepClaimBlocking: true,
+    createIsolation: true
+  }
+};
+function operationLifecycleFor(status3) {
+  return OPERATION_LIFECYCLE_MATRIX[status3];
+}
+// src/protocol/areas/operation-lifecycle/transitions.ts
+async function reconcileSurfaceOperation(store, recorder, inputValue) {
+  const input = ReconcileSurfaceOperationInputSchema.parse(inputValue);
+  assertReconciliationInputBoundary(input);
+  const context = await getSurfaceOperationReconciliationContext(recorder, input);
+  const reconciliation = buildSurfaceOperationReconciliation(context);
+  const evidencePlan = await buildSurfaceOperationEvidencePlan(store, recorder, context, reconciliation);
+  await commitSurfaceOperationReconciliation(recorder, context, reconciliation, evidencePlan);
+  return {
+    reconciliation,
+    resolvedProofGaps: evidencePlan.resolvedProofGaps,
+    createdProofGap: evidencePlan.createdProofGap
+  };
+}
+function assertReconciliationInputBoundary(input) {
+  if (input.observedDownstreamStatus === "unknown" && input.resolvedProofGapIds.length > 0) {
+    throw new HandshakeProtocolError("invalid_transition_unknown_reconciliation_cannot_resolve_proof_gap", "An unknown downstream reconciliation records a new proof gap; it cannot resolve existing proof gaps.", 409);
+  }
+}
+async function getSurfaceOperationReconciliationContext(recorder, input) {
+  const mutationRecord = await recorder.requiredRecord("mutation_attempt", input.mutationAttemptId, "mutation_attempt_missing");
+  const contractRecord = await recorder.requiredRecord("action_contract", mutationRecord.payload.actionContractId, "contract_missing");
+  assertTransition3(guardSurfaceOperationReconciliation(mutationRecord.payload, {
+    mutationAttemptId: input.mutationAttemptId,
+    idempotencyKey: input.idempotencyKey,
+    observedSurfaceOperationRef: input.observedSurfaceOperationRef
+  }));
+  const now = nowIso();
+  return {
+    input,
+    mutationAttempt: mutationRecord.payload,
+    contract: contractRecord.payload,
+    now,
+    lifecycle: operationLifecycleFor(input.observedDownstreamStatus)
+  };
+}
+function buildSurfaceOperationReconciliation(context) {
+  const { input, mutationAttempt, now, lifecycle } = context;
+  return SurfaceOperationReconciliationSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: mutationAttempt.tenantId,
+    organizationId: mutationAttempt.organizationId,
+    createdAt: now,
+    reconciliationId: createId("rec"),
+    mutationAttemptId: mutationAttempt.mutationAttemptId,
+    gateAttemptId: mutationAttempt.gateAttemptId,
+    actionContractId: mutationAttempt.actionContractId,
+    greenlightId: mutationAttempt.greenlightId,
+    gatewayId: mutationAttempt.gatewayId,
+    idempotencyKey: mutationAttempt.idempotencyKey,
+    surfaceOperationRef: input.observedSurfaceOperationRef ?? mutationAttempt.surfaceOperationRef,
+    previousMutationOutcome: mutationAttempt.outcome,
+    observedDownstreamStatus: input.observedDownstreamStatus,
+    downstreamRetryability: input.downstreamRetryability,
+    providerRequestRef: input.providerRequestRef,
+    providerOperationRef: input.providerOperationRef,
+    redactedDiagnosticsDigest: input.redactedDiagnosticsDigest,
+    traceRef: input.traceRef,
+    spanRef: input.spanRef,
+    diagnosticsRedactionPosture: input.diagnosticsRedactionPosture,
+    observedAt: now,
+    evidenceRefs: input.evidenceRefs,
+    resolvedProofGapIds: input.resolvedProofGapIds,
+    reconciliationStatus: lifecycle.reconciliationStatus,
+    finalityStatus: lifecycle.finalityStatus
+  });
+}
+async function buildSurfaceOperationEvidencePlan(store, recorder, context, reconciliation) {
+  const { input, mutationAttempt, contract, now, lifecycle } = context;
+  const resolvedProofGaps = await resolveProofGaps(recorder, input.resolvedProofGapIds, reconciliation, now);
+  const activeClaim = await currentClaimForContract(store, contract);
+  const activeLedger = await currentIdempotencyLedgerForContract(store, contract);
+  const terminalClaim = activeClaim && lifecycle.claimState !== "active" ? await buildTerminalProtectedSurfaceOperationClaim(activeClaim.payload, {
+    claimState: lifecycle.claimState,
+    terminalAt: now,
+    terminalReasonCode: lifecycle.proofGapReasonCode ?? input.observedDownstreamStatus,
+    releasedByRef: reconciliation.reconciliationId
+  }) : null;
+  const idempotencyLedgerUpdate = activeLedger && lifecycle.claimState !== "active" ? await buildIdempotencyLedgerTerminal({
+    current: activeLedger.payload,
+    reconciliation,
+    now
+  }) : null;
+  const isolationState = lifecycle.createIsolation && input.orphanIsolationRequested ? buildOrphanIsolationState(contract, reconciliation, now) : null;
+  const createdProofGap = lifecycle.proofGapReasonCode ? buildProofGap(contract, "mutation", "downstream_finality", lifecycle.proofGapReasonCode, {
+    gateAttemptId: mutationAttempt.gateAttemptId,
+    mutationAttemptId: mutationAttempt.mutationAttemptId,
+    receiptId: await receiptIdForMutation(store, mutationAttempt)
+  }) : null;
+  return { activeClaim, terminalClaim, idempotencyLedgerUpdate, isolationState, resolvedProofGaps, createdProofGap };
+}
+async function commitSurfaceOperationReconciliation(recorder, context, reconciliation, evidencePlan) {
+  const { activeClaim, terminalClaim, idempotencyLedgerUpdate, isolationState, resolvedProofGaps, createdProofGap } = evidencePlan;
+  const { lifecycle, now } = context;
+  const protocolRecords = [
+    { objectType: "surface_operation_reconciliation", payload: reconciliation },
+    ...resolvedProofGaps.map((proofGap2) => ({ objectType: "proof_gap", payload: proofGap2 })),
+    ...createdProofGap ? [{ objectType: "proof_gap", payload: createdProofGap }] : [],
+    ...terminalClaim ? [{ objectType: "protected_surface_operation_claim", payload: terminalClaim }] : [],
+    ...idempotencyLedgerUpdate ? [{ objectType: "idempotency_ledger_entry", payload: idempotencyLedgerUpdate }] : [],
+    ...isolationState ? [{ objectType: "isolation_state", payload: isolationState }] : []
+  ];
+  await recorder.commitRecordsWithEvents(protocolRecords, [
+    {
+      source: reconciliation,
+      eventType: "surface_operation_reconciled",
+      objectRefs: [
+        reconciliation.reconciliationId,
+        reconciliation.mutationAttemptId,
+        reconciliation.actionContractId
+      ],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        observedDownstreamStatus: reconciliation.observedDownstreamStatus,
+        downstreamRetryability: reconciliation.downstreamRetryability,
+        reconciliationStatus: reconciliation.reconciliationStatus,
+        finalityStatus: reconciliation.finalityStatus,
+        resolvedProofGapIds: reconciliation.resolvedProofGapIds
+      }
+    },
+    ...createdProofGap ? [
+      {
+        source: createdProofGap,
+        eventType: "proof_gap_recorded",
+        objectRefs: [
+          createdProofGap.proofGapId,
+          reconciliation.mutationAttemptId,
+          reconciliation.actionContractId
+        ],
+        streamRefs: actionLifecycleStreamRefs(context.contract),
+        payload: {
+          reasonCode: createdProofGap.reasonCode,
+          finalityImpact: createdProofGap.finalityImpact,
+          reconciliationId: reconciliation.reconciliationId
+        }
+      }
+    ] : [],
+    ...terminalClaim ? [
+      {
+        source: terminalClaim,
+        eventType: "protected_surface_operation_released",
+        objectRefs: [
+          terminalClaim.protectedSurfaceOperationClaimId,
+          terminalClaim.mutationAttemptId ?? terminalClaim.gateAttemptId,
+          reconciliation.actionContractId
+        ],
+        streamRefs: actionLifecycleStreamRefs(context.contract),
+        payload: {
+          claimState: terminalClaim.claimState,
+          claimKeyDigest: terminalClaim.claimKeyDigest,
+          releasedByRef: terminalClaim.releasedByRef
+        }
+      }
+    ] : [],
+    ...isolationState ? [
+      {
+        source: isolationState,
+        eventType: "isolation_changed",
+        objectRefs: [
+          isolationState.isolationStateId,
+          isolationState.scopeType,
+          isolationState.scopeId,
+          reconciliation.actionContractId
+        ],
+        streamRefs: actionLifecycleStreamRefs(context.contract),
+        payload: {
+          state: isolationState.state,
+          reasonCode: isolationState.reasonCode,
+          sourceDecisionRef: isolationState.sourceDecisionRef
+        }
+      }
+    ] : []
+  ], {
+    protectedSurfaceOperationClaimIndexEntries: terminalClaim && lifecycle.keepClaimBlocking ? [operationClaimIndexEntry(terminalClaim, now)] : [],
+    protectedSurfaceOperationClaimIndexReleases: activeClaim && terminalClaim && !lifecycle.keepClaimBlocking ? [activeClaim.payload.claimKeyDigest] : [],
+    idempotencyLedgerIndexEntries: idempotencyLedgerUpdate ? [idempotencyLedgerIndexEntry(idempotencyLedgerUpdate)] : [],
+    isolationStateIndexEntries: isolationState ? [isolationStateIndexEntry(isolationState)] : []
+  });
+}
+async function receiptIdForMutation(store, mutationAttempt) {
+  return (await store.getReceiptByMutationAttemptId(mutationAttempt.mutationAttemptId))?.payload.receiptId ?? null;
+}
+async function currentClaimForContract(store, contract) {
+  const claimKeyDigest = await protectedSurfaceOperationClaimKeyDigest(protectedSurfaceOperationClaimKey(contract));
+  return store.getCurrentProtectedSurfaceOperationClaim(claimKeyDigest);
+}
+async function currentIdempotencyLedgerForContract(store, contract) {
+  const ledgerKeyDigest = await idempotencyLedgerKeyDigest(idempotencyLedgerKey(contract));
+  const current = await store.getCurrentIdempotencyLedgerEntry(ledgerKeyDigest);
+  if (current)
+    return current;
+  const contractLedgerEntries = await store.listRecordsByActionContract("idempotency_ledger_entry", contract.actionContractId, { tenantId: contract.tenantId, organizationId: contract.organizationId });
+  return contractLedgerEntries.at(-1) ?? null;
+}
+function buildOrphanIsolationState(contract, reconciliation, now) {
+  return IsolationStateSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    isolationStateId: createId("iso"),
+    scopeType: "resource",
+    scopeId: contract.resourceRef,
+    state: "state_suspect",
+    reasonCode: "orphan_mitigation_required",
+    reasonSummary: "Protected surface finality is unknown after a gateway-passed mutation attempt.",
+    sourceDecisionRef: reconciliation.reconciliationId,
+    effectiveAt: now,
+    expiresAt: null,
+    clearedAt: null,
+    observedStreamOffsets: [],
+    version: 0
+  });
+}
+function operationClaimIndexEntry(claim, updatedAt) {
+  return {
+    claimKeyDigest: claim.claimKeyDigest,
+    protectedSurfaceOperationClaimId: claim.protectedSurfaceOperationClaimId,
+    tenantId: claim.tenantId,
+    organizationId: claim.organizationId,
+    claimState: claim.claimState,
+    updatedAt
+  };
+}
+function assertTransition3(result) {
+  if (!result.ok) {
+    throw new HandshakeProtocolError(result.code, result.message, result.status);
+  }
+}
+// src/protocol/areas/gateway-gate/gateway-policy.ts
+function gateRefusalReason(contract, greenlight, observedParamsDigest, idempotencyLedgerKeyDigest2, isolationStates, now, gatewayPolicyDriftReasonCode, delegatedAuthorityBindingReasonCode, gatewayCredentialBindingReasonCode, protectedPathReasonCode, sequenceDependencyReasonCode) {
+  if (greenlight.actionContractId !== contract.actionContractId)
+    return "contract_mismatch";
+  if (greenlight.gatewayRegistryEntryId !== contract.gatewayRegistryEntryId)
+    return "gateway_registry_mismatch";
+  if (greenlight.gatewayRegistryDigest !== null && greenlight.gatewayRegistryDigest !== contract.gatewayRegistryDigest)
+    return "gateway_registry_digest_mismatch";
+  if (greenlight.gatewayRegistryVersion !== contract.gatewayRegistryVersion)
+    return "gateway_registry_version_mismatch";
+  if (greenlight.gatewayId !== contract.gatewayId)
+    return "gateway_mismatch";
+  if (greenlight.gatewayPolicyVersion !== contract.gatewayPolicyVersion)
+    return "greenlight_policy_mismatch";
+  if (greenlight.policyVersionRef !== null && greenlight.policyVersionRef !== stringParameter3(contract, "policyVersionRef"))
+    return "greenlight_policy_version_ref_mismatch";
+  if (greenlight.policyVersionDigest !== null && greenlight.policyVersionDigest !== stringParameter3(contract, "policyVersionDigest"))
+    return "greenlight_policy_version_digest_mismatch";
+  if (greenlight.gatewayReadinessRef !== null && greenlight.gatewayReadinessRef !== stringParameter3(contract, "gatewayReadinessRef"))
+    return "greenlight_readiness_ref_mismatch";
+  if (greenlight.gatewayReadinessDigest !== null && greenlight.gatewayReadinessDigest !== stringParameter3(contract, "gatewayReadinessDigest"))
+    return "greenlight_readiness_digest_mismatch";
+  if (greenlight.actionClass !== contract.actionClass)
+    return "action_class_mismatch";
+  if (greenlight.resourceRef !== contract.resourceRef)
+    return "resource_mismatch";
+  if (greenlight.paramsDigest !== observedParamsDigest)
+    return "params_mismatch";
+  if (greenlight.contractDigest !== contract.actionContractDigest)
+    return "contract_digest_mismatch";
+  if (greenlight.idempotencyKey !== null && greenlight.idempotencyKey !== contract.idempotencyKey)
+    return "greenlight_idempotency_key_mismatch";
+  if (greenlight.idempotencyLedgerKeyDigest !== null && greenlight.idempotencyLedgerKeyDigest !== idempotencyLedgerKeyDigest2)
+    return "greenlight_idempotency_scope_mismatch";
+  if (!sameSet(greenlight.gatewayCredentialRefIds, contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefId)))
+    return "greenlight_credential_ref_mismatch";
+  if (!sameSet(greenlight.gatewayCredentialRefDigests, contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefDigest)))
+    return "greenlight_credential_ref_digest_mismatch";
+  if (!sameSet(greenlight.delegatedAuthorityRefIds, contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefId)))
+    return "greenlight_delegated_authority_ref_mismatch";
+  if (!sameSet(greenlight.delegatedAuthorityRefDigests, contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefDigest)))
+    return "greenlight_delegated_authority_ref_digest_mismatch";
+  if (greenlight.requiredProtectedPathState !== contract.requiredProtectedPathState)
+    return "protected_path_requirement_mismatch";
+  if (Date.parse(greenlight.notBefore) > Date.parse(now))
+    return "greenlight_not_active";
+  if (Date.parse(greenlight.expiresAt) <= Date.parse(now))
+    return "greenlight_expired";
+  if (greenlight.consumedAt !== null)
+    return "already_consumed";
+  if (gatewayPolicyDriftReasonCode)
+    return gatewayPolicyDriftReasonCode;
+  if (delegatedAuthorityBindingReasonCode)
+    return delegatedAuthorityBindingReasonCode;
+  if (gatewayCredentialBindingReasonCode)
+    return gatewayCredentialBindingReasonCode;
+  if (protectedPathReasonCode)
+    return protectedPathReasonCode;
+  const blockingIsolation = isolationStates.find((state) => ["review_only", "quarantined", "halted", "revoked", "state_suspect"].includes(state.state));
+  if (blockingIsolation)
+    return `current_isolation_${blockingIsolation.state}`;
+  if (sequenceDependencyReasonCode)
+    return sequenceDependencyReasonCode;
+  return null;
+}
+function stringParameter3(contract, key) {
+  const value = contract.parameters[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function sameSet(left, right) {
+  if (left.length !== right.length)
+    return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+function checkGatewayPolicyDrift(contract, greenlight, currentGateway) {
+  if (!currentGateway) {
+    return { status: "unknown", currentGatewayPolicyVersion: null, reasonCode: "gateway_policy_unknown" };
+  }
+  if (currentGateway.gatewayId !== contract.gatewayId || currentGateway.protectedSurfaceKind !== contract.protectedSurfaceKind || currentGateway.gatewayPolicyContractId !== contract.gatewayPolicyContractId || currentGateway.canonicalizerVersion !== contract.canonicalizerVersion || currentGateway.receiptCapabilityStatus !== "available" || currentGateway.isolationCheckCapabilityStatus !== "available" || currentGateway.credentialCustodyStatus !== contract.credentialCustodyStatus || currentGateway.enforcementMode !== contract.enforcementMode || currentGateway.mutationCredentialHolderRef !== contract.mutationCredentialHolderRef || currentGateway.gatewayAuthorityHolderRef !== contract.gatewayAuthorityHolderRef) {
+    return {
+      status: "incompatible",
+      currentGatewayPolicyVersion: currentGateway.gatewayPolicyVersion,
+      reasonCode: "gateway_policy_drift"
+    };
+  }
+  if (greenlight.gatewayPolicyVersion !== contract.gatewayPolicyVersion) {
+    return {
+      status: "incompatible",
+      currentGatewayPolicyVersion: currentGateway.gatewayPolicyVersion,
+      reasonCode: "greenlight_policy_mismatch"
+    };
+  }
+  if (currentGateway.gatewayPolicyVersion === contract.gatewayPolicyVersion) {
+    return {
+      status: "same_version",
+      currentGatewayPolicyVersion: currentGateway.gatewayPolicyVersion,
+      reasonCode: null
+    };
+  }
+  if (currentGateway.gatewayPolicyDriftMode === "allow_compatible_stricter" && currentGateway.compatiblePreviousGatewayPolicyVersions.includes(contract.gatewayPolicyVersion)) {
+    return {
+      status: "compatible_stricter",
+      currentGatewayPolicyVersion: currentGateway.gatewayPolicyVersion,
+      reasonCode: null
+    };
+  }
+  return {
+    status: "incompatible",
+    currentGatewayPolicyVersion: currentGateway.gatewayPolicyVersion,
+    reasonCode: "gateway_policy_drift"
+  };
+}
+function mutationOutcomeFor() {
+  return "submitted";
+}
+function surfaceOperationRefFor(providedRef) {
+  if (providedRef)
+    return providedRef;
+  return createId("sop");
+}
+function downstreamStatusFor(gateDecision) {
+  if (gateDecision === "refused")
+    return "not_started";
+  return "pending";
+}
+function receiptFinalityFor(gateDecision, hasProofGap) {
+  if (hasProofGap || gateDecision === "proof_gap")
+    return "unknown";
+  if (gateDecision === "refused")
+    return "suspect";
+  return "pending";
+}
+// src/protocol/areas/gateway-gate/artifacts.ts
+async function buildGateArtifacts(input) {
+  const receiptId = createId("rcp");
+  const mutationAttempt = input.refusal ? null : buildMutationAttempt(input);
+  const proofGap2 = buildMutationProofGap(input, mutationAttempt, receiptId);
+  const gateDecision = proofGap2 ? "proof_gap" : input.refusal ? "refused" : "passed";
+  const reasonCode = proofGap2 ? "downstream_status_unknown" : input.refusal ?? "gate_passed";
+  const gateAttempt = buildGateAttempt(input, gateDecision, reasonCode, mutationAttempt);
+  const receipt = buildReceipt(input, receiptId, gateAttempt, mutationAttempt, proofGap2);
+  const refusal2 = gateDecision === "refused" ? await buildGatewayRefusal(input, gateAttempt) : null;
+  return { result: { gateAttempt, mutationAttempt, receipt, proofGap: proofGap2 }, refusal: refusal2 };
+}
+async function withReceiptStreamReferences(result, events) {
+  const receiptWithStreamRefs = {
+    ...result.receipt,
+    streamEventIds: events.map((event) => event.streamEventId),
+    streamOffsets: receiptStreamReferencesForEvents(events)
+  };
+  const receiptDigest = await digestCanonical({
+    ...receiptWithStreamRefs,
+    receiptDigest: null,
+    auditChainDigest: null
+  });
+  const auditChainDigest = await digestCanonical({
+    receiptDigest,
+    streamOffsets: receiptWithStreamRefs.streamOffsets,
+    proofGapIds: receiptWithStreamRefs.proofGapIds,
+    finalityStatus: receiptWithStreamRefs.finalityStatus
+  });
+  const receipt = ReceiptSchema.parse({
+    ...receiptWithStreamRefs,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receiptWithStreamRefs),
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receiptWithStreamRefs),
+    receiptDigest,
+    auditChainDigest
+  });
+  return { ...result, receipt };
+}
+function gateEventDescriptors(artifacts, streamRefs, operationClaim) {
+  const { gateAttempt, mutationAttempt, proofGap: proofGap2, receipt } = artifacts.result;
+  const { refusal: refusal2 } = artifacts;
+  const descriptors = [
+    {
+      source: gateAttempt,
+      eventType: "gateway_checked",
+      objectRefs: [gateAttempt.gateAttemptId, streamRefs.actionContractId],
+      streamRefs,
+      payload: { gateDecision: gateAttempt.gateDecision, reasonCode: gateAttempt.gateDecisionReasonCode }
+    }
+  ];
+  if (mutationAttempt) {
+    descriptors.push({
+      source: mutationAttempt,
+      eventType: "mutation_attempted",
+      objectRefs: [mutationAttempt.mutationAttemptId, streamRefs.actionContractId],
+      streamRefs,
+      payload: { outcome: mutationAttempt.outcome }
+    });
+  }
+  if (operationClaim) {
+    descriptors.push({
+      source: operationClaim,
+      eventType: "protected_surface_operation_claimed",
+      objectRefs: [
+        operationClaim.protectedSurfaceOperationClaimId,
+        operationClaim.mutationAttemptId ?? operationClaim.gateAttemptId,
+        streamRefs.actionContractId
+      ],
+      streamRefs,
+      payload: { claimState: operationClaim.claimState, claimKeyDigest: operationClaim.claimKeyDigest }
+    });
+  }
+  if (proofGap2) {
+    descriptors.push({
+      source: proofGap2,
+      eventType: "proof_gap_recorded",
+      objectRefs: [proofGap2.proofGapId, streamRefs.actionContractId],
+      streamRefs,
+      payload: { reasonCode: proofGap2.reasonCode, finalityImpact: proofGap2.finalityImpact }
+    });
+  }
+  if (refusal2) {
+    descriptors.push({
+      source: refusal2,
+      eventType: "gateway_refused",
+      objectRefs: [refusal2.refusalId, gateAttempt.gateAttemptId, streamRefs.actionContractId],
+      streamRefs,
+      payload: { reasonCode: refusal2.reasonCode, refusedObjectRef: refusal2.refusedObjectRef }
+    });
+  }
+  descriptors.push({
+    source: receipt,
+    eventType: "receipt_emitted",
+    objectRefs: [receipt.receiptId, streamRefs.actionContractId],
+    streamRefs,
+    payload: { finalityStatus: receipt.finalityStatus, proofGapIds: receipt.proofGapIds }
+  });
+  return descriptors;
+}
+async function buildGatewayRefusal(input, gateAttempt) {
+  return buildRefusal({
+    tenantId: input.contract.tenantId,
+    organizationId: input.contract.organizationId,
+    createdAt: input.now,
+    phase: "gateway",
+    actionContractId: input.contract.actionContractId,
+    policyDecisionId: input.greenlight.policyDecisionId,
+    greenlightId: input.greenlight.greenlightId,
+    gateAttemptId: gateAttempt.gateAttemptId,
+    refusedObjectRef: protocolObjectRef("gateway_check_attempt", gateAttempt.gateAttemptId),
+    reasonCode: gateAttempt.gateDecisionReasonCode,
+    reason: `Gateway refused before mutation with reason code ${gateAttempt.gateDecisionReasonCode}.`,
+    evidenceRefs: [
+      protocolObjectRef("action_contract", input.contract.actionContractId),
+      protocolObjectRef("greenlight", input.greenlight.greenlightId),
+      protocolObjectRef("gateway_check_attempt", gateAttempt.gateAttemptId)
+    ],
+    refusedAt: input.now
+  });
+}
+function buildMutationAttempt(input) {
+  return MutationAttemptSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.contract.tenantId,
+    organizationId: input.contract.organizationId,
+    createdAt: input.now,
+    mutationAttemptId: createId("mut"),
+    gateAttemptId: input.gateAttemptId,
+    actionContractId: input.contract.actionContractId,
+    greenlightId: input.greenlight.greenlightId,
+    gatewayId: input.contract.gatewayId,
+    actionClass: input.contract.actionClass,
+    resourceRef: input.contract.resourceRef,
+    idempotencyKey: input.contract.idempotencyKey,
+    outcome: mutationOutcomeFor(),
+    outcomeReasonCode: "pending",
+    surfaceOperationRef: surfaceOperationRefFor(input.input.surfaceOperationRef),
+    startedAt: input.now,
+    finishedAt: null
+  });
+}
+function buildMutationProofGap(input, mutationAttempt, receiptId) {
+  if (mutationAttempt?.outcome !== "unknown")
+    return null;
+  return buildProofGap(input.contract, "mutation", "downstream_finality", "downstream_status_unknown", {
+    gateAttemptId: input.gateAttemptId,
+    mutationAttemptId: mutationAttempt.mutationAttemptId,
+    receiptId
+  });
+}
+function buildGateAttempt(input, gateDecision, reasonCode, mutationAttempt) {
+  return GatewayCheckAttemptSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.contract.tenantId,
+    organizationId: input.contract.organizationId,
+    createdAt: input.now,
+    gateAttemptId: input.gateAttemptId,
+    gatewayId: input.contract.gatewayId,
+    gatewayPolicyContractId: input.contract.gatewayPolicyContractId,
+    gatewayPolicyVersion: input.contract.gatewayPolicyVersion,
+    pinnedGatewayPolicyVersion: input.contract.gatewayPolicyVersion,
+    currentGatewayPolicyVersion: input.gatewayPolicyDrift.currentGatewayPolicyVersion,
+    gatewayPolicyDriftStatus: input.gatewayPolicyDrift.status,
+    actionContractId: input.contract.actionContractId,
+    greenlightId: input.greenlight.greenlightId,
+    contractDigestSeen: input.contract.actionContractDigest,
+    greenlightDigestSeen: input.greenlightDigestSeen,
+    paramsDigestSeen: input.observedParamsDigest,
+    idempotencyKeySeen: input.contract.idempotencyKey,
+    isolationSnapshotRef: isolationSnapshotRef(input.isolationStates),
+    protectedPathPostureIdSeen: input.protectedPathPosture?.payload.protectedPathPostureId ?? null,
+    protectedPathPostureDigestSeen: input.protectedPathPosture?.payload.postureDigest ?? null,
+    protectedPathPostureStateSeen: input.protectedPathPosture?.payload.postureState ?? null,
+    gateDecision,
+    gateDecisionReasonCode: reasonCode,
+    consumedGreenlight: !input.refusal,
+    mutationAttemptId: mutationAttempt?.mutationAttemptId ?? null
+  });
+}
+function buildReceipt(input, receiptId, gateAttempt, mutationAttempt, proofGap2) {
+  const receiptSeed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.contract.tenantId,
+    organizationId: input.contract.organizationId,
+    createdAt: input.now,
+    receiptId,
+    actionContractId: input.contract.actionContractId,
+    policyDecisionId: input.greenlight.policyDecisionId,
+    greenlightId: input.greenlight.greenlightId,
+    gateAttemptId: gateAttempt.gateAttemptId,
+    mutationAttemptId: mutationAttempt?.mutationAttemptId ?? null,
+    gatewayId: input.contract.gatewayId,
+    policyDecisionStatus: "greenlight",
+    gatewayCheckStatus: gateAttempt.gateDecision,
+    greenlightConsumptionStatus: !input.refusal ? "consumed" : input.refusal === "already_consumed" ? "replayed" : "not_consumed",
+    mutationAttemptStatus: mutationAttempt?.outcome ?? "not_attempted",
+    downstreamExecutionStatus: downstreamStatusFor(gateAttempt.gateDecision),
+    proofGapIds: proofGap2 ? [proofGap2.proofGapId] : [],
+    evidenceRefs: input.contract.evidenceRefs,
+    streamEventIds: [],
+    streamOffsets: [],
+    receiptDigest: null,
+    auditChainDigest: null,
+    finalityStatus: receiptFinalityFor(gateAttempt.gateDecision, proofGap2 !== null),
+    emittedAt: input.now
+  };
+  return ReceiptSchema.parse({
+    ...receiptSeed,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receiptSeed),
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receiptSeed)
+  });
+}
+function gateProtocolRecords(input, result, refusal2) {
+  const updatedGreenlight = input.refusal ? null : GreenlightSchema.parse({
+    ...input.greenlight,
+    consumedAt: input.now,
+    consumedByGateAttemptId: input.gateAttemptId
+  });
+  const records2 = [
+    { objectType: "gateway_check_attempt", payload: result.gateAttempt },
+    { objectType: "receipt", payload: result.receipt }
+  ];
+  if (updatedGreenlight)
+    records2.push({ objectType: "greenlight", payload: updatedGreenlight });
+  if (result.mutationAttempt)
+    records2.push({ objectType: "mutation_attempt", payload: result.mutationAttempt });
+  if (result.proofGap)
+    records2.push({ objectType: "proof_gap", payload: result.proofGap });
+  if (refusal2)
+    records2.push({ objectType: "refusal", payload: refusal2 });
+  return records2;
+}
+// src/protocol/areas/gateway-gate/guards.ts
+function guardGatewayCheckAuthority(greenlight, policyDecision) {
+  if (policyDecision.policyDecisionId !== greenlight.policyDecisionId) {
+    return fail("invalid_transition_policy_greenlight_mismatch", "Greenlight must reference the policy decision loaded for gate authority.");
+  }
+  if (policyDecision.actionContractId !== greenlight.actionContractId) {
+    return fail("invalid_transition_policy_contract_mismatch", "Greenlight policy decision must bind to the same action contract.");
+  }
+  if (policyDecision.decision !== "greenlight") {
+    return fail("invalid_transition_policy_not_greenlight", "Gateway gate requires a policy decision whose value is greenlight.");
+  }
+  return ok();
+}
+// src/protocol/areas/gateway-gate/replay-refusal/index.ts
+var MAX_STREAM_COMMIT_RETRIES = 3;
+async function commitReplayRefusal(store, recorder, contract, greenlight, context) {
+  const now = nowIso();
+  const greenlightDigestSeen = await digestCanonical(greenlight);
+  const gateAttempt = buildReplayGateAttempt(contract, greenlight, context, greenlightDigestSeen, now);
+  const refusal2 = await buildRefusal({
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    phase: "gateway",
+    actionContractId: contract.actionContractId,
+    policyDecisionId: greenlight.policyDecisionId,
+    greenlightId: greenlight.greenlightId,
+    gateAttemptId: gateAttempt.gateAttemptId,
+    refusedObjectRef: protocolObjectRef("gateway_check_attempt", gateAttempt.gateAttemptId),
+    reasonCode: gateAttempt.gateDecisionReasonCode,
+    reason: `Gateway refused before mutation with reason code ${gateAttempt.gateDecisionReasonCode}.`,
+    evidenceRefs: [
+      protocolObjectRef("action_contract", contract.actionContractId),
+      protocolObjectRef("greenlight", greenlight.greenlightId),
+      protocolObjectRef("gateway_check_attempt", gateAttempt.gateAttemptId)
+    ],
+    refusedAt: now
+  });
+  const receipt = buildReplayReceipt(contract, greenlight, gateAttempt, now, context.greenlightConsumptionStatus ?? "replayed");
+  const eventDescriptors = gateEventDescriptors({ result: { gateAttempt, mutationAttempt: null, receipt, proofGap: null }, refusal: refusal2 }, actionLifecycleStreamRefs(contract));
+  const requestContextRecord = await recorder.transitionRequestContextRecordFor({
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId
+  });
+  const eventDescriptorsWithContext = recorder.withTransitionRequestContextEventDescriptors(eventDescriptors, requestContextRecord);
+  for (let attempt = 0;attempt <= MAX_STREAM_COMMIT_RETRIES; attempt += 1) {
+    const events = await buildEventChain(store, eventDescriptorsWithContext);
+    const finalizedResult = await withReceiptStreamReferences({ gateAttempt, mutationAttempt: null, receipt, proofGap: null }, events);
+    const records2 = await Promise.all([
+      ...requestContextRecord ? [requestContextRecord] : [],
+      { objectType: "gateway_check_attempt", payload: finalizedResult.gateAttempt },
+      { objectType: "refusal", payload: refusal2 },
+      { objectType: "receipt", payload: finalizedResult.receipt }
+    ].map((record2) => recorder.buildRecord(record2)));
+    const commitResult = await store.commitGatewayCheck({ consumption: null, records: records2, events });
+    if (commitResult === "committed" || commitResult === "already_consumed") {
+      return finalizedResult;
+    }
+  }
+  throw new HandshakeProtocolError("stream_append_conflict", "Replay refusal could not commit a contiguous contract stream after retrying fresh stream tails.", 409);
+}
+function buildReplayGateAttempt(contract, greenlight, context, greenlightDigestSeen, now) {
+  return GatewayCheckAttemptSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    gateAttemptId: createId("gat"),
+    gatewayId: contract.gatewayId,
+    gatewayPolicyContractId: contract.gatewayPolicyContractId,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    pinnedGatewayPolicyVersion: contract.gatewayPolicyVersion,
+    currentGatewayPolicyVersion: context.gatewayPolicyDrift.currentGatewayPolicyVersion,
+    gatewayPolicyDriftStatus: context.gatewayPolicyDrift.status,
+    actionContractId: contract.actionContractId,
+    greenlightId: greenlight.greenlightId,
+    contractDigestSeen: contract.actionContractDigest,
+    greenlightDigestSeen,
+    paramsDigestSeen: context.observedParamsDigest,
+    idempotencyKeySeen: contract.idempotencyKey,
+    isolationSnapshotRef: isolationSnapshotRef(context.isolationStates),
+    protectedPathPostureIdSeen: context.protectedPathPosture?.payload.protectedPathPostureId ?? null,
+    protectedPathPostureDigestSeen: context.protectedPathPosture?.payload.postureDigest ?? null,
+    protectedPathPostureStateSeen: context.protectedPathPosture?.payload.postureState ?? null,
+    gateDecision: "refused",
+    gateDecisionReasonCode: context.refusalReasonCode ?? "already_consumed",
+    consumedGreenlight: false,
+    mutationAttemptId: null
+  });
+}
+function buildReplayReceipt(contract, greenlight, gateAttempt, now, greenlightConsumptionStatus) {
+  const receiptSeed = {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    receiptId: createId("rcp"),
+    actionContractId: contract.actionContractId,
+    policyDecisionId: greenlight.policyDecisionId,
+    greenlightId: greenlight.greenlightId,
+    gateAttemptId: gateAttempt.gateAttemptId,
+    mutationAttemptId: null,
+    gatewayId: contract.gatewayId,
+    policyDecisionStatus: "greenlight",
+    gatewayCheckStatus: "refused",
+    greenlightConsumptionStatus,
+    mutationAttemptStatus: "not_attempted",
+    downstreamExecutionStatus: "not_started",
+    proofGapIds: [],
+    evidenceRefs: contract.evidenceRefs,
+    streamEventIds: [],
+    streamOffsets: [],
+    receiptDigest: null,
+    auditChainDigest: null,
+    finalityStatus: "suspect",
+    emittedAt: now
+  };
+  return ReceiptSchema.parse({
+    ...receiptSeed,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receiptSeed),
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receiptSeed)
+  });
+}
+
+// src/protocol/areas/gateway-gate/transitions.ts
+var MAX_STREAM_COMMIT_RETRIES2 = 3;
+async function gatewayCheck(store, recorder, inputValue) {
+  const authorityContext = await getGatewayAuthorityContext(recorder, inputValue);
+  assertTransition4(guardGatewayCheckAuthority(authorityContext.greenlightRecord.payload, authorityContext.policyDecisionRecord.payload));
+  const evaluation = await deriveGatewayConstraintEvaluation(store, authorityContext);
+  const plan = await buildGatewayCommitPlan(recorder, evaluation);
+  return commitGatewayCheckPlan(store, recorder, plan);
+}
+async function getGatewayAuthorityContext(recorder, inputValue) {
+  const input = GatewayCheckInputSchema.parse(inputValue);
+  const contractRecord = await recorder.requiredRecord("action_contract", input.actionContractId, "contract_missing");
+  const greenlightRecord = await recorder.requiredRecord("greenlight", input.greenlightId, "greenlight_missing");
+  const policyDecisionRecord = await recorder.requiredRecord("policy_decision", greenlightRecord.payload.policyDecisionId, "policy_decision_missing");
+  return { input, contractRecord, greenlightRecord, policyDecisionRecord };
+}
+async function deriveGatewayConstraintEvaluation(store, context) {
+  const contract = context.contractRecord.payload;
+  const greenlight = context.greenlightRecord.payload;
+  const now = nowIso();
+  const gatewayPolicyDrift = await currentGatewayPolicyDrift(store, contract, greenlight);
+  const observedParamsDigest = await protectedActionParamsDigest({
+    parameters: context.input.observedParameters,
+    secretRefs: contract.secretRefs,
+    gatewayCredentialRefs: contract.gatewayCredentialRefs,
+    delegatedAuthorityRefs: contract.delegatedAuthorityRefs
+  });
+  const greenlightDigestSeen = await digestCanonical(greenlight);
+  const isolationStates = await store.listIsolationStates([
+    ...isolationScopeRefsForContract(contract),
+    ...isolationScopeRefsForGreenlight(greenlight)
+  ]);
+  const protectedPathPosture = await loadCurrentPostureForContract(store, contract);
+  const ledgerKeyDigest = greenlight.idempotencyLedgerKeyDigest ?? await idempotencyLedgerKeyDigest(idempotencyLedgerKey(contract));
+  const idempotencyLedgerEntry = await store.getCurrentIdempotencyLedgerEntry(ledgerKeyDigest);
+  const protectedPathEvaluation = evaluateRequiredProtectedPathPosture({
+    contract,
+    gateway: contract,
+    posture: protectedPathPosture,
+    now
+  });
+  const delegatedAuthorityBindingEvaluation = await evaluateDelegatedAuthorityBindings(store, contract, now);
+  const gatewayCredentialBindingEvaluation = await evaluateGatewayCredentialBindings(store, contract, now);
+  const sequenceDependencyStates = await loadGatewayCheckSequenceDependencyStates(store, contract);
+  const sequenceDependencyReasonCode = gatewayCheckSequenceDependencyRefusalReason(sequenceDependencyStates);
+  const gateAttemptId = createId("gat");
+  const refusal2 = gateRefusalReason(contract, greenlight, observedParamsDigest, ledgerKeyDigest, isolationStates, now, gatewayPolicyDrift.reasonCode, delegatedAuthorityBindingEvaluation.ok ? null : delegatedAuthorityBindingEvaluation.reasonCode, gatewayCredentialBindingEvaluation.ok ? null : gatewayCredentialBindingEvaluation.reasonCode, protectedPathEvaluation.ok ? null : protectedPathEvaluation.reasonCode, sequenceDependencyReasonCode);
+  return {
+    input: context.input,
+    contract,
+    greenlight,
+    now,
+    gateAttemptId,
+    observedParamsDigest,
+    greenlightDigestSeen,
+    isolationStates,
+    gatewayPolicyDrift,
+    protectedPathPosture,
+    delegatedAuthorityBindingEvaluation,
+    gatewayCredentialBindingEvaluation,
+    idempotencyLedgerEntry,
+    refusal: refusal2
+  };
+}
+async function buildGatewayCommitPlan(recorder, evaluation) {
+  const artifacts = await buildGateArtifacts(evaluation);
+  const streamRefs = actionLifecycleStreamRefs(evaluation.contract);
+  const operationClaim = await deriveProtectedSurfaceOperationClaim(evaluation, artifacts.result);
+  const idempotencyLedgerUpdate = await deriveIdempotencyLedgerUpdate(evaluation, artifacts.result);
+  const requestContextRecord = await recorder.transitionRequestContextRecordFor({
+    tenantId: evaluation.contract.tenantId,
+    organizationId: evaluation.contract.organizationId
+  });
+  const events = recorder.withTransitionRequestContextEventDescriptors(gateEventDescriptors(artifacts, streamRefs, operationClaim), requestContextRecord);
+  return {
+    ...evaluation,
+    artifacts,
+    operationClaim,
+    idempotencyLedgerUpdate,
+    requestContextRecord,
+    events,
+    consumption: buildGreenlightConsumption(evaluation)
+  };
+}
+async function commitGatewayCheckPlan(store, recorder, plan) {
+  for (let attempt = 0;attempt <= MAX_STREAM_COMMIT_RETRIES2; attempt += 1) {
+    const { commit, finalizedResult } = await buildGatewayCheckCommit(store, recorder, plan);
+    const commitResult = await store.commitGatewayCheck(commit);
+    if (commitResult === "committed")
+      return finalizedResult;
+    if (commitResult === "already_consumed") {
+      return commitReplayRefusal(store, recorder, plan.contract, plan.greenlight, {
+        observedParamsDigest: plan.observedParamsDigest,
+        isolationStates: plan.isolationStates,
+        gatewayPolicyDrift: plan.gatewayPolicyDrift,
+        protectedPathPosture: plan.protectedPathPosture
+      });
+    }
+    if (commitResult === "operation_claim_conflict") {
+      return commitReplayRefusal(store, recorder, plan.contract, plan.greenlight, {
+        observedParamsDigest: plan.observedParamsDigest,
+        isolationStates: plan.isolationStates,
+        gatewayPolicyDrift: plan.gatewayPolicyDrift,
+        protectedPathPosture: plan.protectedPathPosture,
+        refusalReasonCode: "protected_surface_operation_in_progress",
+        greenlightConsumptionStatus: "not_consumed"
+      });
+    }
+    if (commitResult === "receipt_index_conflict") {
+      return commitReplayRefusal(store, recorder, plan.contract, plan.greenlight, {
+        observedParamsDigest: plan.observedParamsDigest,
+        isolationStates: plan.isolationStates,
+        gatewayPolicyDrift: plan.gatewayPolicyDrift,
+        protectedPathPosture: plan.protectedPathPosture,
+        refusalReasonCode: "receipt_index_conflict",
+        greenlightConsumptionStatus: "not_consumed"
+      });
+    }
+  }
+  throw new HandshakeProtocolError("stream_append_conflict", "Gateway gate could not commit a contiguous contract stream after retrying fresh stream tails.", 409);
+}
+async function deriveProtectedSurfaceOperationClaim(evaluation, result) {
+  if (evaluation.refusal || !result.mutationAttempt)
+    return null;
+  return buildActiveProtectedSurfaceOperationClaim({
+    contract: evaluation.contract,
+    greenlight: evaluation.greenlight,
+    gateAttemptId: evaluation.gateAttemptId,
+    mutationAttempt: result.mutationAttempt,
+    now: evaluation.now
+  });
+}
+async function deriveIdempotencyLedgerUpdate(evaluation, result) {
+  if (evaluation.refusal || !result.mutationAttempt || !evaluation.idempotencyLedgerEntry)
+    return null;
+  return buildIdempotencyLedgerMutationStarted({
+    current: evaluation.idempotencyLedgerEntry.payload,
+    gateAttempt: result.gateAttempt,
+    mutationAttempt: result.mutationAttempt,
+    receiptId: result.receipt.receiptId,
+    now: evaluation.now
+  });
+}
+function buildGreenlightConsumption(evaluation) {
+  if (evaluation.refusal)
+    return null;
+  return {
+    greenlightId: evaluation.greenlight.greenlightId,
+    gateAttemptId: evaluation.gateAttemptId,
+    actionContractId: evaluation.contract.actionContractId,
+    idempotencyKey: evaluation.contract.idempotencyKey,
+    consumedAt: evaluation.now
+  };
+}
+async function buildGatewayCheckCommit(store, recorder, plan) {
+  const streamEvents = await buildEventChain(store, plan.events);
+  const finalizedResult = await withReceiptStreamReferences(plan.artifacts.result, streamEvents);
+  const protocolRecords = [
+    ...plan.requestContextRecord ? [plan.requestContextRecord] : [],
+    ...gateProtocolRecords(plan, finalizedResult, plan.artifacts.refusal)
+  ];
+  if (plan.operationClaim) {
+    protocolRecords.push({ objectType: "protected_surface_operation_claim", payload: plan.operationClaim });
+  }
+  if (plan.idempotencyLedgerUpdate) {
+    protocolRecords.push({ objectType: "idempotency_ledger_entry", payload: plan.idempotencyLedgerUpdate });
+  }
+  const records2 = await Promise.all(protocolRecords.map((record2) => recorder.buildRecord(record2)));
+  return {
+    finalizedResult,
+    commit: {
+      consumption: plan.consumption,
+      records: records2,
+      events: streamEvents,
+      protectedSurfaceOperationClaimIndexEntries: plan.operationClaim ? [operationClaimIndexEntry2(plan.operationClaim, plan.now)] : [],
+      idempotencyLedgerIndexEntries: plan.idempotencyLedgerUpdate ? [idempotencyLedgerIndexEntry(plan.idempotencyLedgerUpdate)] : [],
+      receiptMutationAttemptIndexEntries: receiptMutationAttemptIndexEntriesFor(finalizedResult)
+    }
+  };
+}
+function receiptMutationAttemptIndexEntriesFor(result) {
+  if (!result.receipt.mutationAttemptId)
+    return [];
+  return [
+    {
+      mutationAttemptId: result.receipt.mutationAttemptId,
+      receiptId: result.receipt.receiptId,
+      tenantId: result.receipt.tenantId,
+      organizationId: result.receipt.organizationId,
+      createdAt: result.receipt.createdAt
+    }
+  ];
+}
+async function currentGatewayPolicyDrift(store, contract, greenlight) {
+  const currentGatewayRecord = await store.getRecord("gateway_registry_entry", contract.gatewayRegistryEntryId);
+  return checkGatewayPolicyDrift(contract, greenlight, currentGatewayRecord?.payload ?? null);
+}
+function operationClaimIndexEntry2(claim, updatedAt) {
+  return {
+    claimKeyDigest: claim.claimKeyDigest,
+    protectedSurfaceOperationClaimId: claim.protectedSurfaceOperationClaimId,
+    tenantId: claim.tenantId,
+    organizationId: claim.organizationId,
+    claimState: claim.claimState,
+    updatedAt
+  };
+}
+function assertTransition4(result) {
+  if (!result.ok) {
+    throw new HandshakeProtocolError(result.code, result.message, result.status);
+  }
+}
+// src/protocol/areas/install-setup/inputs.ts
+var RegisterInstallProposalCompiledRecordsInputSchema = InstallProposalSchema;
+// src/protocol/areas/install-setup/transitions.ts
+var installSetupAuthorityBoundary = {
+  authorityCreated: false,
+  authorityCertificateMinted: false,
+  credentialMaterialIncluded: false,
+  gatewayCheckPerformed: false,
+  greenlightCreated: false,
+  mutationAttempted: false,
+  mutationCommandIncluded: false,
+  rawInternalRecordIncluded: false,
+  receiptExportCreated: false
+};
+async function registerInstallProposalCompiledRecords(store, recorder, inputValue) {
+  const proposal = InstallProposalSchema.parse(inputValue);
+  if (proposal.status !== "ready_to_install" || proposal.compiledRecords === null) {
+    return recordInstallProposalRefusal(recorder, proposal);
+  }
+  if (!proposal.compiledRecords.gatewayRegistryEntry) {
+    return recordInstallProposalRefusal(recorder, {
+      ...proposal,
+      refusalReasonCodes: ["install_orphan_catalog_missing_gateway"]
+    });
+  }
+  const records2 = installProposalCatalogRecords(proposal.compiledRecords);
+  for (const record2 of records2) {
+    const guard = guardCatalogRegistration(record2);
+    if (!guard.ok)
+      throw new HandshakeProtocolError(guard.code, guard.message, guard.status);
+  }
+  await assertNoCatalogDigestConflict(store, recorder, records2);
+  await recorder.commitRecordsWithEvents(records2, [installRegisteredEvent(proposal)], {
+    recordConflictMode: "absent_or_same"
+  });
+  return InstallSetupResultSchema.parse({
+    ...installSetupAuthorityBoundary,
+    outcome: "compiled_records_registered",
+    commitAtomicity: "server_store_commit",
+    installProposalId: proposal.installProposalId,
+    installDigest: proposal.installDigest,
+    adapterPackId: proposal.adapterPackId,
+    adapterPackVersion: proposal.adapterPackVersion,
+    actionFamily: proposal.actionFamily,
+    protectedSurfaceKind: proposal.protectedSurfaceKind,
+    records: proposal.compiledRecords,
+    recordRefs: recordRefsFor(proposal.compiledRecords),
+    refusal: null
+  });
+}
+async function recordInstallProposalRefusal(recorder, proposal) {
+  const refusedAt = nowIso();
+  const refusal2 = RefusalSchema.parse({
+    schemaVersion: proposal.schemaVersion,
+    tenantId: proposal.tenantId,
+    organizationId: proposal.organizationId,
+    createdAt: refusedAt,
+    refusalId: createId("ref"),
+    phase: "transition",
+    actionContractId: null,
+    policyDecisionId: null,
+    greenlightId: null,
+    gateAttemptId: null,
+    refusedObjectRef: proposal.installProposalId,
+    reasonCode: proposal.refusalReasonCodes[0] ?? "install_proposal_refused",
+    reason: `Install proposal ${proposal.installProposalId} did not include ready compiled records.`,
+    mutationAttempted: false,
+    authorityCreated: false,
+    evidenceRefs: [proposal.installDigest],
+    refusedAt
+  });
+  await recorder.commitRecordsWithEvents([{ objectType: "refusal", payload: refusal2 }], [installRefusedEvent(proposal, refusal2)]);
+  return InstallSetupResultSchema.parse({
+    ...installSetupAuthorityBoundary,
+    outcome: "install_proposal_refused",
+    commitAtomicity: "server_store_commit",
+    installProposalId: proposal.installProposalId,
+    installDigest: proposal.installDigest,
+    adapterPackId: proposal.adapterPackId,
+    adapterPackVersion: proposal.adapterPackVersion,
+    actionFamily: proposal.actionFamily,
+    protectedSurfaceKind: proposal.protectedSurfaceKind,
+    reasonCodes: proposal.refusalReasonCodes,
+    records: null,
+    recordRefs: null,
+    refusal: refusal2
+  });
+}
+function installProposalCatalogRecords(records2) {
+  if (!records2.gatewayRegistryEntry) {
+    throw new HandshakeProtocolError("install_orphan_catalog_missing_gateway", "Install setup requires gateway registry entry in compiled catalog triplet.", 422);
+  }
+  return [
+    { objectType: "tool_capability", payload: records2.toolCapability },
+    { objectType: "action_type", payload: records2.actionType },
+    { objectType: "gateway_registry_entry", payload: records2.gatewayRegistryEntry },
+    { objectType: "operating_envelope", payload: records2.operatingEnvelope }
+  ];
+}
+async function assertNoCatalogDigestConflict(store, recorder, records2) {
+  for (const record2 of records2) {
+    const nextRecord = await recorder.buildRecord(record2);
+    const existing = await store.getRecord(record2.objectType, nextRecord.objectId);
+    if (existing && existing.canonicalDigest !== nextRecord.canonicalDigest) {
+      throw new HandshakeProtocolError("bootstrap_record_digest_conflict", "Install setup cannot replace existing catalog or envelope records with a different canonical digest.", 409);
+    }
+  }
+}
+function installRegisteredEvent(proposal) {
+  const records2 = proposal.compiledRecords;
+  if (!records2)
+    throw new Error("install registered event requires compiled records");
+  return {
+    source: proposal,
+    eventType: "install_setup_recorded",
+    objectRefs: [proposal.installProposalId, proposal.installDigest, ...Object.values(recordRefsFor(records2))],
+    payload: {
+      installProposalId: proposal.installProposalId,
+      installDigest: proposal.installDigest,
+      adapterPackId: proposal.adapterPackId,
+      actionFamily: proposal.actionFamily,
+      protectedSurfaceKind: proposal.protectedSurfaceKind,
+      authorityCreated: false,
+      greenlightCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false
+    }
+  };
+}
+function installRefusedEvent(proposal, refusal2) {
+  return {
+    source: refusal2,
+    eventType: "install_setup_refused",
+    objectRefs: [refusal2.refusalId, proposal.installProposalId, proposal.installDigest],
+    payload: {
+      installProposalId: proposal.installProposalId,
+      installDigest: proposal.installDigest,
+      adapterPackId: proposal.adapterPackId,
+      actionFamily: proposal.actionFamily,
+      protectedSurfaceKind: proposal.protectedSurfaceKind,
+      reasonCode: refusal2.reasonCode,
+      authorityCreated: false,
+      greenlightCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false
+    }
+  };
+}
+function recordRefsFor(records2) {
+  const gatewayRegistryEntryId = records2.gatewayRegistryEntry?.gatewayRegistryEntryId;
+  if (!gatewayRegistryEntryId) {
+    throw new Error("record refs require gateway registry entry");
+  }
+  return {
+    toolCapabilityId: records2.toolCapability.toolCapabilityId,
+    actionTypeId: records2.actionType.actionTypeId,
+    gatewayRegistryEntryId,
+    operatingEnvelopeId: records2.operatingEnvelope.envelopeId
+  };
+}
+// src/protocol/areas/tool-call-draft/inputs.ts
+var CreateToolCallDraftInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCapabilityId: exports_external.string().min(1),
+  actionTypeId: exports_external.string().min(1),
+  gatewayRegistryEntryId: exports_external.string().min(1),
+  actionClass: exports_external.string().min(1),
+  gatewayId: exports_external.string().min(1),
+  resourceRef: exports_external.string().min(1),
+  draftState: exports_external.literal("opened").default("opened"),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  expiresAt: exports_external.string().datetime({ offset: true }),
+  invalidReasonCodes: exports_external.array(exports_external.string().min(2)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+var TransitionToolCallDraftInputSchema = exports_external.strictObject({
+  toolCallDraftId: exports_external.string().min(1),
+  nextDraftState: exports_external.enum(["streaming", "finalized", "invalid", "abandoned"]),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema).optional(),
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema).optional(),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).optional(),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).optional(),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).optional(),
+  finalizedAt: exports_external.string().datetime({ offset: true }).nullable().optional(),
+  expiresAt: exports_external.string().datetime({ offset: true }).optional(),
+  invalidReasonCodes: exports_external.array(exports_external.string().min(2)).optional(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).optional()
+});
+// src/protocol/areas/tool-call-draft/transitions.ts
+async function createToolCallDraft(recorder, inputValue) {
+  const input = CreateToolCallDraftInputSchema.parse(inputValue);
+  const context = {
+    input,
+    createdAt: nowIso(),
+    paramsDigest: await protectedActionParamsDigest({
+      parameters: input.parameters,
+      secretRefs: input.secretRefs,
+      gatewayCredentialRefs: input.gatewayCredentialRefs,
+      delegatedAuthorityRefs: input.delegatedAuthorityRefs
+    })
+  };
+  const draft = await buildToolCallDraft(context);
+  await recorder.commitRecordsWithEvents(toolCallDraftRecords(draft), toolCallDraftEvents(draft));
+  return draft;
+}
+async function transitionToolCallDraft(store, recorder, inputValue) {
+  const input = TransitionToolCallDraftInputSchema.parse(inputValue);
+  const currentRecord = await store.getRecord("tool_call_draft", input.toolCallDraftId);
+  if (!currentRecord) {
+    throw new HandshakeProtocolError("tool_call_draft_missing", "Tool call draft was not found.", 404);
+  }
+  const current = currentRecord.payload;
+  assertAllowedTransition(current, input);
+  const transitioned = await buildTransitionedToolCallDraft(current, input);
+  await recorder.commitRecordsWithEvents(toolCallDraftRecords(transitioned), toolCallDraftEvents(transitioned, current));
+  return transitioned;
+}
+async function buildToolCallDraft(context) {
+  const { input, createdAt, paramsDigest } = context;
+  const toolCallDraftId = createId("tcd");
+  const draftDigest = await digestCanonical(toolCallDraftDigestMaterial(context, toolCallDraftId));
+  return ToolCallDraftSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    toolCallDraftId,
+    runtimeExecutionId: input.runtimeExecutionId,
+    generatedExecutionGraphId: input.generatedExecutionGraphId,
+    generatedExecutionNodeId: input.generatedExecutionNodeId,
+    toolCapabilityId: input.toolCapabilityId,
+    actionTypeId: input.actionTypeId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    actionClass: input.actionClass,
+    gatewayId: input.gatewayId,
+    resourceRef: input.resourceRef,
+    draftState: input.draftState,
+    parameters: input.parameters,
+    nonSecretParamsSummary: input.nonSecretParamsSummary,
+    secretRefs: input.secretRefs,
+    gatewayCredentialRefs: input.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.delegatedAuthorityRefs,
+    paramsDigest,
+    finalizedAt: null,
+    expiresAt: input.expiresAt,
+    invalidReasonCodes: input.invalidReasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    draftDigest
+  });
+}
+function toolCallDraftDigestMaterial(context, toolCallDraftId) {
+  const { input, paramsDigest } = context;
+  return {
+    toolCallDraftId,
+    runtimeExecutionId: input.runtimeExecutionId,
+    generatedExecutionGraphId: input.generatedExecutionGraphId,
+    generatedExecutionNodeId: input.generatedExecutionNodeId,
+    toolCapabilityId: input.toolCapabilityId,
+    actionTypeId: input.actionTypeId,
+    gatewayRegistryEntryId: input.gatewayRegistryEntryId,
+    actionClass: input.actionClass,
+    gatewayId: input.gatewayId,
+    resourceRef: input.resourceRef,
+    draftState: input.draftState,
+    paramsDigest,
+    nonSecretParamsSummary: input.nonSecretParamsSummary,
+    gatewayCredentialRefs: input.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.delegatedAuthorityRefs,
+    invalidReasonCodes: input.invalidReasonCodes,
+    evidenceRefs: input.evidenceRefs,
+    finalizedAt: null,
+    expiresAt: input.expiresAt
+  };
+}
+function toolCallDraftRecords(draft) {
+  return [{ objectType: "tool_call_draft", payload: draft }];
+}
+function toolCallDraftEvents(draft, previousDraft = null) {
+  return [
+    {
+      source: draft,
+      eventType: "tool_call_draft_recorded",
+      objectRefs: [draft.toolCallDraftId, draft.draftDigest, draft.paramsDigest],
+      payload: {
+        previousDraftState: previousDraft?.draftState ?? null,
+        draftState: draft.draftState,
+        actionClass: draft.actionClass,
+        resourceRef: draft.resourceRef,
+        generatedExecutionGraphId: draft.generatedExecutionGraphId,
+        generatedExecutionNodeId: draft.generatedExecutionNodeId
+      }
+    }
+  ];
+}
+async function buildTransitionedToolCallDraft(current, input) {
+  const parameters = input.parameters ?? current.parameters;
+  const nonSecretParamsSummary = input.nonSecretParamsSummary ?? current.nonSecretParamsSummary;
+  const secretRefs = input.secretRefs ?? current.secretRefs;
+  const gatewayCredentialRefs = input.gatewayCredentialRefs ?? current.gatewayCredentialRefs;
+  const delegatedAuthorityRefs = input.delegatedAuthorityRefs ?? current.delegatedAuthorityRefs;
+  const paramsDigest = await protectedActionParamsDigest({
+    parameters,
+    secretRefs,
+    gatewayCredentialRefs,
+    delegatedAuthorityRefs
+  });
+  const finalizedAt = input.nextDraftState === "finalized" ? input.finalizedAt ?? nowIso() : input.finalizedAt ?? current.finalizedAt;
+  const next = ToolCallDraftSchema.parse({
+    ...current,
+    draftState: input.nextDraftState,
+    parameters,
+    nonSecretParamsSummary,
+    secretRefs,
+    gatewayCredentialRefs,
+    delegatedAuthorityRefs,
+    paramsDigest,
+    finalizedAt,
+    expiresAt: input.expiresAt ?? current.expiresAt,
+    invalidReasonCodes: input.invalidReasonCodes ?? current.invalidReasonCodes,
+    evidenceRefs: [...new Set([...current.evidenceRefs, ...input.evidenceRefs ?? []])],
+    draftDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  });
+  const draftDigest = await digestCanonical({
+    toolCallDraftId: next.toolCallDraftId,
+    runtimeExecutionId: next.runtimeExecutionId,
+    generatedExecutionGraphId: next.generatedExecutionGraphId,
+    generatedExecutionNodeId: next.generatedExecutionNodeId,
+    toolCapabilityId: next.toolCapabilityId,
+    actionTypeId: next.actionTypeId,
+    gatewayRegistryEntryId: next.gatewayRegistryEntryId,
+    actionClass: next.actionClass,
+    gatewayId: next.gatewayId,
+    resourceRef: next.resourceRef,
+    draftState: next.draftState,
+    paramsDigest: next.paramsDigest,
+    nonSecretParamsSummary: next.nonSecretParamsSummary,
+    gatewayCredentialRefs: next.gatewayCredentialRefs,
+    delegatedAuthorityRefs: next.delegatedAuthorityRefs,
+    invalidReasonCodes: next.invalidReasonCodes,
+    evidenceRefs: next.evidenceRefs,
+    finalizedAt: next.finalizedAt,
+    expiresAt: next.expiresAt
+  });
+  return ToolCallDraftSchema.parse({ ...next, draftDigest });
+}
+function assertAllowedTransition(current, input) {
+  if (["finalized", "invalid", "abandoned"].includes(current.draftState)) {
+    throw new HandshakeProtocolError("tool_call_draft_terminal_state", "Terminal tool-call drafts cannot transition to another state.", 409);
+  }
+  if (current.draftState === "opened" && !["streaming", "finalized", "invalid", "abandoned"].includes(input.nextDraftState)) {
+    throw new HandshakeProtocolError("tool_call_draft_transition_invalid", "Opened tool-call draft can only stream, finalize, invalidate, or abandon.", 409);
+  }
+  if (current.draftState === "streaming" && !["streaming", "finalized", "invalid", "abandoned"].includes(input.nextDraftState)) {
+    throw new HandshakeProtocolError("tool_call_draft_transition_invalid", "Streaming tool-call draft can only continue streaming, finalize, invalidate, or abandon.", 409);
+  }
+  if (input.nextDraftState === "finalized" && (!input.parameters || !input.nonSecretParamsSummary)) {
+    throw new HandshakeProtocolError("tool_call_draft_finalize_params_missing", "Finalized tool-call drafts must bind explicit parameters and non-secret parameter summary.", 422);
+  }
+  if (input.nextDraftState === "invalid" && (!input.invalidReasonCodes || input.invalidReasonCodes.length === 0)) {
+    throw new HandshakeProtocolError("tool_call_draft_invalid_reason_missing", "Invalid tool-call drafts must record at least one reason code.", 422);
+  }
+}
+// src/protocol/areas/intent-compilation/inputs.ts
+var CompileIntentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  candidate: exports_external.strictObject({
+    toolCapabilityId: exports_external.string().min(1),
+    actionTypeId: exports_external.string().min(1),
+    gatewayRegistryEntryId: exports_external.string().min(1),
+    actionClass: exports_external.string().min(1),
+    gatewayId: exports_external.string().min(1),
+    resourceRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().nonnegative(),
+    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
+    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+    purposeCode: exports_external.string().min(1),
+    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+    evidenceRefs: exports_external.array(exports_external.string()).default([]),
+    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+    idempotencyKey: exports_external.string().min(1),
+    rollbackHint: exports_external.string().max(500).nullable().default(null),
+    expiresAt: exports_external.string().datetime({ offset: true })
+  }),
+  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
+});
+// src/protocol/areas/intent-compilation/candidate-decision.ts
+function deriveCandidateDecision(context) {
+  const uncertaintyMarkers = deriveUncertaintyMarkers(context);
+  const overreachReasonCodes = [
+    ...deriveRuntimeExecutionReasonCodes(context),
+    ...deriveToolCallDraftReasonCodes(context),
+    ...deriveCatalogAndEnvelopeReasonCodes(context)
+  ];
+  if (requiresMissingGeneratedExecutionGraphRefusal(context)) {
+    overreachReasonCodes.push("generated_execution_graph_missing");
+  }
+  const generatedExecutionCoverage = context.generatedExecutionGraph ? deriveGeneratedExecutionCoverage({
+    input: context.input,
+    runtimeExecution: context.runtimeExecution,
+    generatedExecutionGraph: context.generatedExecutionGraph,
+    paramsDigest: context.paramsDigest
+  }) : { node: null, reasonCodes: [] };
+  overreachReasonCodes.push(...generatedExecutionCoverage.reasonCodes);
+  const refusalReasonCodes = [...uncertaintyMarkers, ...overreachReasonCodes];
+  return {
+    uncertaintyMarkers,
+    overreachReasonCodes,
+    refusalReasonCodes,
+    candidateStatus: refusalReasonCodes.length === 0 ? "contractable" : "rejected",
+    generatedExecutionNode: generatedExecutionCoverage.node
+  };
+}
+function deriveUncertaintyMarkers(context) {
+  const { input, tool, actionType, gateway, envelope, runtimeExecution, generatedExecutionGraph, toolCallDraft } = context;
+  const markers = [];
+  if (!tool)
+    markers.push("unknown_tool_capability");
+  if (!actionType)
+    markers.push("unknown_action_type");
+  if (!gateway)
+    markers.push("unknown_gateway_registry_entry");
+  if (!envelope)
+    markers.push("unknown_operating_envelope");
+  if (input.runtimeExecutionId && !runtimeExecution)
+    markers.push("unknown_runtime_execution");
+  if (input.generatedExecutionGraphId && !generatedExecutionGraph)
+    markers.push("unknown_generated_execution_graph");
+  if (input.toolCallDraftId && !toolCallDraft)
+    markers.push("unknown_tool_call_draft");
+  return markers;
+}
+function deriveRuntimeExecutionReasonCodes(context) {
+  const { input, runtimeExecution } = context;
+  if (!runtimeExecution)
+    return [];
+  const runtimeOverreachCodes = [];
+  if (runtimeExecution.tenantId !== input.tenantId || runtimeExecution.organizationId !== input.organizationId || runtimeExecution.principalIntentRef !== input.principalIntentRef || runtimeExecution.principalId !== input.principalId || runtimeExecution.agentId !== input.agentId || runtimeExecution.runId !== input.runId || runtimeExecution.runtimeAdapterId !== input.runtimeAdapterId) {
+    runtimeOverreachCodes.push("runtime_execution_scope_mismatch");
+  }
+  if (runtimeExecution.dynamicToolConstructionDetected) {
+    runtimeOverreachCodes.push("runtime_dynamic_tool_construction_detected");
+  }
+  if (runtimeExecution.unobservedRegionRefs.length > 0) {
+    runtimeOverreachCodes.push("runtime_unobserved_regions_present");
+  }
+  runtimeOverreachCodes.push(...runtimeExecution.refusalReasonCodes.map((code3) => `runtime_${code3}`));
+  return runtimeOverreachCodes;
+}
+function deriveToolCallDraftReasonCodes(context) {
+  const { input, createdAt, paramsDigest, toolCallDraft } = context;
+  const draftReasonCodes = [];
+  if ((input.generatedExecutionGraphId || input.generatedExecutionNodeId) && !input.toolCallDraftId) {
+    draftReasonCodes.push("tool_call_draft_missing");
+  }
+  if (!toolCallDraft)
+    return draftReasonCodes;
+  if (toolCallDraft.draftState !== "finalized")
+    draftReasonCodes.push("tool_call_draft_not_finalized");
+  if (Date.parse(toolCallDraft.expiresAt) <= Date.parse(createdAt))
+    draftReasonCodes.push("tool_call_draft_stale");
+  if (toolCallDraft.tenantId !== input.tenantId || toolCallDraft.organizationId !== input.organizationId || toolCallDraft.runtimeExecutionId !== input.runtimeExecutionId || toolCallDraft.generatedExecutionGraphId !== input.generatedExecutionGraphId || toolCallDraft.generatedExecutionNodeId !== input.generatedExecutionNodeId || toolCallDraft.toolCapabilityId !== input.candidate.toolCapabilityId || toolCallDraft.actionTypeId !== input.candidate.actionTypeId || toolCallDraft.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || toolCallDraft.actionClass !== input.candidate.actionClass || toolCallDraft.gatewayId !== input.candidate.gatewayId || toolCallDraft.resourceRef !== input.candidate.resourceRef) {
+    draftReasonCodes.push("tool_call_draft_binding_mismatch");
+  }
+  if (toolCallDraft.paramsDigest !== paramsDigest)
+    draftReasonCodes.push("tool_call_draft_params_digest_mismatch");
+  return draftReasonCodes;
+}
+function deriveCatalogAndEnvelopeReasonCodes(context) {
+  const { input, createdAt, tool, actionType, gateway, envelope } = context;
+  const catalogOverreachCodes = [];
+  if (tool?.readWriteClassification === "consequential" && tool.wrapperStatus !== "wrapped") {
+    catalogOverreachCodes.push("unwrapped_consequential_tool");
+  }
+  if (tool) {
+    assertSecretSafeCandidateInput(tool, input.candidate.parameters, input.candidate.nonSecretParamsSummary, input.candidate.secretRefs);
+  }
+  if (tool && tool.runtimeAdapterId !== input.runtimeAdapterId) {
+    catalogOverreachCodes.push("tool_runtime_adapter_mismatch");
+  }
+  if (actionType && actionType.actionClass !== input.candidate.actionClass) {
+    catalogOverreachCodes.push("action_class_mismatch");
+  }
+  if (gateway && gateway.gatewayId !== input.candidate.gatewayId) {
+    catalogOverreachCodes.push("gateway_mismatch");
+  }
+  if (gateway && actionType && gateway.protectedSurfaceKind !== actionType.protectedSurfaceKind) {
+    catalogOverreachCodes.push("protected_surface_kind_mismatch");
+  }
+  if (gateway && actionType && !gateway.acceptedActionCatalogVersions.includes(actionType.actionCatalogVersion)) {
+    catalogOverreachCodes.push("action_catalog_version_not_accepted");
+  }
+  if (envelope) {
+    catalogOverreachCodes.push(...deriveEnvelopeReasonCodes(input, envelope, createdAt));
+  }
+  if (durableRecordScopeMismatch(context)) {
+    catalogOverreachCodes.push("durable_record_scope_mismatch");
+  }
+  return catalogOverreachCodes;
+}
+function deriveEnvelopeReasonCodes(input, envelope, createdAt) {
+  const envelopeOverreachCodes = [];
+  if (envelope.principalId !== input.principalId || envelope.agentId !== input.agentId) {
+    envelopeOverreachCodes.push("envelope_actor_mismatch");
+  }
+  if (!envelope.allowedActionClasses.includes(input.candidate.actionClass)) {
+    envelopeOverreachCodes.push("envelope_action_class_not_allowed");
+  }
+  if (!envelope.allowedGateways.includes(input.candidate.gatewayId)) {
+    envelopeOverreachCodes.push("envelope_gateway_not_allowed");
+  }
+  if (!envelope.allowedResources.includes(input.candidate.resourceRef)) {
+    envelopeOverreachCodes.push("envelope_resource_not_allowed");
+  }
+  if (envelope.revokedAt !== null)
+    envelopeOverreachCodes.push("envelope_revoked");
+  if (Date.parse(envelope.expiresAt) <= Date.parse(createdAt))
+    envelopeOverreachCodes.push("envelope_expired");
+  return envelopeOverreachCodes;
+}
+function durableRecordScopeMismatch(context) {
+  const { input, tool, actionType, gateway, envelope } = context;
+  return [tool, actionType, gateway, envelope].some((record2) => record2 && (record2.tenantId !== input.tenantId || record2.organizationId !== input.organizationId));
+}
+function requiresMissingGeneratedExecutionGraphRefusal(context) {
+  if (context.generatedExecutionGraph) {
+    return false;
+  }
+  if (context.runtimeExecution && requiresGeneratedExecutionGraph(context.runtimeExecution.executionShape)) {
+    return true;
+  }
+  return isAgentOriginCompilation(context);
+}
+function isAgentOriginCompilation(context) {
+  return context.runtimeExecution === null && (context.input.generatedExecutionGraphId !== null || context.input.generatedExecutionNodeId !== null);
+}
+function assertSecretSafeCandidateInput(tool, parameters, nonSecretParamsSummary, secretRefs) {
+  const secretBearingFields = new Set(tool.secretBearingFields);
+  for (const field of secretBearingFields) {
+    if (Object.hasOwn(parameters, field) || Object.hasOwn(nonSecretParamsSummary, field)) {
+      throw new HandshakeProtocolError("secret_bearing_param_in_non_secret_params", `Secret-bearing parameter ${field} must be represented as a secretRef, not stored parameter material.`, 422);
+    }
+  }
+  for (const field of Object.keys(secretRefs)) {
+    if (!secretBearingFields.has(field)) {
+      throw new HandshakeProtocolError("undeclared_secret_ref", `Secret ref ${field} is not declared by the tool capability secretBearingFields.`, 422);
+    }
+  }
+}
+function requiresGeneratedExecutionGraph(executionShape) {
+  return executionShape === "shell_exec_block" || executionShape === "codemode_block" || executionShape === "tool_dispatch_chain" || executionShape === "generated_mcp_tool_chain";
+}
+function deriveGeneratedExecutionCoverage(args) {
+  const { input, runtimeExecution, generatedExecutionGraph, paramsDigest } = args;
+  const graphOverreachCodes = [];
+  if (!runtimeExecution) {
+    graphOverreachCodes.push("generated_execution_graph_without_runtime_execution");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  if (generatedExecutionGraph.tenantId !== input.tenantId || generatedExecutionGraph.organizationId !== input.organizationId) {
+    graphOverreachCodes.push("generated_execution_graph_scope_mismatch");
+  }
+  if (generatedExecutionGraph.runtimeExecutionId !== runtimeExecution.runtimeExecutionId || generatedExecutionGraph.runtimeExecutionDigest !== runtimeExecution.runtimeExecutionDigest || generatedExecutionGraph.executionBlockDigest !== runtimeExecution.executionBlockDigest) {
+    graphOverreachCodes.push("generated_execution_graph_runtime_mismatch");
+  }
+  if (generatedExecutionGraph.coverageStatus !== "fully_covered_no_unsupported_nodes") {
+    graphOverreachCodes.push("generated_execution_graph_not_contractable");
+  }
+  const requestedNodeId = input.generatedExecutionNodeId;
+  if (!requestedNodeId) {
+    graphOverreachCodes.push("generated_execution_node_missing");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  const node = generatedExecutionGraph.nodes.find((candidate) => candidate.nodeId === requestedNodeId) ?? null;
+  if (!node) {
+    graphOverreachCodes.push("generated_execution_node_missing");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  if (node.classification !== "candidate_action_eligible") {
+    graphOverreachCodes.push("generated_execution_node_not_contractable");
+  }
+  if (!node.nodeGatewayBindingDigest) {
+    graphOverreachCodes.push("generated_execution_node_gateway_binding_missing");
+  }
+  if (node.actionClass !== input.candidate.actionClass || node.toolCapabilityId !== input.candidate.toolCapabilityId || node.actionTypeId !== input.candidate.actionTypeId || node.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || node.resourceRef !== input.candidate.resourceRef || node.paramsDigest !== paramsDigest) {
+    graphOverreachCodes.push("generated_execution_node_binding_mismatch");
+  }
+  return { node, reasonCodes: graphOverreachCodes };
+}
+
+// src/protocol/areas/intent-compilation/transitions.ts
+async function compileIntent(store, recorder, inputValue) {
+  const input = CompileIntentInputSchema.parse(inputValue);
+  const context = await getIntentCompilationContext(store, input);
+  const decision = deriveCandidateDecision(context);
+  const candidateAction = await buildCandidateAction(context, decision);
+  const record2 = buildIntentCompilationRecord(context, decision, candidateAction);
+  await commitIntentCompilation(recorder, context, record2);
+  return record2;
+}
+async function getIntentCompilationContext(store, input) {
+  const createdAt = nowIso();
+  const [
+    toolRecord,
+    actionTypeRecord,
+    gatewayRecord,
+    envelopeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord,
+    toolCallDraftRecord
+  ] = await Promise.all([
+    store.getRecord("tool_capability", input.candidate.toolCapabilityId),
+    store.getRecord("action_type", input.candidate.actionTypeId),
+    store.getRecord("gateway_registry_entry", input.candidate.gatewayRegistryEntryId),
+    store.getRecord("operating_envelope", input.operatingEnvelopeId),
+    input.runtimeExecutionId ? store.getRecord("runtime_execution", input.runtimeExecutionId) : Promise.resolve(null),
+    input.generatedExecutionGraphId ? store.getRecord("generated_execution_graph", input.generatedExecutionGraphId) : Promise.resolve(null),
+    input.toolCallDraftId ? store.getRecord("tool_call_draft", input.toolCallDraftId) : Promise.resolve(null)
+  ]);
+  const tool = toolRecord?.payload ?? null;
+  const actionType = actionTypeRecord?.payload ?? null;
+  const gateway = gatewayRecord?.payload ?? null;
+  const envelope = envelopeRecord?.payload ?? null;
+  const runtimeExecution = runtimeExecutionRecord?.payload ?? null;
+  const generatedExecutionGraph = generatedExecutionGraphRecord?.payload ?? null;
+  const toolCallDraft = toolCallDraftRecord?.payload ?? null;
+  const paramsDigest = await protectedActionParamsDigest({
+    parameters: input.candidate.parameters,
+    secretRefs: input.candidate.secretRefs,
+    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs
+  });
+  return {
+    input,
+    createdAt,
+    paramsDigest,
+    toolRecord,
+    actionTypeRecord,
+    gatewayRecord,
+    envelopeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord,
+    toolCallDraftRecord,
+    tool,
+    actionType,
+    gateway,
+    envelope,
+    runtimeExecution,
+    generatedExecutionGraph,
+    toolCallDraft
+  };
+}
+async function buildCandidateAction(context, decision) {
+  const { input, paramsDigest, toolRecord, actionTypeRecord, gatewayRecord, envelopeRecord } = context;
+  const { tool, actionType, gateway, runtimeExecution, generatedExecutionGraph } = context;
+  const { toolCallDraft } = context;
+  const { generatedExecutionNode } = decision;
+  const candidateActionId = createId("cand");
+  const candidateBase = {
+    candidateActionId,
+    candidateStatus: decision.candidateStatus,
+    candidateDigest: null,
+    refusalReasonCodes: decision.refusalReasonCodes,
+    toolCapabilityId: input.candidate.toolCapabilityId,
+    toolCapabilityDigest: toolRecord?.canonicalDigest ?? null,
+    toolCatalogVersion: tool?.toolCatalogVersion ?? null,
+    actionTypeId: input.candidate.actionTypeId,
+    actionTypeDigest: actionTypeRecord?.canonicalDigest ?? null,
+    actionCatalogVersion: actionType?.actionCatalogVersion ?? null,
+    gatewayRegistryEntryId: input.candidate.gatewayRegistryEntryId,
+    gatewayRegistryDigest: gatewayRecord?.canonicalDigest ?? null,
+    gatewayRegistryVersion: gateway?.gatewayRegistryVersion ?? null,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    operatingEnvelopeDigest: envelopeRecord?.canonicalDigest ?? null,
+    actionClass: input.candidate.actionClass,
+    gatewayId: input.candidate.gatewayId,
+    resourceRef: input.candidate.resourceRef,
+    sequenceNumber: input.candidate.sequenceNumber,
+    requiredPriorActionContractIds: input.candidate.requiredPriorActionContractIds,
+    recoveryRecommendationId: input.candidate.recoveryRecommendationId,
+    parameters: input.candidate.parameters,
+    paramsDigest,
+    nonSecretParamsSummary: input.candidate.nonSecretParamsSummary,
+    secretRefs: input.candidate.secretRefs,
+    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs,
+    purposeCode: input.candidate.purposeCode,
+    expectedSideEffectCodes: input.candidate.expectedSideEffectCodes,
+    evidenceRefs: input.candidate.evidenceRefs,
+    clearingEvidenceRefs: input.candidate.clearingEvidenceRefs,
+    bounds: input.candidate.bounds,
+    idempotencyKey: input.candidate.idempotencyKey,
+    rollbackHint: input.candidate.rollbackHint,
+    expiresAt: input.candidate.expiresAt,
+    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
+    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
+    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
+    generatedExecutionGraphId: generatedExecutionGraph?.generatedExecutionGraphId ?? null,
+    generatedExecutionGraphDigest: generatedExecutionGraph?.graphDigest ?? null,
+    generatedExecutionCoverageStatus: generatedExecutionGraph?.coverageStatus ?? null,
+    generatedExecutionNodeId: generatedExecutionNode?.nodeId ?? null,
+    generatedExecutionNodeDigest: generatedExecutionNode?.nodeDigest ?? null,
+    generatedExecutionCatalogSnapshotDigest: generatedExecutionGraph?.catalogSnapshotDigest ?? null,
+    generatedExecutionGatewayRegistrySnapshotDigest: generatedExecutionGraph?.gatewayRegistrySnapshotDigest ?? null,
+    generatedExecutionRegistryBindingSetDigest: generatedExecutionGraph?.registryBindingSetDigest ?? null,
+    generatedExecutionNodeGatewayBindingDigest: generatedExecutionNode?.nodeGatewayBindingDigest ?? null,
+    toolCallDraftId: toolCallDraft?.toolCallDraftId ?? null,
+    toolCallDraftDigest: toolCallDraft?.draftDigest ?? null,
+    toolCallDraftState: toolCallDraft?.draftState ?? null
+  };
+  const candidateDigest = decision.candidateStatus === "contractable" ? await digestCanonical(candidateDigestMaterial(input, candidateBase)) : null;
+  return CandidateActionSchema.parse({ ...candidateBase, candidateDigest });
+}
+function buildIntentCompilationRecord(context, decision, candidateAction) {
+  const { input, createdAt, runtimeExecution } = context;
+  return IntentCompilationRecordSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    intentCompilationId: createId("icr"),
+    principalIntentRef: input.principalIntentRef,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runId: input.runId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    toolCatalogRef: input.toolCatalogRef,
+    actionCatalogRef: input.actionCatalogRef,
+    gatewayRegistryRef: input.gatewayRegistryRef,
+    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
+    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
+    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
+    declaredAssumptions: input.declaredAssumptions,
+    uncertaintyMarkers: decision.uncertaintyMarkers,
+    candidateAction,
+    candidateActionContractRefs: [],
+    rejectedCandidateRefs: decision.candidateStatus === "rejected" ? [candidateAction.candidateActionId] : [],
+    overreachReasonCodes: decision.overreachReasonCodes,
+    requiredEvidenceRefs: input.requiredEvidenceRefs,
+    compilerVersion: input.compilerVersion
+  });
+}
+async function commitIntentCompilation(recorder, context, record2) {
+  const refusal2 = record2.candidateAction.candidateStatus === "rejected" ? await buildRefusal({
+    tenantId: record2.tenantId,
+    organizationId: record2.organizationId,
+    createdAt: record2.createdAt,
+    phase: "compilation",
+    refusedObjectRef: protocolObjectRef("intent_compilation", record2.intentCompilationId),
+    reasonCode: record2.candidateAction.refusalReasonCodes[0] ?? "unwrapped_consequential_tool",
+    reason: "Intent compilation refused to produce an action contract for this candidate action.",
+    evidenceRefs: [
+      protocolObjectRef("intent_compilation", record2.intentCompilationId),
+      ...record2.candidateAction.refusalReasonCodes,
+      ...record2.requiredEvidenceRefs
+    ],
+    refusedAt: record2.createdAt
+  }) : null;
+  await recorder.commitRecordsWithEvents([
+    { objectType: "intent_compilation", payload: record2 },
+    ...refusal2 ? [{ objectType: "refusal", payload: refusal2 }] : []
+  ], [
+    {
+      source: record2,
+      eventType: "intent_compiled",
+      objectRefs: context.runtimeExecution ? [
+        record2.intentCompilationId,
+        context.runtimeExecution.runtimeExecutionId,
+        context.runtimeExecution.runtimeExecutionDigest
+      ] : [record2.intentCompilationId],
+      payload: {
+        uncertaintyMarkers: record2.uncertaintyMarkers,
+        overreachReasonCodes: record2.overreachReasonCodes
+      }
+    },
+    ...refusal2 ? [
+      {
+        source: refusal2,
+        eventType: "action_refused",
+        objectRefs: [refusal2.refusalId, record2.intentCompilationId, record2.candidateAction.candidateActionId],
+        payload: {
+          reasonCode: refusal2.reasonCode,
+          refusalReasonCodes: record2.candidateAction.refusalReasonCodes
+        }
+      }
+    ] : []
+  ]);
+}
+function candidateDigestMaterial(input, candidate) {
+  return {
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    principalIntentRef: input.principalIntentRef,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runId: input.runId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    compilerVersion: input.compilerVersion,
+    runtimeExecutionId: input.runtimeExecutionId,
+    runtimeExecutionDigest: candidate.runtimeExecutionDigest,
+    toolCallDraftId: input.toolCallDraftId,
+    toolCallDraftDigest: candidate.toolCallDraftDigest,
+    candidateAction: {
+      ...candidate,
+      clearingEvidenceRefs: clearingEvidenceRefsJson3(candidate.clearingEvidenceRefs),
+      candidateDigest: null
+    }
+  };
+}
+function clearingEvidenceRefsJson3(refs) {
+  const json2 = {};
+  if (refs.correlationRef !== undefined)
+    json2.correlationRef = refs.correlationRef;
+  if (refs.obligationRef !== undefined)
+    json2.obligationRef = refs.obligationRef;
+  if (refs.counterpartyRef !== undefined)
+    json2.counterpartyRef = refs.counterpartyRef;
+  return json2;
+}
+// src/protocol/areas/review-binding/inputs.ts
+var CreateReviewArtifactInputSchema = exports_external.strictObject({
+  actionContractId: exports_external.string().min(1),
+  policyDecisionId: exports_external.string().min(1),
+  reviewArtifactRef: exports_external.string().min(1),
+  reviewRenderSchemaVersion: exports_external.string().min(1),
+  rendererRef: exports_external.string().min(1),
+  renderedContractDigest: DigestSchema,
+  renderedPolicyInputDigest: DigestSchema,
+  renderedUncertaintyDigest: DigestSchema,
+  renderedArtifactDigest: DigestSchema,
+  catalogDigest: DigestSchema.nullable().default(null),
+  rendererDigest: DigestSchema.nullable().default(null),
+  actionBindingDigest: DigestSchema.nullable().default(null),
+  hiddenActionPosture: exports_external.enum(["no_hidden_actions_detected", "hidden_action_risk", "unknown"]).default("unknown"),
+  secondaryActionPosture: exports_external.enum(["no_secondary_actions_detected", "secondary_action_risk", "unknown"]).default("unknown"),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+var CreateReviewDecisionInputSchema = exports_external.strictObject({
+  actionContractId: exports_external.string().min(1),
+  policyDecisionId: exports_external.string().min(1),
+  reviewArtifactId: exports_external.string().min(1),
+  reviewArtifactDigest: DigestSchema,
+  reviewerPrincipalId: exports_external.string().min(1),
+  decision: exports_external.enum(["approve", "reject", "needs_changes"]),
+  decisionReasonCode: exports_external.string().min(2),
+  decisionExpiresAt: exports_external.string().datetime({ offset: true }),
+  signatureOrAttestationRef: exports_external.string().min(1)
+});
+// src/protocol/areas/review-binding/artifacts.ts
+async function createReviewArtifact(recorder, inputValue) {
+  const input = CreateReviewArtifactInputSchema.parse(inputValue);
+  const context = await getReviewArtifactContext(recorder, input);
+  const reviewArtifact = await buildReviewArtifact(context);
+  await commitReviewArtifact(recorder, context, reviewArtifact);
+  return reviewArtifact;
+}
+async function getReviewArtifactContext(recorder, input) {
+  const [contract, policyDecision] = await Promise.all([
+    recorder.requiredRecord("action_contract", input.actionContractId, "contract_missing"),
+    recorder.requiredRecord("policy_decision", input.policyDecisionId, "policy_decision_missing")
+  ]);
+  if (policyDecision.payload.actionContractId !== contract.payload.actionContractId) {
+    throw new HandshakeProtocolError("review_artifact_policy_contract_mismatch", "Review artifact policy decision must bind to the exact action contract.", 409);
+  }
+  if (policyDecision.payload.decision !== "review_required") {
+    throw new HandshakeProtocolError("review_artifact_not_required", "Review artifacts may satisfy only policy decisions that required review.", 409);
+  }
+  if (input.renderedContractDigest !== contract.payload.actionContractDigest) {
+    throw new HandshakeProtocolError("review_artifact_contract_digest_mismatch", "Rendered review contract digest does not match the exact action contract.", 409);
+  }
+  if (input.renderedPolicyInputDigest !== policyDecision.payload.policyInputDigest) {
+    throw new HandshakeProtocolError("review_artifact_policy_input_digest_mismatch", "Rendered review policy input digest does not match the exact policy input.", 409);
+  }
+  return {
+    input,
+    contract: contract.payload,
+    policyDecision: policyDecision.payload,
+    reviewArtifactId: createId("rart"),
+    now: nowIso()
+  };
+}
+async function buildReviewArtifact(context) {
+  const { input, contract, policyDecision, reviewArtifactId, now } = context;
+  const reviewArtifactDigest = await digestCanonical(buildReviewArtifactBinding(context));
+  return ReviewArtifactRecordSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    reviewArtifactId,
+    reviewArtifactRef: input.reviewArtifactRef,
+    reviewRenderSchemaVersion: input.reviewRenderSchemaVersion,
+    rendererRef: input.rendererRef,
+    actionContractId: contract.actionContractId,
+    actionContractDigest: contract.actionContractDigest,
+    policyDecisionId: policyDecision.policyDecisionId,
+    policyInputDigest: policyDecision.policyInputDigest,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    renderedContractDigest: input.renderedContractDigest,
+    renderedPolicyInputDigest: input.renderedPolicyInputDigest,
+    renderedUncertaintyDigest: input.renderedUncertaintyDigest,
+    renderedArtifactDigest: input.renderedArtifactDigest,
+    catalogDigest: input.catalogDigest,
+    rendererDigest: input.rendererDigest,
+    actionBindingDigest: input.actionBindingDigest,
+    hiddenActionPosture: input.hiddenActionPosture,
+    secondaryActionPosture: input.secondaryActionPosture,
+    uncertaintyMarkers: input.uncertaintyMarkers,
+    evidenceRefs: input.evidenceRefs,
+    reviewArtifactDigest
+  });
+}
+function buildReviewArtifactBinding(context) {
+  const { input, contract, policyDecision } = context;
+  const digestMaterial = {
+    reviewArtifactRef: input.reviewArtifactRef,
+    reviewRenderSchemaVersion: input.reviewRenderSchemaVersion,
+    rendererRef: input.rendererRef,
+    actionContractId: contract.actionContractId,
+    actionContractDigest: contract.actionContractDigest,
+    policyDecisionId: policyDecision.policyDecisionId,
+    policyInputDigest: policyDecision.policyInputDigest,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    renderedContractDigest: input.renderedContractDigest,
+    renderedPolicyInputDigest: input.renderedPolicyInputDigest,
+    renderedUncertaintyDigest: input.renderedUncertaintyDigest,
+    renderedArtifactDigest: input.renderedArtifactDigest,
+    catalogDigest: input.catalogDigest,
+    rendererDigest: input.rendererDigest,
+    actionBindingDigest: input.actionBindingDigest,
+    hiddenActionPosture: input.hiddenActionPosture,
+    secondaryActionPosture: input.secondaryActionPosture,
+    uncertaintyMarkers: input.uncertaintyMarkers,
+    evidenceRefs: input.evidenceRefs
+  };
+  return digestMaterial;
+}
+async function commitReviewArtifact(recorder, context, reviewArtifact) {
+  await recorder.commitRecordsWithEvents(reviewArtifactRecords(reviewArtifact), reviewArtifactEvents(context, reviewArtifact));
+}
+function reviewArtifactRecords(reviewArtifact) {
+  return [{ objectType: "review_artifact", payload: reviewArtifact }];
+}
+function reviewArtifactEvents(context, reviewArtifact) {
+  return [
+    {
+      source: reviewArtifact,
+      eventType: "review_artifact_recorded",
+      objectRefs: [
+        reviewArtifact.reviewArtifactId,
+        reviewArtifact.actionContractId,
+        reviewArtifact.policyDecisionId,
+        reviewArtifact.reviewArtifactDigest
+      ],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        reviewRenderSchemaVersion: reviewArtifact.reviewRenderSchemaVersion,
+        rendererRef: reviewArtifact.rendererRef
+      }
+    }
+  ];
+}
+// src/protocol/areas/review-binding/guards.ts
+function guardReviewDecision(contract, policyDecision) {
+  if (policyDecision.actionContractId !== contract.actionContractId) {
+    return fail("review_policy_contract_mismatch", "Review decision policy reference must match the exact action contract.");
+  }
+  if (policyDecision.decision !== "review_required") {
+    return fail("review_not_required", "Review decisions may only satisfy policy decisions that required review.");
+  }
+  return ok();
+}
+
+// src/protocol/areas/review-binding/decisions.ts
+async function createReviewDecision(recorder, inputValue) {
+  const input = CreateReviewDecisionInputSchema.parse(inputValue);
+  const context = await getReviewDecisionContext(recorder, input);
+  const reviewDecision = buildReviewDecision(context);
+  await commitReviewDecision(recorder, context, reviewDecision);
+  return reviewDecision;
+}
+async function getReviewDecisionContext(recorder, input) {
+  const [contract, policyDecision, reviewArtifact] = await Promise.all([
+    recorder.requiredRecord("action_contract", input.actionContractId, "contract_missing"),
+    recorder.requiredRecord("policy_decision", input.policyDecisionId, "policy_decision_missing"),
+    recorder.requiredRecord("review_artifact", input.reviewArtifactId, "review_artifact_missing")
+  ]);
+  assertTransition5(guardReviewDecision(contract.payload, policyDecision.payload));
+  assertReviewArtifactBinding(reviewArtifact.payload, contract.payload, policyDecision.payload, input.reviewArtifactDigest);
+  return {
+    input,
+    contract: contract.payload,
+    policyDecision: policyDecision.payload,
+    reviewArtifact: reviewArtifact.payload,
+    now: nowIso()
+  };
+}
+function buildReviewDecision(context) {
+  const { input, contract, policyDecision, reviewArtifact, now } = context;
+  return ReviewDecisionSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: contract.tenantId,
+    organizationId: contract.organizationId,
+    createdAt: now,
+    reviewDecisionId: createId("rev"),
+    reviewArtifactId: reviewArtifact.reviewArtifactId,
+    reviewArtifactRef: reviewArtifact.reviewArtifactRef,
+    reviewArtifactDigest: reviewArtifact.reviewArtifactDigest,
+    reviewRenderSchemaVersion: reviewArtifact.reviewRenderSchemaVersion,
+    reviewerPrincipalId: input.reviewerPrincipalId,
+    actionContractId: contract.actionContractId,
+    actionContractDigest: contract.actionContractDigest,
+    policyInputDigest: policyDecision.policyInputDigest,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    decision: input.decision,
+    decisionReasonCode: input.decisionReasonCode,
+    decisionExpiresAt: input.decisionExpiresAt,
+    signatureOrAttestationRef: input.signatureOrAttestationRef
+  });
+}
+async function commitReviewDecision(recorder, context, reviewDecision) {
+  const refusal2 = reviewDecision.decision === "approve" ? null : await buildRefusal({
+    tenantId: reviewDecision.tenantId,
+    organizationId: reviewDecision.organizationId,
+    createdAt: reviewDecision.createdAt,
+    phase: "review",
+    actionContractId: reviewDecision.actionContractId,
+    policyDecisionId: context.policyDecision.policyDecisionId,
+    refusedObjectRef: protocolObjectRef("review_decision", reviewDecision.reviewDecisionId),
+    reasonCode: reviewDecision.decisionReasonCode,
+    reason: `Review decision ${reviewDecision.decision} refused authority for the exact action contract.`,
+    evidenceRefs: [
+      protocolObjectRef("review_decision", reviewDecision.reviewDecisionId),
+      protocolObjectRef("review_artifact", reviewDecision.reviewArtifactId),
+      protocolObjectRef("action_contract", reviewDecision.actionContractId),
+      reviewDecision.reviewArtifactDigest
+    ],
+    refusedAt: reviewDecision.createdAt
+  });
+  await recorder.commitRecordsWithEvents(reviewDecisionRecords(reviewDecision, refusal2), reviewDecisionEvents(context, reviewDecision, refusal2));
+}
+function reviewDecisionRecords(reviewDecision, refusal2) {
+  const records2 = [{ objectType: "review_decision", payload: reviewDecision }];
+  if (refusal2)
+    records2.push({ objectType: "refusal", payload: refusal2 });
+  return records2;
+}
+function reviewDecisionEvents(context, reviewDecision, refusal2) {
+  const events = [
+    {
+      source: reviewDecision,
+      eventType: "review_decision_recorded",
+      objectRefs: [
+        reviewDecision.reviewDecisionId,
+        reviewDecision.reviewArtifactId,
+        reviewDecision.actionContractId,
+        reviewDecision.policyInputDigest
+      ],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        decision: reviewDecision.decision,
+        decisionReasonCode: reviewDecision.decisionReasonCode
+      }
+    }
+  ];
+  if (refusal2) {
+    events.push({
+      source: refusal2,
+      eventType: "action_refused",
+      objectRefs: [refusal2.refusalId, reviewDecision.reviewDecisionId, reviewDecision.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: { reasonCode: refusal2.reasonCode, reviewDecision: reviewDecision.decision }
+    });
+  }
+  return events;
+}
+function assertReviewArtifactBinding(reviewArtifact, contract, policyDecision, suppliedDigest) {
+  if (reviewArtifact.reviewArtifactDigest !== suppliedDigest) {
+    throw new HandshakeProtocolError("review_artifact_digest_mismatch", "Review decision must supply the exact review artifact digest.", 409);
+  }
+  if (reviewArtifact.actionContractId !== contract.actionContractId || reviewArtifact.actionContractDigest !== contract.actionContractDigest || reviewArtifact.renderedContractDigest !== contract.actionContractDigest) {
+    throw new HandshakeProtocolError("review_artifact_contract_mismatch", "Review artifact does not bind to the exact action contract digest.", 409);
+  }
+  if (reviewArtifact.policyDecisionId !== policyDecision.policyDecisionId || reviewArtifact.policyInputDigest !== policyDecision.policyInputDigest || reviewArtifact.renderedPolicyInputDigest !== policyDecision.policyInputDigest) {
+    throw new HandshakeProtocolError("review_artifact_policy_input_mismatch", "Review artifact does not bind to the exact policy input digest.", 409);
+  }
+  if (reviewArtifact.gatewayPolicyVersion !== contract.gatewayPolicyVersion) {
+    throw new HandshakeProtocolError("review_artifact_gateway_policy_mismatch", "Review artifact gateway policy version does not match the exact action contract.", 409);
+  }
+  if (reviewArtifact.hiddenActionPosture !== "no_hidden_actions_detected" || reviewArtifact.secondaryActionPosture !== "no_secondary_actions_detected" || !reviewArtifact.catalogDigest || !reviewArtifact.rendererDigest || !reviewArtifact.actionBindingDigest) {
+    throw new HandshakeProtocolError("review_artifact_action_posture_unsafe", "Review artifact cannot satisfy review policy without safe hidden-action, secondary-action, catalog, renderer, and action-binding posture.", 409);
+  }
+}
+function assertTransition5(result) {
+  if (!result.ok) {
+    throw new HandshakeProtocolError(result.code, result.message, result.status);
+  }
+}
+// src/protocol/areas/runtime-evidence/inputs.ts
+var CreateRuntimeExecutionInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  executionShape: RuntimeExecutionShapeSchema,
+  runtimePosture: RuntimePostureSchema,
+  executionBlockRef: exports_external.string().min(1),
+  executionBlockDigest: DigestSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  allowedToolCapabilityIds: exports_external.array(exports_external.string().min(1)).default([]),
+  observedToolCallRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  observedConsequentialCallCount: exports_external.number().int().nonnegative().default(0),
+  loopDetected: exports_external.boolean().default(false),
+  retryDetected: exports_external.boolean().default(false),
+  branchDetected: exports_external.boolean().default(false),
+  dynamicToolConstructionDetected: exports_external.boolean().default(false),
+  unobservedRegionRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  accessPosture: RuntimeAccessPostureSchema,
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1)).default([]),
+  refusalReasonCodes: exports_external.array(exports_external.string().min(2)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+// src/protocol/areas/runtime-evidence/transitions.ts
+async function createRuntimeExecution(recorder, inputValue) {
+  const input = CreateRuntimeExecutionInputSchema.parse(inputValue);
+  const context = buildRuntimeExecutionContext(input);
+  const record2 = await buildRuntimeExecutionRecord(context);
+  await commitRuntimeExecution(recorder, record2);
+  return record2;
+}
+function buildRuntimeExecutionContext(input) {
+  return {
+    input,
+    createdAt: nowIso(),
+    runtimeExecutionId: createId("rex")
+  };
+}
+async function buildRuntimeExecutionRecord(context) {
+  const { input, createdAt, runtimeExecutionId } = context;
+  const runtimeExecutionDigest = await digestCanonical(runtimeExecutionDigestMaterial(context));
+  return RuntimeExecutionRecordSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    ...input,
+    createdAt,
+    runtimeExecutionId,
+    runtimeExecutionDigest
+  });
+}
+function runtimeExecutionDigestMaterial(context) {
+  const { input } = context;
+  const digestMaterial = {
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    principalIntentRef: input.principalIntentRef,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runId: input.runId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    executionShape: input.executionShape,
+    runtimePosture: input.runtimePosture,
+    executionBlockRef: input.executionBlockRef,
+    executionBlockDigest: input.executionBlockDigest,
+    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
+    allowedToolCapabilityIds: input.allowedToolCapabilityIds,
+    observedToolCallRefs: input.observedToolCallRefs,
+    observedConsequentialCallCount: input.observedConsequentialCallCount,
+    loopDetected: input.loopDetected,
+    retryDetected: input.retryDetected,
+    branchDetected: input.branchDetected,
+    dynamicToolConstructionDetected: input.dynamicToolConstructionDetected,
+    unobservedRegionRefs: input.unobservedRegionRefs,
+    accessPosture: input.accessPosture,
+    uncertaintyMarkers: input.uncertaintyMarkers,
+    refusalReasonCodes: input.refusalReasonCodes,
+    evidenceRefs: input.evidenceRefs
+  };
+  return digestMaterial;
+}
+async function commitRuntimeExecution(recorder, record2) {
+  await recorder.commitRecordsWithEvents(runtimeExecutionRecords(record2), runtimeExecutionEvents(record2));
+}
+function runtimeExecutionRecords(record2) {
+  return [{ objectType: "runtime_execution", payload: record2 }];
+}
+function runtimeExecutionEvents(record2) {
+  return [
+    {
+      source: record2,
+      eventType: "runtime_execution_recorded",
+      objectRefs: [record2.runtimeExecutionId, record2.runtimeExecutionDigest],
+      payload: {
+        executionShape: record2.executionShape,
+        runtimePosture: record2.runtimePosture,
+        observedConsequentialCallCount: record2.observedConsequentialCallCount,
+        dynamicToolConstructionDetected: record2.dynamicToolConstructionDetected
+      }
+    }
+  ];
+}
+// src/protocol/events/records.ts
+var MAX_STREAM_COMMIT_RETRIES3 = 3;
+
+class ProtocolRecorder {
+  store;
+  transitionRequestContext;
+  constructor(store, transitionRequestContext) {
+    this.store = store;
+    this.transitionRequestContext = transitionRequestContext;
+  }
+  async requiredRecord(objectType, objectId, code3) {
+    const record2 = await this.store.getRecord(objectType, objectId);
+    if (!record2)
+      throw new HandshakeProtocolError(code3, `${objectType} ${objectId} was not found.`, 404);
+    return record2;
+  }
+  async persistRecord(record2) {
+    await this.store.putRecord(await this.buildRecord(record2));
+    await this.persistTransitionRequestContextIfNeeded(record2);
+  }
+  async persistRecordIfAbsentOrSame(record2) {
+    const result = await this.store.putRecordIfAbsentOrSame(await this.buildRecord(record2));
+    if (result !== "conflict")
+      await this.persistTransitionRequestContextIfNeeded(record2);
+    return result;
+  }
+  async buildRecord(record2) {
+    return {
+      objectId: getObjectId(record2),
+      objectType: record2.objectType,
+      tenantId: record2.payload.tenantId,
+      organizationId: record2.payload.organizationId,
+      schemaVersion: record2.payload.schemaVersion,
+      canonicalDigest: await digestCanonical(record2.payload),
+      payload: record2.payload,
+      createdAt: record2.payload.createdAt,
+      sourceEventId: null
+    };
+  }
+  async commitRecordsWithEvents(protocolRecords, eventDescriptors, options = {}) {
+    const result = await this.tryCommitRecordsWithEvents(protocolRecords, eventDescriptors, options);
+    if (result.status === "committed")
+      return result.events;
+    if (result.status === "idempotency_ledger_conflict") {
+      throw new HandshakeProtocolError("idempotency_ledger_conflict", "Idempotency ledger reservation already exists for this protected action key.", 409);
+    }
+    if (result.status === "record_digest_conflict") {
+      throw new HandshakeProtocolError("bootstrap_record_digest_conflict", "Protocol commit cannot replace an existing record with a different canonical digest.", 409);
+    }
+    throw new HandshakeProtocolError("ambiguous_commit", "Protocol commit ended in an unknown state.", 500);
+  }
+  async tryCommitRecordsWithEvents(protocolRecords, eventDescriptors, options = {}) {
+    const { records: protocolRecordsWithContext, eventDescriptors: eventDescriptorsWithContext } = await this.withTransitionRequestContext(protocolRecords, eventDescriptors);
+    const records2 = await Promise.all(protocolRecordsWithContext.map((record2) => this.buildRecord(record2)));
+    for (let attempt = 0;attempt <= MAX_STREAM_COMMIT_RETRIES3; attempt += 1) {
+      const events = await buildEventChain(this.store, eventDescriptorsWithContext);
+      const commitResult = await this.store.commitProtocolRecords({ records: records2, events, ...options });
+      if (commitResult === "committed")
+        return { status: "committed", events };
+      if (commitResult === "idempotency_ledger_conflict") {
+        return { status: "idempotency_ledger_conflict" };
+      }
+      if (commitResult === "record_digest_conflict") {
+        return { status: "record_digest_conflict" };
+      }
+      if (commitResult === "greenlight_issuance_conflict") {
+        throw new HandshakeProtocolError("invalid_transition_greenlight_already_issued", "A new greenlight requires a new action contract; this action contract already has a greenlight.", 409);
+      }
+      if (commitResult === "recovery_terminal_conflict") {
+        throw new HandshakeProtocolError("recovery_terminal_conflict", "Recovery recommendation already has a terminal status transition.", 409);
+      }
+    }
+    throw new HandshakeProtocolError("stream_append_conflict", "Protocol lifecycle record could not commit a contiguous contract stream after retrying fresh stream tails.", 409);
+  }
+  async persistTransitionRequestContextIfNeeded(record2) {
+    if (!this.transitionRequestContext || record2.objectType === "transition_request_context")
+      return;
+    const context = await buildTransitionRequestContext(this.transitionRequestContext, {
+      tenantId: record2.payload.tenantId,
+      organizationId: record2.payload.organizationId
+    });
+    await this.store.putRecord(await this.buildRecord({ objectType: "transition_request_context", payload: context }));
+  }
+  async transitionRequestContextRecordFor(scope2) {
+    if (!this.transitionRequestContext)
+      return null;
+    const context = await buildTransitionRequestContext(this.transitionRequestContext, scope2);
+    return { objectType: "transition_request_context", payload: context };
+  }
+  withTransitionRequestContextEventDescriptors(eventDescriptors, contextRecord) {
+    if (!contextRecord || contextRecord.objectType !== "transition_request_context")
+      return eventDescriptors;
+    const context = contextRecord.payload;
+    return eventDescriptors.map((descriptor) => ({
+      ...descriptor,
+      objectRefs: [context.transitionRequestContextId, ...descriptor.objectRefs],
+      payload: {
+        ...descriptor.payload,
+        transitionRequestContextId: context.transitionRequestContextId,
+        requestContextDigest: context.requestContextDigest
+      }
+    }));
+  }
+  async withTransitionRequestContext(protocolRecords, eventDescriptors) {
+    if (!this.transitionRequestContext || protocolRecords.length === 0) {
+      return { records: protocolRecords, eventDescriptors };
+    }
+    const scopeRecord = protocolRecords[0];
+    if (!scopeRecord)
+      return { records: protocolRecords, eventDescriptors };
+    const scope2 = scopeRecord.payload;
+    const contextRecord = await this.transitionRequestContextRecordFor({
+      tenantId: scope2.tenantId,
+      organizationId: scope2.organizationId
+    });
+    if (!contextRecord)
+      return { records: protocolRecords, eventDescriptors };
+    return {
+      records: [contextRecord, ...protocolRecords],
+      eventDescriptors: this.withTransitionRequestContextEventDescriptors(eventDescriptors, contextRecord)
+    };
+  }
+}
+
+// src/protocol/kernel.ts
+class HandshakeKernel {
+  store;
+  recorder;
+  constructor(store, transitionRequestContext) {
+    this.store = store;
+    this.recorder = new ProtocolRecorder(store, transitionRequestContext);
+  }
+  async putCatalogObject(record2) {
+    const parsedRecord = ProtocolRecordSchema.parse(record2);
+    this.assertTransition(guardCatalogRegistration(parsedRecord));
+    const result = await this.recorder.persistRecordIfAbsentOrSame(parsedRecord);
+    if (result === "conflict") {
+      throw new HandshakeProtocolError("bootstrap_record_digest_conflict", "Bootstrap catalog and envelope records are immutable by object id; same-id replacement must have the same canonical digest.", 409);
+    }
+  }
+  registerInstallProposalCompiledRecords(input) {
+    return registerInstallProposalCompiledRecords(this.store, this.recorder, input);
+  }
+  createRuntimeExecution(input) {
+    return createRuntimeExecution(this.recorder, input);
+  }
+  createGeneratedExecutionGraph(input, issuerContext) {
+    return createGeneratedExecutionGraph(this.store, this.recorder, input, issuerContext);
+  }
+  createBypassProbe(input) {
+    return createBypassProbe(this.recorder, input);
+  }
+  createToolCallDraft(input) {
+    return createToolCallDraft(this.recorder, input);
+  }
+  transitionToolCallDraft(input) {
+    return transitionToolCallDraft(this.store, this.recorder, input);
+  }
+  createProtectedPathPosture(input) {
+    return createProtectedPathPosture(this.recorder, input);
+  }
+  compileIntent(input) {
+    return compileIntent(this.store, this.recorder, input);
+  }
+  proposeActionContract(input) {
+    return proposeActionContract(this.store, this.recorder, input);
+  }
+  recordNegotiationSession(input) {
+    return recordNegotiationSession(this.recorder, input);
+  }
+  recordNegotiationOffer(input) {
+    return recordNegotiationOffer(this.store, this.recorder, input);
+  }
+  recordNegotiationDecision(input) {
+    return recordNegotiationDecision(this.store, this.recorder, input);
+  }
+  recordLinkedAgreement(input) {
+    return recordLinkedAgreement(this.store, this.recorder, input);
+  }
+  recordAgreementObligationBinding(input) {
+    return recordAgreementObligationBinding(this.store, this.recorder, input);
+  }
+  transitionAgreementStatus(input) {
+    return transitionAgreementStatus(this.store, this.recorder, input);
+  }
+  registerGatewayCredentialRef(input) {
+    return registerGatewayCredentialRef(this.recorder, input);
+  }
+  registerDelegatedAuthorityRef(input) {
+    return registerDelegatedAuthorityRef(this.recorder, input);
+  }
+  transitionDelegatedAuthorityStatus(input) {
+    return transitionDelegatedAuthorityStatus(this.recorder, input);
+  }
+  recordCredentialResolutionEvidence(input) {
+    return recordCredentialResolutionEvidence(this.recorder, input);
+  }
+  recordGatewayCustodyProofPacket(input) {
+    return recordGatewayCustodyProofPacket(this.recorder, input);
+  }
+  createAuthorityCertificate(input) {
+    return createAuthorityCertificate(this.store, this.recorder, input);
+  }
+  evaluatePolicy(input) {
+    return evaluatePolicy(this.store, this.recorder, input);
+  }
+  gatewayCheck(input) {
+    return gatewayCheck(this.store, this.recorder, input);
+  }
+  createReviewDecision(input) {
+    return createReviewDecision(this.recorder, input);
+  }
+  createReviewArtifact(input) {
+    return createReviewArtifact(this.recorder, input);
+  }
+  reconcileSurfaceOperation(input) {
+    return reconcileSurfaceOperation(this.store, this.recorder, input);
+  }
+  createIsolationState(input) {
+    return createIsolationState(this.recorder, input);
+  }
+  createBreakerDecision(input) {
+    return createBreakerDecision(this.store, this.recorder, input);
+  }
+  createReceiptExport(input) {
+    return createReceiptExport(this.recorder, input);
+  }
+  createRecoveryRecommendation(input) {
+    return createRecoveryRecommendation(this.recorder, input);
+  }
+  transitionRecoveryRecommendationStatus(input) {
+    return transitionRecoveryRecommendationStatus(this.recorder, input);
+  }
+  resolveRecoveryTerminalConflictProofGap(input) {
+    return resolveRecoveryTerminalConflictProofGap(this.recorder, input);
+  }
+  assertTransition(result) {
+    if (!result.ok) {
+      throw new HandshakeProtocolError(result.code, result.message, result.status);
+    }
+  }
+}
+
+// src/storage/d1/statements.ts
+class D1ProtocolStatements {
+  db;
+  constructor(db) {
+    this.db = db;
+  }
+  protocolCommitStatements(records2, events, options = {}) {
+    const statements = [];
+    for (const claim of options.greenlightIssuanceClaims ?? []) {
+      statements.push(this.greenlightIssuanceClaimStatement(claim));
+    }
+    for (const entry2 of options.idempotencyLedgerReservationEntries ?? []) {
+      statements.push(this.idempotencyLedgerIndexStatement(entry2, "insert"));
+    }
+    for (const entry2 of options.idempotencyLedgerIndexEntries ?? []) {
+      statements.push(this.idempotencyLedgerIndexStatement(entry2, "replace"));
+    }
+    for (const claim of options.recoveryTerminalClaims ?? []) {
+      statements.push(this.recoveryTerminalClaimStatement(claim));
+    }
+    for (const entry2 of options.isolationStateIndexEntries ?? []) {
+      statements.push(this.isolationStateIndexStatement(entry2));
+    }
+    for (const entry2 of options.protectedPathPostureIndexEntries ?? []) {
+      statements.push(this.protectedPathPostureIndexStatement(entry2));
+    }
+    for (const claimKeyDigest of options.protectedSurfaceOperationClaimIndexReleases ?? []) {
+      statements.push(this.protectedSurfaceOperationClaimReleaseStatement(claimKeyDigest));
+    }
+    for (const entry2 of options.protectedSurfaceOperationClaimIndexEntries ?? []) {
+      statements.push(this.protectedSurfaceOperationClaimIndexStatement(entry2, "replace"));
+    }
+    for (const entry2 of options.receiptMutationAttemptIndexEntries ?? []) {
+      statements.push(this.receiptMutationAttemptIndexStatement(entry2));
+    }
+    for (const record2 of records2) {
+      statements.push(...this.recordReplacementStatements(record2, options.recordConflictMode ?? "replace"));
+    }
+    for (const event of events) {
+      statements.push(this.streamEventStatement(event));
+      statements.push(...this.recordReplacementStatements({
+        objectId: event.streamEventId,
+        objectType: "contract_stream_event",
+        tenantId: event.tenantId,
+        organizationId: event.organizationId,
+        schemaVersion: event.schemaVersion,
+        canonicalDigest: event.eventDigest,
+        payload: event,
+        createdAt: event.createdAt,
+        sourceEventId: null
+      }));
+    }
+    return statements;
+  }
+  recordReplacementStatements(record2, conflictMode = "replace") {
+    return [
+      this.recordStatement(record2, conflictMode),
+      this.recordActionContractRefDeleteStatement(record2),
+      ...this.recordActionContractRefStatements(record2)
+    ];
+  }
+  recordAbsentStatements(record2) {
+    return [this.recordIfAbsentStatement(record2), ...this.recordActionContractRefStatements(record2)];
+  }
+  greenlightConsumptionStatement(consumption) {
+    return this.db.prepare(`INSERT INTO greenlight_consumptions
+          (greenlight_id, gate_attempt_id, action_contract_id, idempotency_key, consumed_at)
+         VALUES (?, ?, ?, ?, ?)`).bind(consumption.greenlightId, consumption.gateAttemptId, consumption.actionContractId, consumption.idempotencyKey, consumption.consumedAt);
+  }
+  protectedSurfaceOperationClaimIndexStatement(entry2, mode) {
+    const verb = mode === "insert" ? "INSERT" : "INSERT OR REPLACE";
+    return this.db.prepare(`${verb} INTO protected_surface_operation_claim_current
+          (claim_key_digest, protected_surface_operation_claim_id, tenant_id, organization_id, claim_state, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`).bind(entry2.claimKeyDigest, entry2.protectedSurfaceOperationClaimId, entry2.tenantId, entry2.organizationId, entry2.claimState, entry2.updatedAt);
+  }
+  idempotencyLedgerIndexStatement(entry2, mode) {
+    const verb = mode === "insert" ? "INSERT" : "INSERT OR REPLACE";
+    return this.db.prepare(`${verb} INTO idempotency_ledger_current
+          (ledger_key_digest, idempotency_ledger_entry_id, tenant_id, organization_id, params_digest, action_contract_id, policy_decision_id, greenlight_id, ledger_state, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(entry2.ledgerKeyDigest, entry2.idempotencyLedgerEntryId, entry2.tenantId, entry2.organizationId, entry2.paramsDigest, entry2.actionContractId, entry2.policyDecisionId, entry2.greenlightId, entry2.ledgerState, entry2.updatedAt);
+  }
+  receiptMutationAttemptIndexStatement(entry2) {
+    return this.db.prepare(`INSERT INTO receipt_by_mutation_attempt
+          (mutation_attempt_id, receipt_id, tenant_id, organization_id, created_at)
+         VALUES (?, ?, ?, ?, ?)`).bind(entry2.mutationAttemptId, entry2.receiptId, entry2.tenantId, entry2.organizationId, entry2.createdAt);
+  }
+  recordStatement(record2, conflictMode = "replace") {
+    if (conflictMode === "absent_or_same")
+      return this.recordAbsentOrSameStatement(record2);
+    return this.db.prepare(`INSERT OR REPLACE INTO protocol_records
+          (object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(record2.objectId, record2.objectType, record2.tenantId, record2.organizationId, record2.schemaVersion, record2.canonicalDigest, JSON.stringify(record2.payload), record2.createdAt, record2.sourceEventId);
+  }
+  recordAbsentOrSameStatement(record2) {
+    return this.db.prepare(`INSERT INTO protocol_records
+          (object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(object_type, object_id) DO UPDATE SET
+           tenant_id = excluded.tenant_id,
+           organization_id = excluded.organization_id,
+           schema_version = excluded.schema_version,
+           canonical_digest = CASE
+             WHEN protocol_records.canonical_digest = excluded.canonical_digest THEN excluded.canonical_digest
+             ELSE NULL
+           END,
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at,
+           source_event_id = excluded.source_event_id`).bind(record2.objectId, record2.objectType, record2.tenantId, record2.organizationId, record2.schemaVersion, record2.canonicalDigest, JSON.stringify(record2.payload), record2.createdAt, record2.sourceEventId);
+  }
+  recordIfAbsentStatement(record2) {
+    return this.db.prepare(`INSERT OR IGNORE INTO protocol_records
+          (object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(record2.objectId, record2.objectType, record2.tenantId, record2.organizationId, record2.schemaVersion, record2.canonicalDigest, JSON.stringify(record2.payload), record2.createdAt, record2.sourceEventId);
+  }
+  recordActionContractRefDeleteStatement(record2) {
+    return this.db.prepare(`DELETE FROM protocol_record_action_contract_refs
+         WHERE object_type = ? AND object_id = ?`).bind(record2.objectType, record2.objectId);
+  }
+  recordActionContractRefStatements(record2) {
+    return actionContractIdsForRecord(record2).map((actionContractId) => this.db.prepare(`INSERT OR REPLACE INTO protocol_record_action_contract_refs
+            (object_type, object_id, tenant_id, organization_id, action_contract_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`).bind(record2.objectType, record2.objectId, record2.tenantId, record2.organizationId, actionContractId, record2.createdAt));
+  }
+  streamEventStatement(event) {
+    return this.db.prepare(`INSERT INTO stream_events
+          (stream_event_id, tenant_id, organization_id, stream_id, partition_key, "offset", event_type, event_time, event_digest, previous_event_digest, payload_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(event.streamEventId, event.tenantId, event.organizationId, event.streamId, event.partitionKey, event.offset, event.eventType, event.eventTime, event.eventDigest, event.previousEventDigest, JSON.stringify(event));
+  }
+  greenlightIssuanceClaimStatement(claim) {
+    return this.db.prepare(`INSERT INTO greenlight_issuances
+          (action_contract_id, greenlight_id, policy_decision_id, tenant_id, organization_id, claimed_at)
+         VALUES (?, ?, ?, ?, ?, ?)`).bind(claim.actionContractId, claim.greenlightId, claim.policyDecisionId, claim.tenantId, claim.organizationId, claim.claimedAt);
+  }
+  recoveryTerminalClaimStatement(claim) {
+    return this.db.prepare(`INSERT INTO recovery_terminal_claims
+          (recovery_recommendation_id, status_transition_id, next_status, claimed_at)
+         VALUES (?, ?, ?, ?)`).bind(claim.recoveryRecommendationId, claim.statusTransitionId, claim.nextStatus, claim.claimedAt);
+  }
+  isolationStateIndexStatement(entry2) {
+    return this.db.prepare(`INSERT OR REPLACE INTO isolation_state_current
+          (isolation_scope_key, isolation_state_id, tenant_id, organization_id, scope_type, scope_id, state, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(entry2.isolationScopeKey, entry2.isolationStateId, entry2.tenantId, entry2.organizationId, entry2.scopeType, entry2.scopeId, entry2.state, entry2.updatedAt);
+  }
+  protectedPathPostureIndexStatement(entry2) {
+    return this.db.prepare(`INSERT OR REPLACE INTO protected_path_posture_current
+          (posture_scope_key, protected_path_posture_id, tenant_id, organization_id, updated_at)
+         VALUES (?, ?, ?, ?, ?)`).bind(entry2.postureScopeKey, entry2.protectedPathPostureId, entry2.tenantId, entry2.organizationId, entry2.updatedAt);
+  }
+  protectedSurfaceOperationClaimReleaseStatement(claimKeyDigest) {
+    return this.db.prepare("DELETE FROM protected_surface_operation_claim_current WHERE claim_key_digest = ?").bind(claimKeyDigest);
+  }
+}
+
+// src/storage/d1/index.ts
+class D1ProtocolStore {
+  db;
+  statements;
+  constructor(db) {
+    this.db = db;
+    this.statements = new D1ProtocolStatements(db);
+  }
+  async putRecord(record2) {
+    await this.db.batch(this.statements.recordReplacementStatements(record2));
+  }
+  async putRecordIfAbsentOrSame(record2) {
+    const before = await this.getRecord(record2.objectType, record2.objectId);
+    if (before)
+      return before.canonicalDigest === record2.canonicalDigest ? "unchanged" : "conflict";
+    await this.db.batch(this.statements.recordAbsentStatements(record2));
+    const existing = await this.getRecord(record2.objectType, record2.objectId);
+    if (!existing)
+      return "conflict";
+    if (existing.canonicalDigest === record2.canonicalDigest)
+      return "inserted";
+    return "conflict";
+  }
+  async getRecord(objectType, objectId) {
+    const row = await this.db.prepare(`SELECT object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id
+         FROM protocol_records
+         WHERE object_type = ? AND object_id = ?`).bind(objectType, objectId).first();
+    if (!row)
+      return null;
+    return {
+      objectId: row.object_id,
+      objectType: row.object_type,
+      tenantId: row.tenant_id,
+      organizationId: row.organization_id,
+      schemaVersion: row.schema_version,
+      canonicalDigest: row.canonical_digest,
+      payload: JSON.parse(row.payload_json),
+      createdAt: row.created_at,
+      sourceEventId: row.source_event_id
+    };
+  }
+  async listRecordsByType(objectType, scope2 = {}) {
+    const where = ["object_type = ?"];
+    const bindings = [objectType];
+    if (scope2.tenantId) {
+      where.push("tenant_id = ?");
+      bindings.push(scope2.tenantId);
+    }
+    if (scope2.organizationId) {
+      where.push("organization_id = ?");
+      bindings.push(scope2.organizationId);
+    }
+    const result = await this.db.prepare(`SELECT object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id
+         FROM protocol_records
+         WHERE ${where.join(" AND ")}`).bind(...bindings).all();
+    return result.results.map(rowToRecord);
+  }
+  async listRecordsByActionContract(objectType, actionContractId, scope2 = {}) {
+    const where = ["ref.object_type = ?", "ref.action_contract_id = ?"];
+    const bindings = [objectType, actionContractId];
+    if (scope2.tenantId) {
+      where.push("ref.tenant_id = ?");
+      bindings.push(scope2.tenantId);
+    }
+    if (scope2.organizationId) {
+      where.push("ref.organization_id = ?");
+      bindings.push(scope2.organizationId);
+    }
+    const result = await this.db.prepare(`SELECT r.object_id, r.object_type, r.tenant_id, r.organization_id, r.schema_version, r.canonical_digest, r.payload_json, r.created_at, r.source_event_id
+         FROM protocol_record_action_contract_refs ref
+         JOIN protocol_records r
+           ON r.object_type = ref.object_type
+          AND r.object_id = ref.object_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY r.created_at DESC, r.object_id DESC`).bind(...bindings).all();
+    return result.results.map(rowToRecord);
+  }
+  async getStreamTail(streamId, partitionKey) {
+    const row = await this.db.prepare(`SELECT "offset" AS offset, event_digest
+         FROM stream_events
+         WHERE stream_id = ? AND partition_key = ?
+         ORDER BY "offset" DESC
+         LIMIT 1`).bind(streamId, partitionKey).first();
+    return row ? { offset: row.offset, eventDigest: row.event_digest } : null;
+  }
+  async getStreamEvent(streamId, partitionKey, offset) {
+    const row = await this.db.prepare(`SELECT payload_json
+         FROM stream_events
+         WHERE stream_id = ? AND partition_key = ? AND "offset" = ?
+         LIMIT 1`).bind(streamId, partitionKey, offset).first();
+    return row ? JSON.parse(row.payload_json) : null;
+  }
+  async listStreamEvents(streamId, partitionKey, range = {}) {
+    const where = ["stream_id = ?", "partition_key = ?"];
+    const bindings = [streamId, partitionKey];
+    if (range.startOffset !== undefined) {
+      where.push('"offset" >= ?');
+      bindings.push(range.startOffset);
+    }
+    if (range.endOffset !== undefined) {
+      where.push('"offset" <= ?');
+      bindings.push(range.endOffset);
+    }
+    const limit = range.limit !== undefined ? " LIMIT ?" : "";
+    if (range.limit !== undefined)
+      bindings.push(range.limit);
+    const result = await this.db.prepare(`SELECT payload_json
+         FROM stream_events
+         WHERE ${where.join(" AND ")}
+         ORDER BY "offset" ASC${limit}`).bind(...bindings).all();
+    return result.results.map((row) => JSON.parse(row.payload_json));
+  }
+  async getCurrentProtectedPathPosture(postureScopeKey) {
+    const row = await this.db.prepare(`SELECT protected_path_posture_id
+         FROM protected_path_posture_current
+         WHERE posture_scope_key = ?
+         LIMIT 1`).bind(postureScopeKey).first();
+    if (!row)
+      return null;
+    return this.getRecord("protected_path_posture", row.protected_path_posture_id);
+  }
+  async getCurrentIdempotencyLedgerEntry(ledgerKeyDigest) {
+    const row = await this.db.prepare(`SELECT idempotency_ledger_entry_id
+         FROM idempotency_ledger_current
+         WHERE ledger_key_digest = ?
+         LIMIT 1`).bind(ledgerKeyDigest).first();
+    if (!row)
+      return null;
+    return this.getRecord("idempotency_ledger_entry", row.idempotency_ledger_entry_id);
+  }
+  async getCurrentProtectedSurfaceOperationClaim(claimKeyDigest) {
+    const row = await this.db.prepare(`SELECT protected_surface_operation_claim_id
+         FROM protected_surface_operation_claim_current
+         WHERE claim_key_digest = ?
+         LIMIT 1`).bind(claimKeyDigest).first();
+    if (!row)
+      return null;
+    return this.getRecord("protected_surface_operation_claim", row.protected_surface_operation_claim_id);
+  }
+  async getReceiptByMutationAttemptId(mutationAttemptId) {
+    const row = await this.db.prepare(`SELECT receipt_id
+         FROM receipt_by_mutation_attempt
+         WHERE mutation_attempt_id = ?
+         LIMIT 1`).bind(mutationAttemptId).first();
+    if (!row)
+      return null;
+    return this.getRecord("receipt", row.receipt_id);
+  }
+  async listIsolationStates(scopeRefs) {
+    const refs = uniqueIsolationScopeRefs2(scopeRefs);
+    if (refs.length === 0)
+      return [];
+    const clauses = refs.map(() => `(c.tenant_id = ?
+            AND c.organization_id = ?
+            AND c.scope_type = ?
+            AND c.scope_id = ?)`).join(" OR ");
+    const result = await this.db.prepare(`SELECT r.payload_json
+         FROM isolation_state_current c
+         JOIN protocol_records r
+           ON r.object_type = 'isolation_state'
+          AND r.object_id = c.isolation_state_id
+         WHERE json_extract(r.payload_json, '$.clearedAt') IS NULL
+           AND (${clauses})`).bind(...refs.flatMap((ref) => [ref.tenantId, ref.organizationId, ref.scopeType, ref.scopeId])).all();
+    return result.results.map((row) => JSON.parse(row.payload_json));
+  }
+  async consumeGreenlight(consumption) {
+    try {
+      await this.statements.greenlightConsumptionStatement(consumption).run();
+      return "consumed";
+    } catch {
+      return "already_consumed";
+    }
+  }
+  async commitProtocolRecords(commit) {
+    try {
+      await this.db.batch(this.statements.protocolCommitStatements(commit.records, commit.events, commit));
+      return "committed";
+    } catch (error51) {
+      if (isRecordDigestConflict(error51)) {
+        return "record_digest_conflict";
+      }
+      if (isGreenlightIssuanceConflict(error51)) {
+        return "greenlight_issuance_conflict";
+      }
+      if (isIdempotencyLedgerConflict(error51)) {
+        return "idempotency_ledger_conflict";
+      }
+      if (isRecoveryTerminalConflict3(error51)) {
+        return "recovery_terminal_conflict";
+      }
+      if (isStreamConflict(error51)) {
+        return "stream_conflict";
+      }
+      throw error51;
+    }
+  }
+  async commitGatewayCheck(commit) {
+    const statements = [];
+    if (commit.consumption) {
+      statements.push(this.statements.greenlightConsumptionStatement(commit.consumption));
+    }
+    for (const entry2 of commit.protectedSurfaceOperationClaimIndexEntries ?? []) {
+      statements.push(this.statements.protectedSurfaceOperationClaimIndexStatement(entry2, "insert"));
+    }
+    for (const entry2 of commit.idempotencyLedgerIndexEntries ?? []) {
+      statements.push(this.statements.idempotencyLedgerIndexStatement(entry2, "replace"));
+    }
+    for (const entry2 of commit.receiptMutationAttemptIndexEntries ?? []) {
+      statements.push(this.statements.receiptMutationAttemptIndexStatement(entry2));
+    }
+    statements.push(...this.statements.protocolCommitStatements(commit.records, commit.events, {}));
+    try {
+      await this.db.batch(statements);
+      return "committed";
+    } catch (error51) {
+      if (commit.consumption && await this.hasGreenlightConsumption(commit.consumption.greenlightId)) {
+        return "already_consumed";
+      }
+      if (isProtectedSurfaceOperationClaimConflict(error51)) {
+        return "operation_claim_conflict";
+      }
+      if (isReceiptMutationAttemptIndexConflict(error51)) {
+        return "receipt_index_conflict";
+      }
+      if (isStreamConflict(error51)) {
+        return "stream_conflict";
+      }
+      throw error51;
+    }
+  }
+  async hasGreenlightConsumption(greenlightId) {
+    const row = await this.db.prepare("SELECT greenlight_id FROM greenlight_consumptions WHERE greenlight_id = ?").bind(greenlightId).first();
+    return row !== null;
+  }
+}
+function rowToRecord(row) {
+  return {
+    objectId: row.object_id,
+    objectType: row.object_type,
+    tenantId: row.tenant_id,
+    organizationId: row.organization_id,
+    schemaVersion: row.schema_version,
+    canonicalDigest: row.canonical_digest,
+    payload: JSON.parse(row.payload_json),
+    createdAt: row.created_at,
+    sourceEventId: row.source_event_id
+  };
+}
+function uniqueIsolationScopeRefs2(scopeRefs) {
+  const seen = new Set;
+  const unique4 = [];
+  for (const scopeRef of scopeRefs) {
+    const key = `${scopeRef.tenantId}:${scopeRef.organizationId}:${scopeRef.scopeType}:${scopeRef.scopeId}`;
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    unique4.push(scopeRef);
+  }
+  return unique4;
+}
+function isStreamConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("stream_events") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isRecordDigestConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("protocol_records") && message.includes("canonical_digest") && (message.includes("NOT NULL") || message.includes("constraint"));
+}
+function isRecoveryTerminalConflict3(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("recovery_terminal_claims") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isGreenlightIssuanceConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("greenlight_issuances") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isIdempotencyLedgerConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("idempotency_ledger_current") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isProtectedSurfaceOperationClaimConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("protected_surface_operation_claim_current") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isReceiptMutationAttemptIndexConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("receipt_by_mutation_attempt") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+
+// src/http/store/resolution.ts
+function kernelFor(c, fallbackStore, requestContext) {
+  return new HandshakeKernel(storeFor(c, fallbackStore), requestContext);
+}
+function storeFor(c, fallbackStore) {
+  if (c.env?.DB)
+    return new D1ProtocolStore(c.env.DB);
+  if (fallbackStore)
+    return fallbackStore;
+  throw new HandshakeProtocolError("durable_store_unavailable", "Protocol state endpoints require a durable D1 store or an explicitly injected ephemeral test store.", 503);
+}
+
+// src/http/handlers/evidence-read.ts
+var RECEIPT_TIMELINE_EVENT_BATCH_SIZE = 100;
+async function handleEvidenceRead(c, options, fallbackStore, route) {
+  const errorContext = {
+    transitionName: route.routeId,
+    callerCustodyRole: route.roles[0] ?? null,
+    requestIdentity: null
+  };
+  try {
+    const admission = await authorizeEvidenceReadAdmission(c, options, route, errorContext);
+    if (admission.failure)
+      return admission.failure;
+    const store = storeFor(c, fallbackStore);
+    switch (route.routeId) {
+      case "getGeneratedGraphEvidenceProjection": {
+        const graphId = c.req.param("generatedExecutionGraphId");
+        if (!graphId)
+          return recordNotFound(c, errorContext);
+        const graphRecord = await store.getRecord("generated_execution_graph", graphId);
+        if (!graphRecord || !callerCanReadRecord(admission.hostedIdentity, graphRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        return c.json(projectGeneratedGraphEvidence(graphRecord.payload));
+      }
+      case "getContractEvidenceProjection": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        return c.json(projectContractEvidence(contractRecord.payload));
+      }
+      case "getAgentTransactionEnvelopeProjection": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        const projection = await projectAgentTransactionEnvelope(await assembleAgentTransactionEnvelopeInput(store, contractRecord.payload));
+        return c.json(projection);
+      }
+      case "getIdempotencyRecoveryProjection": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        const ledger = await store.getCurrentIdempotencyLedgerEntry(await idempotencyLedgerKeyDigest(idempotencyLedgerKey(contractRecord.payload)));
+        return c.json(await projectIdempotencyRecovery({
+          contract: contractRecord.payload,
+          ledger: ledger?.payload ?? null
+        }));
+      }
+      case "getReceiptTimelineProjection": {
+        const receiptId = c.req.param("receiptId");
+        if (!receiptId)
+          return recordNotFound(c, errorContext);
+        const receiptRecord = await store.getRecord("receipt", receiptId);
+        if (!receiptRecord || !callerCanReadRecord(admission.hostedIdentity, receiptRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        const events = await loadReceiptTimelineEvents(store, receiptRecord.payload);
+        const reconciliations = await store.listRecordsByActionContract("surface_operation_reconciliation", receiptRecord.payload.actionContractId, {
+          tenantId: receiptRecord.tenantId,
+          organizationId: receiptRecord.organizationId
+        });
+        return c.json(projectReceiptTimeline({
+          receipt: receiptRecord.payload,
+          events: events.events,
+          missingEventCount: events.missingEventCount,
+          reconciliations: reconciliations.map((record2) => record2.payload)
+        }));
+      }
+      case "getOperationReadbackProjection": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        const projection = await projectOperationReadback(await assembleAgentTransactionEnvelopeInput(store, contractRecord.payload));
+        return c.json(projection);
+      }
+      case "getOperationCorrelationIndex": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        return c.json(projectOperationCorrelationIndex(await assembleAgentTransactionEnvelopeInput(store, contractRecord.payload)));
+      }
+      case "getProtectedPathInstallHealthProjection": {
+        const actionContractId = c.req.param("actionContractId");
+        if (!actionContractId)
+          return recordNotFound(c, errorContext);
+        const contractRecord = await store.getRecord("action_contract", actionContractId);
+        if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
+          return recordNotFound(c, errorContext);
+        }
+        const gatewayRecord = await store.getRecord("gateway_registry_entry", contractRecord.payload.gatewayRegistryEntryId);
+        const postureRecord = await store.getCurrentProtectedPathPosture(protectedPathPostureScopeKeyForContract(contractRecord.payload));
+        return c.json(projectProtectedPathInstallHealth({
+          contract: contractRecord.payload,
+          gateway: gatewayRecord?.payload ?? null,
+          posture: postureRecord,
+          now: new Date().toISOString()
+        }));
+      }
+    }
+  } catch (error51) {
+    const result = transitionErrorResult(error51, errorContext);
+    return c.json(result.body, result.status);
+  }
+}
+function callerCanReadRecord(hostedIdentity, record2) {
+  return !hostedIdentity || record2.tenantId === hostedIdentity.tenantId && record2.organizationId === hostedIdentity.organizationId;
+}
+async function loadReceiptTimelineEvents(store, receipt) {
+  const events = [];
+  let missingEventCount = 0;
+  for (const reference of receipt.streamOffsets) {
+    for (let startOffset = reference.offsetStart;startOffset <= reference.offsetEnd; ) {
+      const endOffset = Math.min(reference.offsetEnd, startOffset + RECEIPT_TIMELINE_EVENT_BATCH_SIZE - 1);
+      const batch = await store.listStreamEvents(reference.streamId, reference.partitionKey, {
+        startOffset,
+        endOffset,
+        limit: RECEIPT_TIMELINE_EVENT_BATCH_SIZE
+      });
+      events.push(...batch);
+      const observedOffsets = new Set(batch.map((event) => event.offset));
+      missingEventCount += expectedOffsetCount(startOffset, endOffset) - observedOffsets.size;
+      startOffset = endOffset + 1;
+    }
+  }
+  return { events, missingEventCount };
+}
+function expectedOffsetCount(startOffset, endOffset) {
+  return Math.max(0, endOffset - startOffset + 1);
+}
+function recordNotFound(c, context) {
+  const result = transitionErrorResult(new HandshakeProtocolError("record_not_found", "Protocol evidence record was not found.", 404, {
+    retryability: "terminal",
+    commitState: "not_applicable"
+  }), context);
+  return c.json(result.body, result.status);
+}
+
+// src/http/handlers/hosted-readiness.ts
+var REQUIRED_D1_TABLE_REFS = [
+  "protocol_records",
+  "stream_events",
+  "idempotency_ledger_current",
+  "protected_path_posture_current"
+];
+async function handleHostedReadiness(c, options, fallbackStore) {
+  const errorContext = {
+    transitionName: "getHostedReadiness",
+    callerCustodyRole: options.authMode === "hosted" ? "review_custody" : "control_plane",
+    requestIdentity: null
+  };
+  try {
+    if (options.authMode === "hosted") {
+      const admission = await authorizeHostedReadinessAdmission(c, options);
+      if (admission.failure)
+        return admission.failure;
+    } else {
+      const authFailure = authorizeTransitionCaller(c, options.callerAuthTokens, "control_plane", errorContext);
+      if (authFailure)
+        return authFailure;
+    }
+    return c.json(await buildHostedReadinessReport(c.env, options, fallbackStore));
+  } catch (error51) {
+    const result = transitionErrorResult(error51, errorContext);
+    return c.json(result.body, result.status);
+  }
+}
+function buildHostedReadinessReport(env, options, fallbackStore) {
+  return buildHostedReadinessReportAsync(env, options, fallbackStore);
+}
+async function buildHostedReadinessReportAsync(env, options, fallbackStore) {
+  const config2 = parseOptionalHostedAdmissionConfig(options.hostedAdmissionConfig);
+  if (!config2)
+    return missingReadinessReport(Boolean(options.hostedCallerVerifier));
+  const d1Binding = env?.[config2.storage.d1.bindingName];
+  const d1Present = Boolean(d1Binding);
+  const d1Schema = await inspectD1Schema(d1Binding);
+  const kvPresent = Boolean(env?.[config2.storage.kv.bindingName]);
+  const state = readinessStateFor(config2, d1Present, kvPresent, fallbackStore);
+  const report = {
+    configured: true,
+    deploymentMode: config2.deploymentMode,
+    readinessState: state,
+    authorityClass: "hosted_admission_and_redacted_evidence_read_only",
+    hostedMutationAuthorityCreated: false,
+    paymentManagementCreated: false,
+    settlementAuthorityCreated: false,
+    providerCustodyCreated: false,
+    verifier: {
+      strategy: config2.verifierStrategy,
+      serverVerifierConfigured: Boolean(options.hostedCallerVerifier),
+      maxIdentityAgeSeconds: config2.maxIdentityAgeSeconds
+    },
+    roles: {
+      admittedTransitionRoles: [...config2.rolePolicy.admittedTransitionRoles],
+      redactedEvidenceRoles: [...config2.readPolicy.redactedEvidence.allowedRoles],
+      rawEvidenceRoles: [...config2.readPolicy.rawEvidence.allowedRoles],
+      readinessRoles: [...config2.readPolicy.readiness.allowedRoles],
+      redactedEvidenceScopes: [...config2.readPolicy.redactedEvidence.requiredScopes],
+      rawEvidenceScopes: [...config2.readPolicy.rawEvidence.requiredScopes],
+      readinessScopes: [...config2.readPolicy.readiness.requiredScopes]
+    },
+    tenantSource: config2.tenantSource,
+    storage: {
+      d1: {
+        bindingName: config2.storage.d1.bindingName,
+        required: config2.storage.d1.required,
+        present: d1Present,
+        authority: d1Present || fallbackStore ? "structured_evidence" : "missing",
+        environmentPosture: config2.deploymentMode === "preview" || config2.deploymentMode === "production" ? "remote_required" : "local_or_injected",
+        schema: d1Schema
+      },
+      kv: {
+        bindingName: config2.storage.kv.bindingName,
+        required: config2.storage.kv.required,
+        present: kvPresent,
+        authority: "non_authoritative_cache"
+      }
+    },
+    secrets: config2.secretNames.map((name) => ({ name, present: Boolean(env?.[name]) })),
+    publicVars: config2.publicVarNames.map((name) => ({ name, present: Boolean(env?.[name]) })),
+    rawReadPosture: config2.rawReadPosture,
+    redactionProfileRefs: [...config2.redactionProfileRefs],
+    retentionPosture: config2.retentionPosture,
+    exportPosture: config2.exportPosture,
+    readinessExpectations: [...config2.readinessExpectations],
+    unsupportedCapabilities: unsupportedCapabilitiesFor(config2, d1Present, kvPresent, fallbackStore)
+  };
+  return HostedReadinessReportSchema.parse(report);
+}
+function missingReadinessReport(serverVerifierConfigured) {
+  return {
+    configured: false,
+    deploymentMode: null,
+    readinessState: "missing",
+    authorityClass: "hosted_admission_and_redacted_evidence_read_only",
+    hostedMutationAuthorityCreated: false,
+    paymentManagementCreated: false,
+    settlementAuthorityCreated: false,
+    providerCustodyCreated: false,
+    verifier: {
+      strategy: null,
+      serverVerifierConfigured,
+      maxIdentityAgeSeconds: null
+    },
+    roles: {
+      admittedTransitionRoles: [],
+      redactedEvidenceRoles: [],
+      rawEvidenceRoles: [],
+      readinessRoles: [],
+      redactedEvidenceScopes: [],
+      rawEvidenceScopes: [],
+      readinessScopes: []
+    },
+    tenantSource: null,
+    storage: {
+      d1: {
+        bindingName: null,
+        required: false,
+        present: false,
+        authority: "missing",
+        environmentPosture: "unknown",
+        schema: {
+          checked: false,
+          status: "not_checked",
+          requiredTableRefs: [...REQUIRED_D1_TABLE_REFS],
+          missingTableRefs: [...REQUIRED_D1_TABLE_REFS]
+        }
+      },
+      kv: {
+        bindingName: null,
+        required: false,
+        present: false,
+        authority: "non_authoritative_cache"
+      }
+    },
+    secrets: [],
+    publicVars: [],
+    rawReadPosture: null,
+    redactionProfileRefs: [],
+    retentionPosture: null,
+    exportPosture: null,
+    readinessExpectations: [],
+    unsupportedCapabilities: ["hosted_admission_config_missing", "hosted_mutation_authority_not_provided"]
+  };
+}
+function readinessStateFor(config2, d1Present, kvPresent, fallbackStore) {
+  if (!d1Present && config2.storage.d1.required && (config2.deploymentMode === "preview" || config2.deploymentMode === "production")) {
+    return "missing";
+  }
+  if (!kvPresent && config2.storage.kv.required)
+    return "configured_but_unverified";
+  if (config2.deploymentMode === "production")
+    return "configured_but_unverified";
+  if (!d1Present && fallbackStore)
+    return "configured_but_unverified";
+  if (config2.exportPosture === "disabled" && config2.rawReadPosture !== "allowed")
+    return "read_only";
+  return "active";
+}
+function unsupportedCapabilitiesFor(config2, d1Present, kvPresent, fallbackStore) {
+  const unsupported = [
+    "hosted_mutation_authority_not_provided",
+    "payment_management_not_provided",
+    "settlement_not_provided",
+    "provider_custody_not_provided",
+    "compliance_certification_not_provided",
+    "project_scoped_records_not_promoted"
+  ];
+  if (!d1Present && fallbackStore)
+    unsupported.push("injected_store_not_production_d1_proof");
+  if (!d1Present && config2.storage.d1.required)
+    unsupported.push("d1_binding_missing");
+  if (!kvPresent && config2.storage.kv.required)
+    unsupported.push("kv_binding_missing");
+  if (config2.rawReadPosture !== "allowed")
+    unsupported.push(`raw_evidence_${config2.rawReadPosture}`);
+  return unsupported;
+}
+async function inspectD1Schema(value) {
+  if (!isD1Database(value)) {
+    return {
+      checked: false,
+      status: "not_checked",
+      requiredTableRefs: [...REQUIRED_D1_TABLE_REFS],
+      missingTableRefs: [...REQUIRED_D1_TABLE_REFS]
+    };
+  }
+  try {
+    const placeholders = REQUIRED_D1_TABLE_REFS.map(() => "?").join(", ");
+    const result = await value.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`).bind(...REQUIRED_D1_TABLE_REFS).all();
+    const present = new Set(result.results.map((row) => row.name));
+    const missing = REQUIRED_D1_TABLE_REFS.filter((tableRef) => !present.has(tableRef));
+    return {
+      checked: true,
+      status: missing.length === 0 ? "present" : "missing",
+      requiredTableRefs: [...REQUIRED_D1_TABLE_REFS],
+      missingTableRefs: missing
+    };
+  } catch {
+    return {
+      checked: true,
+      status: "error",
+      requiredTableRefs: [...REQUIRED_D1_TABLE_REFS],
+      missingTableRefs: [...REQUIRED_D1_TABLE_REFS]
+    };
+  }
+}
+function isD1Database(value) {
+  return Boolean(value && typeof value.prepare === "function");
+}
+
+// src/http/handlers/verifier.ts
+var MAX_VERIFIER_REQUEST_BODY_BYTES = 256 * 1024;
+async function handleVerifierMetadata(c) {
+  return c.json({
+    protocol: "handshake",
+    schemaVersion: PROTOCOL_VERSION,
+    verificationPlane: "local_pinned_trust_material",
+    authorityCreated: false,
+    hostedMutationAuthority: false,
+    remoteTrustFetchAllowed: false,
+    supportedOutcomes: ["verified", "refused", "proof_gap"],
+    redactionProfileRef: "authority-certificate-verifier-metadata:v1-public"
+  });
+}
+async function handleVerifierKeySet(c, options) {
+  return c.json(projectAuthorityCertificateVerifierKeySet(options.authorityCertificateTrustMaterial ?? {}));
+}
+async function handleVerifierJwks(c, options) {
+  return c.json(projectAuthorityCertificateJwks(options.authorityCertificateTrustMaterial ?? {}));
+}
+async function handleVerifierStatus(c, options) {
+  const subjectKind = AuthorityCertificateStatusSubjectKindSchema.parse(c.req.param("subjectKind"));
+  const subjectRef = exports_external.string().min(1).parse(c.req.param("subjectRef"));
+  const keySet = projectAuthorityCertificateVerifierKeySet(options.authorityCertificateTrustMaterial ?? {});
+  const trustMaterial = options.authorityCertificateTrustMaterial ?? {};
+  const statusRecord = trustMaterial.statusRecords?.find((record2) => record2.subjectKind === subjectKind && record2.subjectRef === subjectRef) ?? null;
+  return c.json({
+    statusLookupRef: `${subjectKind}:${subjectRef}`,
+    authorityCreated: false,
+    statusRecord,
+    statusOutcome: statusRecord ? statusRecord.status : "status_unavailable",
+    proofGapReasonCode: statusRecord ? null : "trust_status_unavailable",
+    issuerRefs: keySet.issuers.map((issuer) => issuer.issuerRef),
+    redactionProfileRef: "authority-certificate-status:v1-redacted"
+  });
+}
+async function handleHostedAuthorityCertificateVerify(c, options) {
+  try {
+    const body = await parseVerifierBody(c);
+    const request = AuthorityCertificateVerificationRequestSchema.parse({
+      certificate: body.certificate,
+      trustMaterial: options.authorityCertificateTrustMaterial ?? {}
+    });
+    return c.json(await verifyAuthorityCertificate(request.certificate, request.trustMaterial));
+  } catch (error51) {
+    const result = transitionErrorResult(error51);
+    return c.json(result.body, result.status);
+  }
+}
+async function parseVerifierBody(c) {
+  const contentLength = c.req.header("content-length");
+  if (contentLength && Number(contentLength) > MAX_VERIFIER_REQUEST_BODY_BYTES) {
+    throwVerifierBodyTooLarge();
+  }
+  const text = await c.req.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_VERIFIER_REQUEST_BODY_BYTES) {
+    throwVerifierBodyTooLarge();
+  }
+  try {
+    return exports_external.strictObject({ certificate: exports_external.unknown() }).parse(JSON.parse(text));
+  } catch (error51) {
+    if (error51 instanceof SyntaxError) {
+      throw new HandshakeProtocolError("invalid_request", "Verifier request body is not valid JSON.", 400, {
+        retryability: "terminal",
+        commitState: "not_started"
+      });
+    }
+    throw error51;
+  }
+}
+function throwVerifierBodyTooLarge() {
+  throw new HandshakeProtocolError("transition_request_body_too_large", "Verifier request body exceeds the source-owned size limit.", 413, {
+    retryability: "terminal",
+    commitState: "not_started"
+  });
+}
+
+// src/http/handlers/internal-record-read.ts
+async function handleInternalRecordRead(c, options, fallbackStore) {
+  const errorContext = {
+    transitionName: "readProtocolRecord",
+    callerCustodyRole: "control_plane",
+    requestIdentity: null
+  };
+  const admission = options.authMode === "hosted" ? await authorizeHostedRawRecordReadAdmission(c, options) : {
+    failure: authorizeTransitionCaller(c, options.callerAuthTokens, "control_plane", errorContext),
+    hostedIdentity: null,
+    callerEvidence: undefined
+  };
+  if (admission.failure)
+    return admission.failure;
+  const objectTypeResult = ProtocolObjectTypeSchema.safeParse(c.req.param("objectType"));
+  if (!objectTypeResult.success) {
+    const result = transitionErrorResult(new HandshakeProtocolError("invalid_protocol_object_type", "Record read objectType is not a protocol object type.", 400, { retryability: "terminal", commitState: "not_started" }), errorContext);
+    return c.json(result.body, result.status);
+  }
+  const objectId = c.req.param("objectId");
+  if (!objectId)
+    return recordNotFound2(c, errorContext);
+  if (protocolObjectRegistry[objectTypeResult.data].rawReadPosture === "internal_only") {
+    return recordNotFound2(c, errorContext);
+  }
+  const record2 = await storeFor(c, fallbackStore).getRecord(objectTypeResult.data, objectId);
+  if (!record2 || admission.hostedIdentity && (admission.hostedIdentity.tenantId !== record2.tenantId || admission.hostedIdentity.organizationId !== record2.organizationId)) {
+    return recordNotFound2(c, errorContext);
+  }
+  return c.json(record2);
+}
+function recordNotFound2(c, context) {
+  const result = transitionErrorResult(new HandshakeProtocolError("record_not_found", "Protocol record was not found.", 404, {
+    retryability: "terminal",
+    commitState: "not_applicable"
+  }), context);
+  return c.json(result.body, result.status);
+}
+// src/adapters/http-profile/schemas.ts
+var HttpProtectedMutationProfileSchema = exports_external.strictObject({
+  targetHttpMethod: exports_external.string().min(1),
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
+
+// src/adapters/http-profile/canonicalize.ts
+function canonicalizeHttpProfile(input) {
+  const parsed = HttpProtectedMutationProfileSchema.parse(input);
+  if (parsed.dynamicEndpointConstructionObserved || parsed.dynamicHostConstructionObserved) {
+    throw new exports_external.ZodError([
+      {
+        code: "custom",
+        message: "dynamic endpoint or host construction is not allowed on protected HTTP profiles",
+        path: ["dynamicEndpointConstructionObserved"]
+      }
+    ]);
+  }
+  return {
+    ...parsed,
+    targetHttpMethod: parsed.targetHttpMethod.trim().toUpperCase(),
+    pathTemplate: parsed.pathTemplate.trim()
+  };
+}
+
+// src/adapters/auth-md/profiles.ts
+var AuthMdProtectedApiCallAllowedHttpMethodSchema = exports_external.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+var AuthMdProtectedApiCallHeaderAllowlistSchema = exports_external.array(exports_external.enum(["accept", "content-type", "authorization", "x-request-id", "x-idempotency-key"]));
+var AuthMdProtectedApiCallExactTransportSchema = exports_external.strictObject({
+  targetHttpMethod: AuthMdProtectedApiCallAllowedHttpMethodSchema,
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1).refine((value) => value.startsWith("/"), { message: "pathTemplate must start with /" }),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
+var AUTH_MD_REGISTERED_CREDENTIAL_PROFILE = "auth_md_registered_credential.v0";
+var AUTH_MD_DISCOVERY_REDACTION_PROFILE = "auth-md-discovery:v0-redacted";
+var AUTH_MD_REGISTRATION_REDACTION_PROFILE = "auth-md-registration:v0-redacted";
+var AUTH_MD_IDENTITY_ASSERTION_REDACTION_PROFILE = "auth-md-identity-assertion:v0-redacted";
+var AUTH_MD_CLAIM_REDACTION_PROFILE = "auth-md-claim:v0-redacted";
+var AUTH_MD_REVOCATION_REDACTION_PROFILE = "auth-md-revocation:v0-redacted";
+var AuthMdUrlSchema = exports_external.string().url();
+var AuthMdSafeStringSchema = exports_external.string().min(1).refine((value) => !looksLikeAuthMdCredentialMaterial(value), {
+  message: "auth.md adapter evidence must not contain raw credential material"
+});
+var AuthMdCredentialTypeSchema = exports_external.enum(["api_key", "access_token"]);
+var AuthMdAgentAuthIdentityTypeSchema = exports_external.enum(["anonymous", "identity_assertion"]);
+var AuthMdIdentityAssertionTypeSchema = exports_external.enum(["urn:ietf:params:oauth:token-type:id-jag", "verified_email"]);
+var AuthMdIdentityFlowSchema = exports_external.enum(["identity_assertion", "anonymous", "user_claimed"]);
+var AuthMdClaimStateSchema = exports_external.enum([
+  "not_applicable",
+  "pre_claim",
+  "pending_user_claim",
+  "claimed",
+  "claim_refused",
+  "proof_gap"
+]);
+var AuthMdCredentialLifecycleStateSchema = exports_external.enum([
+  "active",
+  "expired",
+  "revoked",
+  "quarantined",
+  "proof_gap"
+]);
+var AuthMdMetadataCachePostureSchema = exports_external.enum(["fresh", "stale", "not_advertised", "unknown"]);
+var AuthMdIdentityAssurancePostureSchema = exports_external.enum([
+  "provider_asserted",
+  "jwks_verified",
+  "cimd_verified",
+  "proof_gap"
+]);
+var AuthMdClaimScopeTransitionSchema = exports_external.enum([
+  "no_scope_change",
+  "rotated_credential_ref",
+  "scope_widened_requires_rotation",
+  "claim_refused",
+  "proof_gap"
+]);
+var AuthMdRevocationEventKindSchema = exports_external.enum([
+  "logout_jwt",
+  "explicit_revocation",
+  "downstream_401",
+  "credential_expired",
+  "metadata_drift",
+  "ambiguous"
+]);
+var AuthMdAnonymousMetadataWireSchema = exports_external.strictObject({
+  credential_types_supported: exports_external.array(AuthMdCredentialTypeSchema).min(1)
+});
+var AuthMdIdentityAssertionMetadataWireSchema = exports_external.strictObject({
+  assertion_types_supported: exports_external.array(AuthMdIdentityAssertionTypeSchema).min(1),
+  credential_types_supported: exports_external.array(AuthMdCredentialTypeSchema).min(1)
+});
+var AuthMdAgentAuthMetadataWireSchema = exports_external.strictObject({
+  skill: exports_external.string().min(1).optional(),
+  register_uri: AuthMdUrlSchema,
+  claim_uri: AuthMdUrlSchema.optional(),
+  revocation_uri: AuthMdUrlSchema.optional(),
+  identity_types_supported: exports_external.array(AuthMdAgentAuthIdentityTypeSchema).min(1),
+  anonymous: AuthMdAnonymousMetadataWireSchema.optional(),
+  identity_assertion: AuthMdIdentityAssertionMetadataWireSchema.optional(),
+  events_supported: exports_external.array(exports_external.string().min(1)).default([])
+}).superRefine((metadata, ctx) => {
+  if (metadata.identity_types_supported.includes("anonymous") && !metadata.anonymous) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["anonymous"],
+      message: "auth.md agent_auth advertised anonymous without anonymous metadata"
+    });
+  }
+  if (metadata.identity_types_supported.includes("identity_assertion") && !metadata.identity_assertion) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["identity_assertion"],
+      message: "auth.md agent_auth advertised identity_assertion without identity_assertion metadata"
+    });
+  }
+});
+var AuthMdProtectedResourceMetadataWireSchema = exports_external.strictObject({
+  resource: AuthMdUrlSchema,
+  resource_name: exports_external.string().min(1).optional(),
+  resource_logo_uri: AuthMdUrlSchema.optional(),
+  authorization_servers: exports_external.array(AuthMdUrlSchema).min(1),
+  scopes_supported: exports_external.array(exports_external.string().min(1)).default([]),
+  bearer_methods_supported: exports_external.array(exports_external.string().min(1)).default([])
+});
+var AuthMdAuthorizationServerMetadataWireSchema = exports_external.strictObject({
+  issuer: AuthMdUrlSchema.optional(),
+  resource: AuthMdUrlSchema.optional(),
+  authorization_servers: exports_external.array(AuthMdUrlSchema).default([]),
+  scopes_supported: exports_external.array(exports_external.string().min(1)).default([]),
+  bearer_methods_supported: exports_external.array(exports_external.string().min(1)).default([]),
+  jwks_uri: AuthMdUrlSchema.optional(),
+  authorization_endpoint: AuthMdUrlSchema.optional(),
+  token_endpoint: AuthMdUrlSchema.optional(),
+  claims_supported: exports_external.array(exports_external.string().min(1)).default([]),
+  agent_auth: AuthMdAgentAuthMetadataWireSchema
+});
+var AuthMdAgentAuthMetadataSchema = exports_external.strictObject({
+  skill: AuthMdSafeStringSchema.nullable(),
+  registerUri: AuthMdUrlSchema,
+  claimUri: AuthMdUrlSchema.nullable(),
+  revocationUri: AuthMdUrlSchema.nullable(),
+  identityTypes: exports_external.array(AuthMdAgentAuthIdentityTypeSchema),
+  credentialTypes: exports_external.array(AuthMdCredentialTypeSchema),
+  anonymousCredentialTypes: exports_external.array(AuthMdCredentialTypeSchema),
+  identityAssertionCredentialTypes: exports_external.array(AuthMdCredentialTypeSchema),
+  identityAssertionTypes: exports_external.array(AuthMdIdentityAssertionTypeSchema),
+  eventsSupported: exports_external.array(AuthMdSafeStringSchema)
+});
+var AuthMdProtectedResourceMetadataSchema = exports_external.strictObject({
+  resource: AuthMdUrlSchema,
+  resourceName: AuthMdSafeStringSchema.nullable(),
+  resourceLogoUri: AuthMdUrlSchema.nullable(),
+  authorizationServers: exports_external.array(AuthMdUrlSchema),
+  scopesSupported: exports_external.array(AuthMdSafeStringSchema),
+  bearerMethodsSupported: exports_external.array(AuthMdSafeStringSchema)
+});
+var AuthMdAuthorizationServerMetadataSchema = exports_external.strictObject({
+  issuer: AuthMdUrlSchema.nullable(),
+  resource: AuthMdUrlSchema.nullable(),
+  authorizationServers: exports_external.array(AuthMdUrlSchema),
+  scopesSupported: exports_external.array(AuthMdSafeStringSchema),
+  bearerMethodsSupported: exports_external.array(AuthMdSafeStringSchema),
+  jwksUri: AuthMdUrlSchema.nullable(),
+  authorizationEndpoint: AuthMdUrlSchema.nullable(),
+  tokenEndpoint: AuthMdUrlSchema.nullable(),
+  claimsSupported: exports_external.array(AuthMdSafeStringSchema),
+  agentAuth: AuthMdAgentAuthMetadataSchema
+});
+var AuthMdDiscoveryEvidenceSchema = exports_external.strictObject({
+  evidenceKind: exports_external.literal("auth_md_discovery"),
+  profile: exports_external.literal(AUTH_MD_REGISTERED_CREDENTIAL_PROFILE),
+  authorityCreated: exports_external.literal(false),
+  metadataSourceOfTruth: exports_external.literal("oauth_protected_resource_metadata_chain"),
+  agentAuthSourceOfTruth: exports_external.literal("oauth_authorization_server_metadata"),
+  protectedResourceMetadata: AuthMdProtectedResourceMetadataSchema,
+  protectedResourceMetadataDigest: DigestSchema,
+  protectedResourceMetadataSourceRef: AuthMdSafeStringSchema.nullable(),
+  authorizationServerMetadata: AuthMdAuthorizationServerMetadataSchema,
+  authorizationServerMetadataDigest: DigestSchema,
+  authorizationServerMetadataSourceRef: AuthMdSafeStringSchema.nullable(),
+  cachePosture: AuthMdMetadataCachePostureSchema,
+  cacheObservedAt: IsoDateSchema.nullable(),
+  cacheMaxAgeSeconds: exports_external.number().int().nonnegative().nullable(),
+  authMdDocumentDigest: DigestSchema.nullable(),
+  discoveredAt: IsoDateSchema,
+  redactionProfileRef: exports_external.literal(AUTH_MD_DISCOVERY_REDACTION_PROFILE),
+  credentialMaterialIncluded: exports_external.literal(false)
+});
+var BuildAuthMdDiscoveryEvidenceInputSchema = exports_external.strictObject({
+  protectedResourceMetadata: AuthMdProtectedResourceMetadataWireSchema,
+  protectedResourceMetadataSourceRef: exports_external.string().min(1).nullable().default(null),
+  authorizationServerMetadata: AuthMdAuthorizationServerMetadataWireSchema,
+  authorizationServerMetadataSourceRef: exports_external.string().min(1).nullable().default(null),
+  cachePosture: AuthMdMetadataCachePostureSchema.default("unknown"),
+  cacheObservedAt: IsoDateSchema.nullable().default(null),
+  cacheMaxAgeSeconds: exports_external.number().int().nonnegative().nullable().default(null),
+  authMdDocumentDigest: DigestSchema.nullable().default(null),
+  discoveredAt: IsoDateSchema
+});
+var AuthMdRegistrationEvidenceSchema = exports_external.strictObject({
+  evidenceKind: exports_external.literal("auth_md_registration"),
+  profile: exports_external.literal(AUTH_MD_REGISTERED_CREDENTIAL_PROFILE),
+  authorityCreated: exports_external.literal(false),
+  registrationId: AuthMdSafeStringSchema,
+  protectedResourceMetadataDigest: DigestSchema,
+  authorizationServerMetadataDigest: DigestSchema,
+  protectedResource: AuthMdUrlSchema,
+  authorizationServer: AuthMdUrlSchema,
+  identityFlow: AuthMdIdentityFlowSchema,
+  credentialType: AuthMdCredentialTypeSchema,
+  scopes: exports_external.array(AuthMdSafeStringSchema),
+  credentialLifecycleState: AuthMdCredentialLifecycleStateSchema,
+  claimState: AuthMdClaimStateSchema,
+  idJagIssuer: AuthMdSafeStringSchema.nullable(),
+  idJagSubjectDigest: DigestSchema.nullable(),
+  idJagAudience: AuthMdUrlSchema.nullable(),
+  idJagJtiDigest: DigestSchema.nullable(),
+  idJagAssurancePosture: AuthMdIdentityAssurancePostureSchema.nullable(),
+  idJagJwksOrCimdRef: AuthMdSafeStringSchema.nullable(),
+  providerRegistryDigest: DigestSchema,
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema.nullable(),
+  registeredAt: IsoDateSchema,
+  redactionProfileRef: exports_external.literal(AUTH_MD_REGISTRATION_REDACTION_PROFILE),
+  credentialMaterialIncluded: exports_external.literal(false),
+  credentialMaterialPosture: exports_external.literal("gateway_custody_intake_only"),
+  registrationEvidenceDigest: DigestSchema
+});
+var AuthMdIdentityAssertionEvidenceSchema = exports_external.strictObject({
+  evidenceKind: exports_external.literal("auth_md_identity_assertion"),
+  profile: exports_external.literal(AUTH_MD_REGISTERED_CREDENTIAL_PROFILE),
+  authorityCreated: exports_external.literal(false),
+  protectedResource: AuthMdUrlSchema,
+  authorizationServer: AuthMdUrlSchema.nullable(),
+  issuer: AuthMdSafeStringSchema,
+  subjectDigest: DigestSchema,
+  audience: AuthMdUrlSchema,
+  jtiDigest: DigestSchema,
+  verifiedEmailDigest: DigestSchema.nullable(),
+  jwksOrCimdRef: AuthMdSafeStringSchema.nullable(),
+  assurancePosture: AuthMdIdentityAssurancePostureSchema,
+  identityAssertionJwtDigest: DigestSchema.nullable(),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  redactionProfileRef: exports_external.literal(AUTH_MD_IDENTITY_ASSERTION_REDACTION_PROFILE),
+  rawJwtIncluded: exports_external.literal(false),
+  piiIncluded: exports_external.literal(false),
+  identityAssertionEvidenceDigest: DigestSchema
+});
+var BuildAuthMdIdentityAssertionEvidenceInputSchema = exports_external.strictObject({
+  protectedResource: AuthMdUrlSchema,
+  authorizationServer: AuthMdUrlSchema.nullable().default(null),
+  issuer: exports_external.string().min(1),
+  subject: exports_external.string().min(1),
+  audience: AuthMdUrlSchema,
+  jti: exports_external.string().min(1),
+  verifiedEmail: exports_external.string().email().nullable().default(null),
+  jwksOrCimdRef: exports_external.string().min(1).nullable().default(null),
+  assurancePosture: AuthMdIdentityAssurancePostureSchema.default("provider_asserted"),
+  identityAssertionJwt: exports_external.string().min(1).nullable().default(null),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema
+});
+var AuthMdClaimEvidenceSchema = exports_external.strictObject({
+  evidenceKind: exports_external.literal("auth_md_claim"),
+  profile: exports_external.literal(AUTH_MD_REGISTERED_CREDENTIAL_PROFILE),
+  authorityCreated: exports_external.literal(false),
+  registrationId: AuthMdSafeStringSchema,
+  protectedResource: AuthMdUrlSchema,
+  claimState: AuthMdClaimStateSchema,
+  scopeTransition: AuthMdClaimScopeTransitionSchema,
+  preClaimCredentialRefId: IdSchema.nullable(),
+  preClaimCredentialRefDigest: DigestSchema.nullable(),
+  postClaimCredentialRefId: IdSchema.nullable(),
+  postClaimCredentialRefDigest: DigestSchema.nullable(),
+  claimTokenDigest: DigestSchema.nullable(),
+  claimedSubjectDigest: DigestSchema.nullable(),
+  verifiedEmailDigest: DigestSchema.nullable(),
+  rotateOnClaimRequired: exports_external.boolean(),
+  evidenceRefs: exports_external.array(AuthMdSafeStringSchema),
+  claimedAt: IsoDateSchema,
+  redactionProfileRef: exports_external.literal(AUTH_MD_CLAIM_REDACTION_PROFILE),
+  secretMaterialIncluded: exports_external.literal(false),
+  piiIncluded: exports_external.literal(false),
+  claimEvidenceDigest: DigestSchema
+});
+var BuildAuthMdClaimEvidenceInputSchema = exports_external.strictObject({
+  registrationId: exports_external.string().min(1),
+  protectedResource: AuthMdUrlSchema,
+  claimState: AuthMdClaimStateSchema,
+  scopeTransition: AuthMdClaimScopeTransitionSchema,
+  preClaimCredentialRefId: IdSchema.nullable().default(null),
+  preClaimCredentialRefDigest: DigestSchema.nullable().default(null),
+  postClaimCredentialRefId: IdSchema.nullable().default(null),
+  postClaimCredentialRefDigest: DigestSchema.nullable().default(null),
+  claimToken: exports_external.string().min(1).nullable().default(null),
+  claimedSubject: exports_external.string().min(1).nullable().default(null),
+  verifiedEmail: exports_external.string().email().nullable().default(null),
+  rotateOnClaimRequired: exports_external.boolean().default(true),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  claimedAt: IsoDateSchema
+});
+var AuthMdRevocationEvidenceSchema = exports_external.strictObject({
+  evidenceKind: exports_external.literal("auth_md_revocation"),
+  profile: exports_external.literal(AUTH_MD_REGISTERED_CREDENTIAL_PROFILE),
+  authorityCreated: exports_external.literal(false),
+  registrationId: AuthMdSafeStringSchema,
+  protectedResource: AuthMdUrlSchema,
+  gatewayCredentialRefId: IdSchema,
+  gatewayCredentialRefDigest: DigestSchema,
+  revocationEventKind: AuthMdRevocationEventKindSchema,
+  revocationReasonCode: AuthMdSafeStringSchema,
+  providerEventDigest: DigestSchema.nullable(),
+  logoutJwtDigest: DigestSchema.nullable(),
+  downstreamStatusDigest: DigestSchema.nullable(),
+  isolationRecommended: exports_external.literal(true),
+  futurePolicyAndGatewayUseAllowed: exports_external.literal(false),
+  evidenceRefs: exports_external.array(AuthMdSafeStringSchema),
+  observedAt: IsoDateSchema,
+  redactionProfileRef: exports_external.literal(AUTH_MD_REVOCATION_REDACTION_PROFILE),
+  secretMaterialIncluded: exports_external.literal(false),
+  piiIncluded: exports_external.literal(false),
+  revocationEvidenceDigest: DigestSchema
+});
+var BuildAuthMdRevocationEvidenceInputSchema = exports_external.strictObject({
+  registrationId: exports_external.string().min(1),
+  protectedResource: AuthMdUrlSchema,
+  gatewayCredentialRefId: IdSchema,
+  gatewayCredentialRefDigest: DigestSchema,
+  revocationEventKind: AuthMdRevocationEventKindSchema,
+  revocationReasonCode: exports_external.string().min(1),
+  providerEvent: exports_external.unknown().nullable().default(null),
+  logoutJwt: exports_external.string().min(1).nullable().default(null),
+  downstreamStatus: exports_external.unknown().nullable().default(null),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  observedAt: IsoDateSchema
+});
+var BuildAuthMdGatewayCredentialIntakeInputSchema = exports_external.strictObject({
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  principalId: IdSchema.nullable().default(null),
+  gatewayId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  registrationId: exports_external.string().min(1),
+  protectedResourceMetadataDigest: DigestSchema,
+  authorizationServerMetadataDigest: DigestSchema,
+  protectedResource: AuthMdUrlSchema,
+  authorizationServer: AuthMdUrlSchema,
+  identityFlow: AuthMdIdentityFlowSchema,
+  credentialType: AuthMdCredentialTypeSchema,
+  scopes: exports_external.array(exports_external.string().min(1)).min(1),
+  credentialMaterial: exports_external.string().min(1),
+  credentialLifecycleState: AuthMdCredentialLifecycleStateSchema.default("active"),
+  claimState: AuthMdClaimStateSchema.default("not_applicable"),
+  idJagIssuer: exports_external.string().min(1).nullable().default(null),
+  idJagSubject: exports_external.string().min(1).nullable().default(null),
+  idJagAudience: AuthMdUrlSchema.nullable().default(null),
+  idJagJti: exports_external.string().min(1).nullable().default(null),
+  idJagAssurancePosture: AuthMdIdentityAssurancePostureSchema.nullable().default(null),
+  idJagJwksOrCimdRef: exports_external.string().min(1).nullable().default(null),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema.nullable().default(null),
+  registeredAt: IsoDateSchema,
+  gatewayCredentialRefId: IdSchema.optional(),
+  protectedSurfaceKind: exports_external.string().min(1).default("auth_md_api"),
+  actionClasses: exports_external.array(exports_external.string().min(1)).min(1).default(["auth_md_protected_api_call.exact"]),
+  resourceNamespaceRef: exports_external.string().min(1).optional(),
+  custodyStatus: GatewayCredentialRefSchema.shape.custodyStatus.default("gateway_held"),
+  resolverRef: exports_external.string().min(1).default("resolver:auth-md-gateway-custody"),
+  resolverVersion: exports_external.string().min(1).default("v0")
+});
+function authMdProtectedResourceRef(protectedResource) {
+  const url2 = new URL(protectedResource);
+  return `auth-md:${url2.origin}${url2.pathname}`;
+}
+function looksLikeAuthMdCredentialMaterial(value) {
+  return credentialMaterialVariants2(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /\bBearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /\b(?:api[_-]?key|access[_-]?token|claim[_-]?token|refresh[_-]?token|client[_-]?secret|password)\s*[:=]\s*\S+/i,
+    /\bsecret\s*[:=]\s*\S+/i,
+    /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/
+  ].some((pattern) => pattern.test(variant)));
+}
+function credentialMaterialVariants2(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like3(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like3(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/adapters/auth-md/action-proposal.ts
+var AUTH_MD_PROTECTED_API_CALL_PROFILE = "auth_md_protected_api_call.exact.v0";
+var ConsequentialHttpMethodSchema = exports_external.enum(["POST", "PUT", "PATCH", "DELETE"]);
+var AuthMdMetadataCachePostureSchema2 = exports_external.enum(["fresh", "stale", "unknown"]);
+var AuthMdGatewayCredentialRefPostureSchema = exports_external.enum(["fresh", "stale", "revoked", "expired", "unknown"]);
+var AuthMdProtectedApiCallParametersSchema = exports_external.strictObject({
+  profile: exports_external.literal(AUTH_MD_PROTECTED_API_CALL_PROFILE),
+  protectedResource: exports_external.string().url(),
+  protectedResourceOrigin: exports_external.string().url(),
+  protectedResourceMetadataDigest: DigestSchema,
+  authorizationServerMetadataDigest: DigestSchema,
+  authorizationServer: exports_external.string().url(),
+  targetHttpMethod: exports_external.string().min(1),
+  endpointUrl: exports_external.string().url(),
+  endpointOrigin: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  requiredScopes: exports_external.array(exports_external.string().min(1)).min(1),
+  gatewayCredentialRefId: IdSchema,
+  gatewayCredentialRefDigest: DigestSchema,
+  providerRegistryRef: exports_external.string().min(1),
+  providerRegistryDigest: DigestSchema.nullable().default(null),
+  requiredCredentialCustodyStatus: CredentialCustodyStatusSchema,
+  operationId: exports_external.string().min(1),
+  metadataCachePosture: AuthMdMetadataCachePostureSchema2.default("fresh"),
+  gatewayCredentialRefPosture: AuthMdGatewayCredentialRefPostureSchema.default("fresh"),
+  idempotencyMaterialRefPresent: exports_external.boolean(),
+  rawAuthorizationHeaderObserved: exports_external.boolean(),
+  dynamicEndpointConstructionObserved: exports_external.boolean(),
+  dynamicHostConstructionObserved: exports_external.boolean(),
+  retryAuthorityReuseDetected: exports_external.boolean()
+});
+var AuthMdProtectedApiCallAttemptSchema = exports_external.strictObject({
+  principalIntentRef: exports_external.string().min(1),
+  generatedCodeOrSpecRef: exports_external.string().min(1),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  toolCallDraftId: IdSchema.nullable().default(null),
+  protectedResource: exports_external.string().url(),
+  protectedResourceMetadataDigest: DigestSchema,
+  authorizationServerMetadataDigest: DigestSchema,
+  authorizationServer: exports_external.string().url(),
+  targetHttpMethod: exports_external.string().min(1),
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  requiredScopes: exports_external.array(exports_external.string().min(1)).min(1),
+  gatewayCredentialRefId: IdSchema,
+  gatewayCredentialRefDigest: DigestSchema,
+  providerRegistryRef: exports_external.string().min(1),
+  providerRegistryDigest: DigestSchema.nullable().default(null),
+  requiredCredentialCustodyStatus: CredentialCustodyStatusSchema.default("gateway_held"),
+  operationId: exports_external.string().min(1),
+  idempotencyMaterialRef: exports_external.string().min(1).nullable().default(null),
+  metadataCachePosture: AuthMdMetadataCachePostureSchema2.default("fresh"),
+  gatewayCredentialRefPosture: AuthMdGatewayCredentialRefPostureSchema.default("fresh"),
+  rawAuthorizationHeaderObserved: exports_external.boolean().default(false),
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  sequenceNumber: exports_external.number().int().nonnegative().default(1),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([])
+});
+var AuthMdProtectedApiCallRuntimeConfigSchema = exports_external.strictObject({
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  operatingEnvelopeId: IdSchema,
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  toolCapabilityId: IdSchema,
+  actionTypeId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  contractExpiresAt: exports_external.string().datetime({ offset: true }),
+  signingSecret: exports_external.string().min(1).optional()
+});
+async function buildAuthMdProtectedApiCallCompileIntentInput(configValue, attemptValue) {
+  const config2 = AuthMdProtectedApiCallRuntimeConfigSchema.parse(configValue);
+  const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
+  const refusalReasonCodes = authMdProtectedApiCallRefusalReasonCodes(attempt);
+  if (refusalReasonCodes.length > 0) {
+    throw new Error(`auth.md protected API call refused before compilation: ${refusalReasonCodes.join(",")}`);
+  }
+  return buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, attempt);
+}
+async function buildAuthMdProtectedApiCallCompileIntentInputForRuntimeRefusal(configValue, attemptValue) {
+  const config2 = AuthMdProtectedApiCallRuntimeConfigSchema.parse(configValue);
+  const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
+  return buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, attempt);
+}
+async function buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, attempt) {
+  const targetHttpMethod = attempt.targetHttpMethod.toUpperCase();
+  const endpointOrigin = new URL(attempt.endpointUrl).origin;
+  const protectedResourceOrigin = new URL(attempt.protectedResource).origin;
+  const resourceRef = authMdProtectedResourceRef(attempt.protectedResource);
+  const gatewayCredentialRefs = [authMdCredentialBindingForAttempt(attempt)];
+  const parameters = AuthMdProtectedApiCallParametersSchema.parse({
+    profile: AUTH_MD_PROTECTED_API_CALL_PROFILE,
+    protectedResource: attempt.protectedResource,
+    protectedResourceOrigin,
+    protectedResourceMetadataDigest: attempt.protectedResourceMetadataDigest,
+    authorizationServerMetadataDigest: attempt.authorizationServerMetadataDigest,
+    authorizationServer: attempt.authorizationServer,
+    targetHttpMethod,
+    endpointUrl: attempt.endpointUrl,
+    endpointOrigin,
+    pathTemplate: attempt.pathTemplate,
+    requestBodyDigest: attempt.requestBodyDigest,
+    selectedHeadersDigest: attempt.selectedHeadersDigest,
+    requiredScopes: sortedUnique(attempt.requiredScopes),
+    gatewayCredentialRefId: attempt.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: attempt.gatewayCredentialRefDigest,
+    providerRegistryRef: attempt.providerRegistryRef,
+    providerRegistryDigest: attempt.providerRegistryDigest,
+    requiredCredentialCustodyStatus: attempt.requiredCredentialCustodyStatus,
+    operationId: attempt.operationId,
+    metadataCachePosture: attempt.metadataCachePosture,
+    gatewayCredentialRefPosture: attempt.gatewayCredentialRefPosture,
+    idempotencyMaterialRefPresent: attempt.idempotencyMaterialRef !== null,
+    rawAuthorizationHeaderObserved: attempt.rawAuthorizationHeaderObserved,
+    dynamicEndpointConstructionObserved: attempt.dynamicEndpointConstructionObserved,
+    dynamicHostConstructionObserved: attempt.dynamicHostConstructionObserved,
+    retryAuthorityReuseDetected: attempt.retryAuthorityReuseDetected
+  });
+  const refusalReasonCodes = authMdProtectedApiCallRefusalReasonCodes(attempt);
+  if (refusalReasonCodes.length === 0) {
+    canonicalizeHttpProfile({
+      targetHttpMethod: parameters.targetHttpMethod,
+      endpointUrl: parameters.endpointUrl,
+      pathTemplate: parameters.pathTemplate,
+      requestBodyDigest: parameters.requestBodyDigest,
+      selectedHeadersDigest: parameters.selectedHeadersDigest,
+      dynamicEndpointConstructionObserved: parameters.dynamicEndpointConstructionObserved,
+      dynamicHostConstructionObserved: parameters.dynamicHostConstructionObserved,
+      retryAuthorityReuseDetected: parameters.retryAuthorityReuseDetected
+    });
+  }
+  const idempotencyDigest = await digestCanonical({
+    profile: AUTH_MD_PROTECTED_API_CALL_PROFILE,
+    protectedResource: attempt.protectedResource,
+    protectedResourceMetadataDigest: attempt.protectedResourceMetadataDigest,
+    authorizationServerMetadataDigest: attempt.authorizationServerMetadataDigest,
+    operationId: attempt.operationId,
+    idempotencyMaterialRef: attempt.idempotencyMaterialRef ?? "missing:idempotency-material-ref",
+    targetHttpMethod,
+    endpointUrl: attempt.endpointUrl,
+    requestBodyDigest: attempt.requestBodyDigest,
+    gatewayCredentialRefDigest: attempt.gatewayCredentialRefDigest
+  });
+  const discoveryEvidenceRef = `evidence:auth-md-discovery:${attempt.protectedResourceMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}`;
+  const authorizationServerEvidenceRef = `evidence:auth-md-authorization-server:${attempt.authorizationServerMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}`;
+  return {
+    tenantId: config2.tenantId,
+    organizationId: config2.organizationId,
+    principalIntentRef: attempt.principalIntentRef,
+    principalId: config2.principalId,
+    agentId: config2.agentId,
+    runId: config2.runId,
+    runtimeAdapterId: config2.runtimeAdapterId,
+    operatingEnvelopeId: config2.operatingEnvelopeId,
+    toolCatalogRef: config2.toolCatalogRef,
+    actionCatalogRef: config2.actionCatalogRef,
+    gatewayRegistryRef: config2.gatewayRegistryRef,
+    runtimeExecutionId: attempt.runtimeExecutionId,
+    generatedExecutionGraphId: attempt.generatedExecutionGraphId,
+    generatedExecutionNodeId: attempt.generatedExecutionNodeId,
+    toolCallDraftId: attempt.toolCallDraftId,
+    generatedCodeOrSpecRefs: [attempt.generatedCodeOrSpecRef],
+    declaredAssumptions: [
+      "auth.md registration and OAuth scopes are provenance only; action authority requires Handshake policy and gateway check"
+    ],
+    requiredEvidenceRefs: [
+      discoveryEvidenceRef,
+      authorizationServerEvidenceRef,
+      ...attempt.evidenceRefs,
+      ...attempt.requiredScopes.map((scope2) => `scope:auth-md:${scope2}`)
+    ].filter(unique4),
+    candidate: {
+      toolCapabilityId: config2.toolCapabilityId,
+      actionTypeId: config2.actionTypeId,
+      gatewayRegistryEntryId: config2.gatewayRegistryEntryId,
+      actionClass: "auth_md_protected_api_call.exact",
+      gatewayId: config2.gatewayId,
+      resourceRef,
+      sequenceNumber: attempt.sequenceNumber,
+      requiredPriorActionContractIds: attempt.requiredPriorActionContractIds,
+      recoveryRecommendationId: null,
+      parameters,
+      nonSecretParamsSummary: parameters,
+      secretRefs: {},
+      gatewayCredentialRefs,
+      purposeCode: "auth_md_service_mutation",
+      expectedSideEffectCodes: ["auth_md_service_mutation_attempt"],
+      evidenceRefs: [discoveryEvidenceRef, authorizationServerEvidenceRef, ...attempt.evidenceRefs].filter(unique4),
+      bounds: {
+        protectedResourceOrigin,
+        endpointOrigin,
+        targetHttpMethod,
+        requiredScopes: sortedUnique(attempt.requiredScopes),
+        metadataCachePosture: attempt.metadataCachePosture,
+        gatewayCredentialRefPosture: attempt.gatewayCredentialRefPosture
+      },
+      idempotencyKey: `auth-md-call:${idempotencyDigest.slice("sha256:".length)}`,
+      rollbackHint: "recover through downstream service evidence, refusal, revocation, or proof gap; do not reuse the greenlight",
+      expiresAt: config2.contractExpiresAt
+    }
+  };
+}
+function authMdProtectedApiCallRefusalReasonCodes(attemptValue) {
+  const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
+  const reasons = [];
+  if (!isConsequentialMethod(attempt.targetHttpMethod))
+    reasons.push("auth_md_non_consequential_method_refused");
+  if (new URL(attempt.endpointUrl).origin !== new URL(attempt.protectedResource).origin) {
+    reasons.push("auth_md_protected_resource_origin_mismatch");
+  }
+  if (attempt.rawAuthorizationHeaderObserved)
+    reasons.push("auth_md_raw_authorization_header_refused");
+  if (attempt.dynamicEndpointConstructionObserved)
+    reasons.push("auth_md_dynamic_endpoint_refused");
+  if (attempt.dynamicHostConstructionObserved)
+    reasons.push("auth_md_dynamic_host_refused");
+  if (attempt.requiredScopes.some((scope2) => scope2.includes("*"))) {
+    reasons.push("auth_md_wildcard_scope_refused");
+  }
+  if (attempt.metadataCachePosture !== "fresh")
+    reasons.push("auth_md_stale_metadata_refused");
+  if (attempt.gatewayCredentialRefPosture !== "fresh")
+    reasons.push("auth_md_stale_credential_ref_refused");
+  if (attempt.idempotencyMaterialRef === null)
+    reasons.push("auth_md_idempotency_material_missing");
+  if (attempt.retryAuthorityReuseDetected)
+    reasons.push("auth_md_retry_authority_reuse_refused");
+  if (!credentialCustodyCanSatisfyGatewayChecked(attempt.requiredCredentialCustodyStatus)) {
+    reasons.push("auth_md_unsafe_credential_custody_refused");
+  }
+  return [...new Set(reasons)].sort();
+}
+function authMdCredentialBindingForAttempt(attemptValue) {
+  const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
+  return {
+    credentialUseName: "auth_md_service_credential",
+    gatewayCredentialRefId: attempt.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: attempt.gatewayCredentialRefDigest,
+    providerRegistryRef: attempt.providerRegistryRef,
+    providerRegistryDigest: attempt.providerRegistryDigest,
+    requiredCredentialCustodyStatus: attempt.requiredCredentialCustodyStatus,
+    evidenceExpectationRefs: [
+      `evidence:auth-md-discovery:${attempt.protectedResourceMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+      `evidence:auth-md-authorization-server:${attempt.authorizationServerMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+      ...attempt.evidenceRefs
+    ].filter(unique4)
+  };
+}
+function isConsequentialMethod(method) {
+  return ConsequentialHttpMethodSchema.safeParse(method.toUpperCase()).success;
+}
+function sortedUnique(values) {
+  return [...new Set(values)].sort();
+}
+function unique4(value, index, values) {
+  return values.indexOf(value) === index;
+}
+
+// src/adapters/x402-payment/action-proposal.ts
+var AtomicAmountSchema3 = exports_external.string().regex(/^(?:0|[1-9]\d*)$/);
+var PaymentIdentifierSchema = exports_external.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/);
+var X402EvidenceProfileSchema = exports_external.enum(["official_payment_required", "local_digest_profile"]);
+var PaymentIdentifierPostureSchema = exports_external.enum(["not_advertised", "advertised_absent", "bound"]);
+var X402RequestBodyPostureSchema = exports_external.enum(["no_body", "digest_bound", "omitted", "unsupported"]);
+var X402ProviderEnvironmentPostureSchema = exports_external.enum(["local_reference_sandbox", "external_sandbox", "live", "unknown"]);
+var X402PaymentAttemptSchema = exports_external.strictObject({
+  principalIntentRef: exports_external.string().min(1),
+  generatedCodeOrSpecRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  endpointUrl: exports_external.string().url(),
+  payee: exports_external.string().min(1),
+  network: exports_external.string().min(1),
+  token: exports_external.string().min(1),
+  atomicAmount: AtomicAmountSchema3,
+  x402EvidenceProfile: X402EvidenceProfileSchema.default("local_digest_profile"),
+  paymentRequirementsDigest: DigestSchema,
+  paymentRequiredEvidenceRef: exports_external.string().min(1).optional(),
+  facilitatorRef: exports_external.string().min(1).nullable().default(null),
+  intendedHttpMethod: exports_external.string().min(1).nullable().default(null),
+  intendedRequestUrl: exports_external.string().url().nullable().default(null),
+  intendedRequestBodyPosture: X402RequestBodyPostureSchema.default("no_body"),
+  intendedRequestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema.nullable().default(null),
+  providerEnvironmentPosture: X402ProviderEnvironmentPostureSchema.default("local_reference_sandbox"),
+  providerEnvironmentRef: exports_external.string().min(1).nullable().default(null),
+  x402Version: exports_external.number().int().positive().nullable().default(null),
+  x402Scheme: exports_external.string().min(1).nullable().default(null),
+  asset: exports_external.string().min(1).nullable().default(null),
+  payTo: exports_external.string().min(1).nullable().default(null),
+  maxTimeoutSeconds: exports_external.number().positive().nullable().default(null),
+  selectedPaymentRequirementIndex: exports_external.number().int().nonnegative().nullable().default(null),
+  selectedPaymentRequirementDigest: DigestSchema.nullable().default(null),
+  paymentIdentifier: PaymentIdentifierSchema.nullable().default(null),
+  paymentIdentifierRef: exports_external.string().min(1).nullable().default(null),
+  paymentIdentifierPosture: PaymentIdentifierPostureSchema.default("not_advertised"),
+  sdkPackageVersions: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  extensionKeys: exports_external.array(exports_external.string().min(1)).default([]),
+  sequenceNumber: exports_external.number().int().nonnegative().default(1),
+  requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema.default({})
+});
+var X402PaymentRuntimeConfigSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  gatewayReadinessRef: exports_external.string().min(1),
+  gatewayReadinessDigest: DigestSchema,
+  policyVersionRef: exports_external.string().min(1),
+  policyVersionDigest: DigestSchema,
+  toolCapabilityId: exports_external.string().min(1),
+  actionTypeId: exports_external.string().min(1),
+  gatewayRegistryEntryId: exports_external.string().min(1),
+  gatewayId: exports_external.string().min(1),
+  gatewayCredentialBinding: GatewayCredentialBindingSchema,
+  delegatedAuthorityBinding: DelegatedAuthorityBindingSchema,
+  maxAtomicAmountPerCall: AtomicAmountSchema3,
+  contractExpiresAt: exports_external.string().datetime({ offset: true }),
+  signingSecret: exports_external.string().min(1).optional()
+});
+async function buildX402PaymentCompileIntentInput(config2, attemptValue) {
+  const runtimeConfig = X402PaymentRuntimeConfigSchema.parse(config2);
+  const attempt = X402PaymentAttemptSchema.parse(attemptValue);
+  assertX402PaymentAttemptWithinRuntimeBounds(runtimeConfig, attempt);
+  return buildX402PaymentCompileIntentInputUnchecked(runtimeConfig, attempt);
+}
+async function buildX402PaymentCompileIntentInputForRuntimeRefusal(config2, attemptValue) {
+  const runtimeConfig = X402PaymentRuntimeConfigSchema.parse(config2);
+  const attempt = X402PaymentAttemptSchema.parse(attemptValue);
+  return buildX402PaymentCompileIntentInputUnchecked(runtimeConfig, attempt);
+}
+async function buildX402PaymentCompileIntentInputUnchecked(runtimeConfig, attempt) {
+  const endpointDomain = new URL(attempt.endpointUrl).hostname;
+  const paymentIdentifierDigest = await paymentIdentifierDigestFor(attempt.paymentIdentifier);
+  const paymentIdentifierPosture = paymentIdentifierPostureForAttempt(attempt);
+  const resourceRef = x402PaymentResourceRef({
+    endpointUrl: attempt.endpointUrl,
+    network: attempt.network,
+    payee: attempt.payee
+  });
+  const parameters = {
+    endpointUrl: attempt.endpointUrl,
+    endpointDomain,
+    intendedHttpMethod: attempt.intendedHttpMethod,
+    intendedRequestUrl: attempt.intendedRequestUrl,
+    intendedRequestBodyPosture: attempt.intendedRequestBodyPosture,
+    intendedRequestBodyDigest: attempt.intendedRequestBodyDigest,
+    selectedHeadersDigest: attempt.selectedHeadersDigest,
+    providerEnvironmentPosture: attempt.providerEnvironmentPosture,
+    providerEnvironmentRef: attempt.providerEnvironmentRef,
+    x402Version: attempt.x402Version,
+    x402Scheme: attempt.x402Scheme,
+    payee: attempt.payee,
+    payTo: attempt.payTo,
+    network: attempt.network,
+    token: attempt.token,
+    asset: attempt.asset,
+    atomicAmount: attempt.atomicAmount,
+    x402EvidenceProfile: attempt.x402EvidenceProfile,
+    paymentRequirementsDigest: attempt.paymentRequirementsDigest,
+    selectedPaymentRequirementIndex: attempt.selectedPaymentRequirementIndex,
+    selectedPaymentRequirementDigest: attempt.selectedPaymentRequirementDigest,
+    maxTimeoutSeconds: attempt.maxTimeoutSeconds,
+    paymentIdentifierPosture,
+    paymentIdentifierRef: attempt.paymentIdentifierRef,
+    paymentIdentifierDigest,
+    facilitatorRef: attempt.facilitatorRef,
+    sdkPackageVersions: attempt.sdkPackageVersions,
+    extensionKeys: attempt.extensionKeys,
+    gatewayCredentialRefId: runtimeConfig.gatewayCredentialBinding.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: runtimeConfig.gatewayCredentialBinding.gatewayCredentialRefDigest,
+    gatewayReadinessRef: runtimeConfig.gatewayReadinessRef,
+    gatewayReadinessDigest: runtimeConfig.gatewayReadinessDigest,
+    policyVersionRef: runtimeConfig.policyVersionRef,
+    policyVersionDigest: runtimeConfig.policyVersionDigest
+  };
+  const idempotencyDigest = paymentIdentifierDigest ? await digestCanonical({ paymentIdentifierDigest, idempotencyScope: "x402_payment_identifier" }) : await digestCanonical({
+    runId: runtimeConfig.runId,
+    endpointUrl: attempt.endpointUrl,
+    intendedHttpMethod: attempt.intendedHttpMethod,
+    intendedRequestUrl: attempt.intendedRequestUrl,
+    intendedRequestBodyPosture: attempt.intendedRequestBodyPosture,
+    intendedRequestBodyDigest: attempt.intendedRequestBodyDigest,
+    selectedHeadersDigest: attempt.selectedHeadersDigest,
+    providerEnvironmentPosture: attempt.providerEnvironmentPosture,
+    providerEnvironmentRef: attempt.providerEnvironmentRef,
+    x402Version: attempt.x402Version,
+    x402Scheme: attempt.x402Scheme,
+    payee: attempt.payee,
+    payTo: attempt.payTo,
+    network: attempt.network,
+    token: attempt.token,
+    asset: attempt.asset,
+    atomicAmount: attempt.atomicAmount,
+    x402EvidenceProfile: attempt.x402EvidenceProfile,
+    paymentRequirementsDigest: attempt.paymentRequirementsDigest,
+    selectedPaymentRequirementIndex: attempt.selectedPaymentRequirementIndex,
+    selectedPaymentRequirementDigest: attempt.selectedPaymentRequirementDigest,
+    maxTimeoutSeconds: attempt.maxTimeoutSeconds,
+    sdkPackageVersions: attempt.sdkPackageVersions,
+    extensionKeys: attempt.extensionKeys,
+    gatewayCredentialRefDigest: runtimeConfig.gatewayCredentialBinding.gatewayCredentialRefDigest,
+    gatewayReadinessDigest: runtimeConfig.gatewayReadinessDigest,
+    policyVersionDigest: runtimeConfig.policyVersionDigest,
+    sequenceNumber: attempt.sequenceNumber
+  });
+  const paymentRequiredEvidenceRef = attempt.paymentRequiredEvidenceRef ?? `evidence:x402-payment-required:${attempt.paymentRequirementsDigest.slice("sha256:".length, "sha256:".length + 16)}`;
+  return {
+    tenantId: runtimeConfig.tenantId,
+    organizationId: runtimeConfig.organizationId,
+    principalIntentRef: attempt.principalIntentRef,
+    principalId: runtimeConfig.principalId,
+    agentId: runtimeConfig.agentId,
+    runId: runtimeConfig.runId,
+    runtimeAdapterId: runtimeConfig.runtimeAdapterId,
+    operatingEnvelopeId: runtimeConfig.operatingEnvelopeId,
+    toolCatalogRef: runtimeConfig.toolCatalogRef,
+    actionCatalogRef: runtimeConfig.actionCatalogRef,
+    gatewayRegistryRef: runtimeConfig.gatewayRegistryRef,
+    runtimeExecutionId: attempt.runtimeExecutionId,
+    generatedExecutionGraphId: attempt.generatedExecutionGraphId,
+    generatedExecutionNodeId: attempt.generatedExecutionNodeId,
+    toolCallDraftId: attempt.toolCallDraftId,
+    generatedCodeOrSpecRefs: [attempt.generatedCodeOrSpecRef],
+    declaredAssumptions: [
+      "x402 payment attempt provided explicit endpoint, payee, network, token, and amount",
+      "x402 wallet signer custody is represented by a bound gateway credential ref",
+      "x402 delegated spend authority is represented by a bound principal authority ref",
+      "x402 runtime config supplied trusted readiness and policy-version digests"
+    ],
+    requiredEvidenceRefs: unique5([
+      paymentRequiredEvidenceRef,
+      runtimeConfig.gatewayReadinessRef,
+      runtimeConfig.policyVersionRef,
+      ...runtimeConfig.gatewayCredentialBinding.evidenceExpectationRefs,
+      ...runtimeConfig.delegatedAuthorityBinding.evidenceExpectationRefs
+    ]),
+    candidate: {
+      toolCapabilityId: runtimeConfig.toolCapabilityId,
+      actionTypeId: runtimeConfig.actionTypeId,
+      gatewayRegistryEntryId: runtimeConfig.gatewayRegistryEntryId,
+      actionClass: "x402_payment.exact",
+      gatewayId: runtimeConfig.gatewayId,
+      resourceRef,
+      sequenceNumber: attempt.sequenceNumber,
+      requiredPriorActionContractIds: attempt.requiredPriorActionContractIds,
+      recoveryRecommendationId: null,
+      parameters,
+      nonSecretParamsSummary: parameters,
+      secretRefs: {},
+      gatewayCredentialRefs: [runtimeConfig.gatewayCredentialBinding],
+      delegatedAuthorityRefs: [runtimeConfig.delegatedAuthorityBinding],
+      purposeCode: "x402_paid_request",
+      expectedSideEffectCodes: ["x402_payment_signature_created"],
+      evidenceRefs: unique5([
+        paymentRequiredEvidenceRef,
+        runtimeConfig.gatewayReadinessRef,
+        runtimeConfig.policyVersionRef,
+        ...runtimeConfig.gatewayCredentialBinding.evidenceExpectationRefs,
+        ...runtimeConfig.delegatedAuthorityBinding.evidenceExpectationRefs
+      ]),
+      clearingEvidenceRefs: attempt.clearingEvidenceRefs,
+      bounds: {
+        endpointDomain,
+        payee: attempt.payee,
+        payTo: attempt.payTo,
+        network: attempt.network,
+        token: attempt.token,
+        asset: attempt.asset,
+        maxAtomicAmountPerCall: runtimeConfig.maxAtomicAmountPerCall,
+        gatewayReadinessDigest: runtimeConfig.gatewayReadinessDigest,
+        policyVersionDigest: runtimeConfig.policyVersionDigest
+      },
+      idempotencyKey: paymentIdentifierDigest ? `x402-payment-id:${idempotencyDigest.slice("sha256:".length)}` : `x402-payment:${idempotencyDigest.slice("sha256:".length)}`,
+      rollbackHint: "recover through payment response or facilitator receipt evidence; do not reuse the greenlight",
+      expiresAt: runtimeConfig.contractExpiresAt
+    }
+  };
+}
+function x402PaymentAttemptRefusalReasonCodes(configValue, attemptValue) {
+  const config2 = X402PaymentRuntimeConfigSchema.parse(configValue);
+  const attempt = X402PaymentAttemptSchema.parse(attemptValue);
+  const reasonCodes = [];
+  if (compareAtomic4(attempt.atomicAmount, config2.maxAtomicAmountPerCall) > 0) {
+    reasonCodes.push("x402_amount_exceeds_call_bound");
+  }
+  if (attempt.x402EvidenceProfile === "official_payment_required" && officialEvidenceMissing(attempt)) {
+    reasonCodes.push("x402_official_payment_required_evidence_incomplete");
+  }
+  if (attempt.intendedRequestBodyPosture === "digest_bound" && attempt.intendedRequestBodyDigest === null) {
+    reasonCodes.push("x402_request_body_digest_missing");
+  }
+  if (["omitted", "unsupported"].includes(attempt.intendedRequestBodyPosture)) {
+    reasonCodes.push("x402_request_body_posture_unsupported");
+  }
+  if (attempt.intendedRequestBodyPosture === "no_body" && attempt.intendedRequestBodyDigest !== null) {
+    reasonCodes.push("x402_request_body_posture_mismatch");
+  }
+  if (attempt.providerEnvironmentPosture !== "local_reference_sandbox") {
+    reasonCodes.push("x402_provider_environment_not_sandboxed");
+  }
+  return [...new Set(reasonCodes)].sort();
+}
+function officialEvidenceMissing(attempt) {
+  return attempt.paymentRequiredEvidenceRef === undefined || attempt.intendedHttpMethod === null || attempt.intendedRequestUrl === null || attempt.selectedHeadersDigest === null || attempt.x402Version === null || attempt.x402Scheme !== "exact" || attempt.asset === null || attempt.payTo === null || attempt.maxTimeoutSeconds === null || attempt.selectedPaymentRequirementIndex === null || attempt.selectedPaymentRequirementDigest === null || Object.keys(attempt.sdkPackageVersions).length === 0;
+}
+function assertX402PaymentAttemptWithinRuntimeBounds(config2, attempt) {
+  const refusalReasonCodes = x402PaymentAttemptRefusalReasonCodes(config2, attempt);
+  if (refusalReasonCodes.length > 0) {
+    throw new Error(`X402 payment attempt refused before compilation: ${refusalReasonCodes.join(",")}`);
+  }
+}
+async function paymentIdentifierDigestFor(paymentIdentifier) {
+  if (!paymentIdentifier)
+    return null;
+  return digestCanonical({ paymentIdentifier, paymentIdentifierExtension: "payment-identifier" });
+}
+function paymentIdentifierPostureForAttempt(attempt) {
+  if (attempt.paymentIdentifier)
+    return "bound";
+  if (attempt.paymentIdentifierPosture === "advertised_absent")
+    return "advertised_absent";
+  return attempt.extensionKeys.includes("payment-identifier") ? "advertised_absent" : "not_advertised";
+}
+function unique5(values) {
+  return [...new Set(values)];
+}
+function compareAtomic4(left, right) {
+  const leftValue = BigInt(left);
+  const rightValue = BigInt(right);
+  return leftValue === rightValue ? 0 : leftValue > rightValue ? 1 : -1;
+}
+
+// src/runtime/package-install/action-proposal.ts
+var PackageInstallToolCallSchema = exports_external.strictObject({
+  principalIntentRef: exports_external.string().min(1),
+  generatedCodeOrSpecRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  package: exports_external.string().min(1),
+  versionRange: exports_external.string().min(1),
+  packageManager: exports_external.string().min(1).default("bun"),
+  registryRef: exports_external.string().min(1).default("registry:npmjs"),
+  workspaceRef: exports_external.string().min(1).nullable().default(null),
+  manifestRef: exports_external.string().min(1).nullable().default("manifest:package.json"),
+  lockfileRef: exports_external.string().min(1).nullable().default("lockfile:bun.lock"),
+  installFlags: exports_external.array(exports_external.string().min(1)).default([]),
+  lifecycleScriptPolicy: exports_external.enum(["blocked", "allowed", "unknown"]).default("blocked"),
+  resolvedMaterialDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  resolvedMaterialEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  sequenceNumber: exports_external.number().int().nonnegative().default(1),
+  requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([])
+});
+var PackageInstallRuntimeConfigSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  toolCapabilityId: exports_external.string().min(1),
+  actionTypeId: exports_external.string().min(1),
+  gatewayRegistryEntryId: exports_external.string().min(1),
+  gatewayId: exports_external.string().min(1),
+  contractExpiresAt: exports_external.string().datetime({ offset: true }),
+  signingSecret: exports_external.string().min(1).optional()
+});
+function buildPackageInstallCompileIntentInput(config2, toolCallValue) {
+  const toolCall = PackageInstallToolCallSchema.parse(toolCallValue);
+  const parameters = {
+    package: toolCall.package,
+    versionRange: toolCall.versionRange,
+    packageManager: toolCall.packageManager,
+    registryRef: toolCall.registryRef,
+    workspaceRef: toolCall.workspaceRef,
+    manifestRef: toolCall.manifestRef,
+    lockfileRef: toolCall.lockfileRef,
+    installFlags: toolCall.installFlags,
+    lifecycleScriptPolicy: toolCall.lifecycleScriptPolicy,
+    resolvedMaterialDigest: toolCall.resolvedMaterialDigest,
+    resolvedMaterialEvidenceRefs: toolCall.resolvedMaterialEvidenceRefs
+  };
+  return {
+    tenantId: config2.tenantId,
+    organizationId: config2.organizationId,
+    principalIntentRef: toolCall.principalIntentRef,
+    principalId: config2.principalId,
+    agentId: config2.agentId,
+    runId: config2.runId,
+    runtimeAdapterId: config2.runtimeAdapterId,
+    operatingEnvelopeId: config2.operatingEnvelopeId,
+    toolCatalogRef: config2.toolCatalogRef,
+    actionCatalogRef: config2.actionCatalogRef,
+    gatewayRegistryRef: config2.gatewayRegistryRef,
+    runtimeExecutionId: toolCall.runtimeExecutionId,
+    generatedExecutionGraphId: toolCall.generatedExecutionGraphId,
+    generatedExecutionNodeId: toolCall.generatedExecutionNodeId,
+    toolCallDraftId: toolCall.toolCallDraftId,
+    generatedCodeOrSpecRefs: [toolCall.generatedCodeOrSpecRef],
+    declaredAssumptions: ["package install tool call provided explicit package and version range"],
+    requiredEvidenceRefs: ["evidence:package-manifest-diff"],
+    candidate: {
+      toolCapabilityId: config2.toolCapabilityId,
+      actionTypeId: config2.actionTypeId,
+      gatewayRegistryEntryId: config2.gatewayRegistryEntryId,
+      actionClass: "package.install",
+      gatewayId: config2.gatewayId,
+      resourceRef: `npm:${toolCall.package}`,
+      sequenceNumber: toolCall.sequenceNumber,
+      requiredPriorActionContractIds: toolCall.requiredPriorActionContractIds,
+      recoveryRecommendationId: null,
+      parameters,
+      nonSecretParamsSummary: parameters,
+      secretRefs: {},
+      purposeCode: "dependency_add",
+      expectedSideEffectCodes: ["package_json_change", "lockfile_change"],
+      evidenceRefs: ["evidence:package-manifest-diff"],
+      bounds: { maxPackages: 1 },
+      idempotencyKey: `package-install:${config2.runId}:${toolCall.sequenceNumber}:${toolCall.package}`,
+      rollbackHint: "remove package and restore manifest from receipt evidence",
+      expiresAt: config2.contractExpiresAt
+    }
+  };
+}
+
+// src/runtime/ingress/registry.ts
+var runtimeIngressFamilyRegistry = [
+  {
+    familyId: "package_install",
+    configKey: "packageInstall",
+    dispatchKindSuffix: "_package_install",
+    grammarVersion: "runtime-dispatch-package-install-0.1",
+    authorityPosture: "proposal_only",
+    compileInputAuthority: "candidate_only",
+    rawBypassPosture: "bypass_evidence_only"
+  },
+  {
+    familyId: "x402_payment",
+    configKey: "x402Payment",
+    dispatchKindSuffix: "_x402_payment",
+    grammarVersion: "runtime-dispatch-x402-payment-0.1",
+    authorityPosture: "proposal_only",
+    compileInputAuthority: "candidate_only",
+    rawBypassPosture: "bypass_evidence_only"
+  },
+  {
+    familyId: "auth_md_protected_api_call",
+    configKey: "authMdProtectedApiCall",
+    dispatchKindSuffix: "_auth_md_protected_api_call",
+    grammarVersion: "runtime-dispatch-auth-md-protected-api-call-0.1",
+    authorityPosture: "proposal_only",
+    compileInputAuthority: "candidate_only",
+    rawBypassPosture: "bypass_evidence_only"
+  }
+];
+function runtimeIngressFamilyDescriptorForDispatchKind(dispatchKind) {
+  return runtimeIngressFamilyRegistry.find((family) => dispatchKind.endsWith(family.dispatchKindSuffix)) ?? null;
+}
+function runtimeIngressFamilyIdForDispatchKind(dispatchKind) {
+  return runtimeIngressFamilyDescriptorForDispatchKind(dispatchKind)?.familyId ?? null;
+}
+function runtimeIngressGrammarVersionForFamilySet(families) {
+  if (families.size > 1)
+    return "runtime-dispatch-mixed-0.1";
+  const familyId = families.values().next().value;
+  const descriptor = familyId ? runtimeIngressFamilyRegistry.find((candidate) => candidate.familyId === familyId) : undefined;
+  if (!descriptor)
+    throw new Error("Runtime ingress dispatch family registry cannot resolve grammar version.");
+  return descriptor.grammarVersion;
+}
+
+// src/runtime/ingress/node-ids.ts
+function runtimeIngressDispatchNodeId(sequenceNumber) {
+  return `runtime_dispatch_${sequenceNumber}`;
+}
+
+// src/runtime/ingress/families.ts
+async function buildCompileIntentInputForDispatch(config2, block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds = []) {
+  if (isPackageInstallDispatch(dispatch)) {
+    return buildPackageInstallCompileIntentInput(requirePackageInstallConfig(config2), packageInstallToolCallForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds));
+  }
+  if (isAuthMdProtectedApiCallDispatch(dispatch)) {
+    const attempt2 = authMdProtectedApiCallAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds);
+    const buildAuthMdCompileInput = authMdProtectedApiCallRefusalReasonCodes(attempt2).length > 0 ? buildAuthMdProtectedApiCallCompileIntentInputForRuntimeRefusal : buildAuthMdProtectedApiCallCompileIntentInput;
+    return buildAuthMdCompileInput(requireAuthMdProtectedApiCallConfig(config2), attempt2);
+  }
+  const attempt = x402PaymentAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds);
+  const buildX402CompileInput = x402DispatchRefusalReasonCodes(dispatch).length > 0 ? buildX402PaymentCompileIntentInputForRuntimeRefusal : buildX402PaymentCompileIntentInput;
+  return buildX402CompileInput(requireX402PaymentConfig(config2), attempt);
+}
+function dispatchGeneratedCodeOrSpecRef(block, dispatch, sequenceNumber) {
+  return dispatch.generatedCodeOrSpecRef ?? `${block.generatedCodeOrSpecRef}#dispatch-${sequenceNumber}`;
+}
+function dispatchSpecificRefusalReasonCodes(dispatch) {
+  if (isAuthMdProtectedApiCallDispatch(dispatch)) {
+    return authMdProtectedApiCallRefusalReasonCodes(authMdProtectedApiCallAttemptForDispatch({
+      principalIntentRef: "runtime-ingress:preflight",
+      generatedCodeOrSpecRef: dispatch.generatedCodeOrSpecRef ?? "runtime-ingress:preflight"
+    }, dispatch, 1, {
+      runtimeExecutionId: "runtime_execution_preflight",
+      generatedExecutionGraphId: "generated_execution_graph_preflight"
+    }));
+  }
+  if (isX402PaymentDispatch(dispatch))
+    return x402DispatchRefusalReasonCodes(dispatch);
+  return [];
+}
+function runtimeIngressEvidenceRefs(block) {
+  return unique6([
+    block.dispatchBoundaryRef,
+    ...block.evidenceRefs,
+    ...block.dispatches.flatMap((dispatch) => [
+      ...dispatch.evidenceRefs,
+      isX402PaymentDispatch(dispatch) ? dispatch.paymentRequiredEvidenceRef : null,
+      isAuthMdProtectedApiCallDispatch(dispatch) ? `evidence:auth-md-discovery:${dispatch.protectedResourceMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}` : null,
+      isAuthMdProtectedApiCallDispatch(dispatch) ? `evidence:auth-md-authorization-server:${dispatch.authorizationServerMetadataDigest.slice("sha256:".length, "sha256:".length + 16)}` : null
+    ])
+  ].filter((value) => Boolean(value)));
+}
+function runtimeConfigForDispatch(config2, dispatch) {
+  switch (runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind)) {
+    case "package_install":
+      return requirePackageInstallConfig(config2);
+    case "x402_payment":
+      return requireX402PaymentConfig(config2);
+    case "auth_md_protected_api_call":
+      return requireAuthMdProtectedApiCallConfig(config2);
+    default:
+      throw new Error(`Runtime ingress dispatch family is not registered: ${dispatch.dispatchKind}`);
+  }
+}
+function signingSecretForDispatch(config2, dispatch) {
+  return runtimeConfigForDispatch(config2, dispatch).signingSecret;
+}
+function supportedGrammarVersionForBlock(block) {
+  return runtimeIngressGrammarVersionForFamilySet(new Set(block.dispatches.map((dispatch) => {
+    const familyId = runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind);
+    if (!familyId)
+      throw new Error(`Runtime ingress dispatch family is not registered: ${dispatch.dispatchKind}`);
+    return familyId;
+  })));
+}
+function isRawSiblingDispatch(dispatch) {
+  return dispatch.dispatchKind.startsWith("raw_sibling_");
+}
+function isAmbiguousDispatch(dispatch) {
+  return dispatch.dispatchKind.startsWith("ambiguous_");
+}
+function packageInstallToolCallForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds = []) {
+  return {
+    principalIntentRef: block.principalIntentRef,
+    generatedCodeOrSpecRef: dispatchGeneratedCodeOrSpecRef(block, dispatch, sequenceNumber),
+    runtimeExecutionId: graphRefs.runtimeExecutionId,
+    generatedExecutionGraphId: graphRefs.generatedExecutionGraphId,
+    generatedExecutionNodeId: runtimeIngressDispatchNodeId(sequenceNumber),
+    package: dispatch.package,
+    versionRange: dispatch.versionRange,
+    packageManager: dispatch.packageManager,
+    registryRef: dispatch.registryRef,
+    workspaceRef: dispatch.workspaceRef,
+    manifestRef: dispatch.manifestRef,
+    lockfileRef: dispatch.lockfileRef,
+    installFlags: dispatch.installFlags,
+    lifecycleScriptPolicy: dispatch.lifecycleScriptPolicy,
+    resolvedMaterialDigest: dispatch.resolvedMaterialDigest,
+    resolvedMaterialEvidenceRefs: dispatch.resolvedMaterialEvidenceRefs,
+    sequenceNumber,
+    requiredPriorActionContractIds
+  };
+}
+function x402PaymentAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds = []) {
+  return {
+    principalIntentRef: block.principalIntentRef,
+    generatedCodeOrSpecRef: dispatchGeneratedCodeOrSpecRef(block, dispatch, sequenceNumber),
+    runtimeExecutionId: graphRefs.runtimeExecutionId,
+    generatedExecutionGraphId: graphRefs.generatedExecutionGraphId,
+    generatedExecutionNodeId: runtimeIngressDispatchNodeId(sequenceNumber),
+    endpointUrl: dispatch.endpointUrl,
+    payee: dispatch.payee,
+    network: dispatch.network,
+    token: dispatch.token,
+    atomicAmount: dispatch.atomicAmount,
+    x402EvidenceProfile: dispatch.x402EvidenceProfile,
+    paymentRequirementsDigest: dispatch.paymentRequirementsDigest,
+    paymentRequiredEvidenceRef: dispatch.paymentRequiredEvidenceRef,
+    facilitatorRef: dispatch.facilitatorRef,
+    intendedHttpMethod: dispatch.intendedHttpMethod,
+    intendedRequestUrl: dispatch.intendedRequestUrl,
+    intendedRequestBodyPosture: dispatch.intendedRequestBodyPosture,
+    intendedRequestBodyDigest: dispatch.intendedRequestBodyDigest,
+    selectedHeadersDigest: dispatch.selectedHeadersDigest,
+    providerEnvironmentPosture: dispatch.providerEnvironmentPosture,
+    providerEnvironmentRef: dispatch.providerEnvironmentRef,
+    x402Version: dispatch.x402Version,
+    x402Scheme: dispatch.x402Scheme,
+    asset: dispatch.asset,
+    payTo: dispatch.payTo,
+    maxTimeoutSeconds: dispatch.maxTimeoutSeconds,
+    selectedPaymentRequirementIndex: dispatch.selectedPaymentRequirementIndex,
+    selectedPaymentRequirementDigest: dispatch.selectedPaymentRequirementDigest,
+    sdkPackageVersions: dispatch.sdkPackageVersions,
+    extensionKeys: dispatch.extensionKeys,
+    sequenceNumber,
+    requiredPriorActionContractIds
+  };
+}
+function authMdProtectedApiCallAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds = []) {
+  return {
+    principalIntentRef: block.principalIntentRef,
+    generatedCodeOrSpecRef: dispatchGeneratedCodeOrSpecRef(block, dispatch, sequenceNumber),
+    runtimeExecutionId: graphRefs.runtimeExecutionId,
+    generatedExecutionGraphId: graphRefs.generatedExecutionGraphId,
+    generatedExecutionNodeId: runtimeIngressDispatchNodeId(sequenceNumber),
+    protectedResource: dispatch.protectedResource,
+    protectedResourceMetadataDigest: dispatch.protectedResourceMetadataDigest,
+    authorizationServerMetadataDigest: dispatch.authorizationServerMetadataDigest,
+    authorizationServer: dispatch.authorizationServer,
+    targetHttpMethod: dispatch.targetHttpMethod,
+    endpointUrl: dispatch.endpointUrl,
+    pathTemplate: dispatch.pathTemplate,
+    requestBodyDigest: dispatch.requestBodyDigest,
+    selectedHeadersDigest: dispatch.selectedHeadersDigest,
+    requiredScopes: dispatch.requiredScopes,
+    gatewayCredentialRefId: dispatch.gatewayCredentialRefId,
+    gatewayCredentialRefDigest: dispatch.gatewayCredentialRefDigest,
+    providerRegistryRef: dispatch.providerRegistryRef,
+    providerRegistryDigest: dispatch.providerRegistryDigest,
+    requiredCredentialCustodyStatus: dispatch.requiredCredentialCustodyStatus,
+    operationId: dispatch.operationId,
+    idempotencyMaterialRef: dispatch.idempotencyMaterialRef,
+    metadataCachePosture: dispatch.metadataCachePosture,
+    gatewayCredentialRefPosture: dispatch.gatewayCredentialRefPosture,
+    rawAuthorizationHeaderObserved: dispatch.rawAuthorizationHeaderObserved,
+    dynamicEndpointConstructionObserved: dispatch.dynamicEndpointConstructionObserved,
+    dynamicHostConstructionObserved: dispatch.dynamicHostConstructionObserved,
+    retryAuthorityReuseDetected: dispatch.retryAuthorityReuseDetected,
+    evidenceRefs: dispatch.evidenceRefs,
+    sequenceNumber,
+    requiredPriorActionContractIds
+  };
+}
+function x402DispatchRefusalReasonCodes(dispatch) {
+  const reasonCodes = [];
+  if (dispatch.intendedRequestBodyPosture === "digest_bound" && dispatch.intendedRequestBodyDigest === null) {
+    reasonCodes.push("x402_request_body_digest_missing");
+  }
+  if (["omitted", "unsupported"].includes(dispatch.intendedRequestBodyPosture)) {
+    reasonCodes.push("x402_request_body_posture_unsupported");
+  }
+  if (dispatch.intendedRequestBodyPosture === "no_body" && dispatch.intendedRequestBodyDigest !== null) {
+    reasonCodes.push("x402_request_body_posture_mismatch");
+  }
+  if (dispatch.providerEnvironmentPosture !== "local_reference_sandbox") {
+    reasonCodes.push("x402_provider_environment_not_sandboxed");
+  }
+  return unique6(reasonCodes);
+}
+function requirePackageInstallConfig(config2) {
+  if (!config2.packageInstall)
+    throw new Error("Runtime ingress package-install dispatch requires packageInstall config.");
+  return config2.packageInstall;
+}
+function requireX402PaymentConfig(config2) {
+  if (!config2.x402Payment)
+    throw new Error("Runtime ingress x402 payment dispatch requires x402Payment config.");
+  return config2.x402Payment;
+}
+function requireAuthMdProtectedApiCallConfig(config2) {
+  if (!config2.authMdProtectedApiCall) {
+    throw new Error("Runtime ingress auth.md protected API call dispatch requires authMdProtectedApiCall config.");
+  }
+  return config2.authMdProtectedApiCall;
+}
+function isPackageInstallDispatch(dispatch) {
+  return runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind) === "package_install";
+}
+function isX402PaymentDispatch(dispatch) {
+  return runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind) === "x402_payment";
+}
+function isAuthMdProtectedApiCallDispatch(dispatch) {
+  return runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind) === "auth_md_protected_api_call";
+}
+function unique6(values) {
+  return [...new Set(values)];
+}
+
+// src/runtime/ingress/schemas.ts
+var RuntimeIngressIdSchema = exports_external.string().min(1).max(160);
+var RuntimeIngressRefSchema = exports_external.string().min(1).max(500);
+var RuntimeIngressUrlSchema = exports_external.string().url().max(2048);
+var RuntimeIngressSmallListSchema = (schema) => exports_external.array(schema).max(32);
+var RuntimeIngressDispatchLimit = 32;
+var PackageInstallDispatchParameterFields = {
+  package: RuntimeIngressIdSchema,
+  versionRange: RuntimeIngressIdSchema,
+  packageManager: RuntimeIngressIdSchema.default("bun"),
+  registryRef: RuntimeIngressRefSchema.default("registry:npmjs"),
+  workspaceRef: RuntimeIngressRefSchema.nullable().default(null),
+  manifestRef: RuntimeIngressRefSchema.nullable().default("manifest:package.json"),
+  lockfileRef: RuntimeIngressRefSchema.nullable().default("lockfile:bun.lock"),
+  installFlags: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).default([]),
+  lifecycleScriptPolicy: exports_external.enum(["blocked", "allowed", "unknown"]).default("blocked"),
+  resolvedMaterialDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  resolvedMaterialEvidenceRefs: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([])
+};
+var X402PaymentDispatchParameterFields = {
+  endpointUrl: RuntimeIngressUrlSchema,
+  payee: RuntimeIngressRefSchema,
+  network: RuntimeIngressIdSchema,
+  token: RuntimeIngressIdSchema,
+  atomicAmount: exports_external.string().max(78).regex(/^(?:0|[1-9]\d*)$/),
+  x402EvidenceProfile: exports_external.enum(["official_payment_required", "local_digest_profile"]).default("local_digest_profile"),
+  paymentRequirementsDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/),
+  paymentRequiredEvidenceRef: RuntimeIngressRefSchema.optional(),
+  facilitatorRef: RuntimeIngressRefSchema.nullable().default(null),
+  intendedHttpMethod: RuntimeIngressIdSchema.nullable().default(null),
+  intendedRequestUrl: RuntimeIngressUrlSchema.nullable().default(null),
+  intendedRequestBodyPosture: exports_external.enum(["no_body", "digest_bound", "omitted", "unsupported"]).default("no_body"),
+  intendedRequestBodyDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  selectedHeadersDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  providerEnvironmentPosture: exports_external.enum(["local_reference_sandbox", "external_sandbox", "live", "unknown"]).default("local_reference_sandbox"),
+  providerEnvironmentRef: RuntimeIngressRefSchema.nullable().default(null),
+  x402Version: exports_external.number().int().positive().nullable().default(null),
+  x402Scheme: RuntimeIngressIdSchema.nullable().default(null),
+  asset: RuntimeIngressIdSchema.nullable().default(null),
+  payTo: RuntimeIngressRefSchema.nullable().default(null),
+  maxTimeoutSeconds: exports_external.number().positive().nullable().default(null),
+  selectedPaymentRequirementDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  selectedPaymentRequirementIndex: exports_external.number().int().nonnegative().nullable().default(null),
+  sdkPackageVersions: exports_external.record(RuntimeIngressIdSchema, RuntimeIngressIdSchema).default({}),
+  extensionKeys: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).default([])
+};
+var AuthMdProtectedApiCallDispatchParameterFields = {
+  protectedResource: RuntimeIngressUrlSchema,
+  protectedResourceMetadataDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/),
+  authorizationServerMetadataDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/),
+  authorizationServer: RuntimeIngressUrlSchema,
+  targetHttpMethod: RuntimeIngressIdSchema,
+  endpointUrl: RuntimeIngressUrlSchema,
+  pathTemplate: RuntimeIngressRefSchema,
+  requestBodyDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  selectedHeadersDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/),
+  requiredScopes: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).min(1),
+  gatewayCredentialRefId: RuntimeIngressIdSchema,
+  gatewayCredentialRefDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/),
+  providerRegistryRef: RuntimeIngressRefSchema,
+  providerRegistryDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).nullable().default(null),
+  requiredCredentialCustodyStatus: CredentialCustodyStatusSchema.default("gateway_held"),
+  operationId: RuntimeIngressIdSchema,
+  idempotencyMaterialRef: RuntimeIngressRefSchema.nullable().default(null),
+  metadataCachePosture: exports_external.enum(["fresh", "stale", "unknown"]).default("fresh"),
+  gatewayCredentialRefPosture: exports_external.enum(["fresh", "stale", "revoked", "expired", "unknown"]).default("fresh"),
+  rawAuthorizationHeaderObserved: exports_external.boolean().default(false),
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+};
+var RuntimeIngressDispatchCommonFields = {
+  dispatchRef: RuntimeIngressRefSchema,
+  generatedCodeOrSpecRef: RuntimeIngressRefSchema.nullable().default(null),
+  dynamicToolConstructionDetected: exports_external.boolean().default(false),
+  lateBoundParameterRefs: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([]),
+  retryOfDispatchRef: RuntimeIngressRefSchema.nullable().default(null),
+  branchRef: RuntimeIngressRefSchema.nullable().default(null),
+  loopIteration: exports_external.number().int().nonnegative().nullable().default(null),
+  evidenceRefs: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([])
+};
+var RuntimeIngressObservedDispatchSchema = exports_external.discriminatedUnion("dispatchKind", [
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("wrapped_package_install"),
+    ...RuntimeIngressDispatchCommonFields,
+    ...PackageInstallDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("raw_sibling_package_install"),
+    ...RuntimeIngressDispatchCommonFields,
+    rawCommandRef: RuntimeIngressRefSchema,
+    rawCommandSummary: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([
+      "package-manager command outside gateway"
+    ]),
+    ...PackageInstallDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("ambiguous_package_install"),
+    ...RuntimeIngressDispatchCommonFields,
+    ambiguousReasonCodes: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).default([
+      "runtime_ingress_ambiguous_dispatch"
+    ]),
+    ...PackageInstallDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("wrapped_x402_payment"),
+    ...RuntimeIngressDispatchCommonFields,
+    ...X402PaymentDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("raw_sibling_x402_payment"),
+    ...RuntimeIngressDispatchCommonFields,
+    rawCommandRef: RuntimeIngressRefSchema,
+    rawCommandSummary: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([
+      "x402 payment command outside gateway"
+    ]),
+    ...X402PaymentDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("ambiguous_x402_payment"),
+    ...RuntimeIngressDispatchCommonFields,
+    ambiguousReasonCodes: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).default([
+      "runtime_ingress_ambiguous_dispatch"
+    ]),
+    ...X402PaymentDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("wrapped_auth_md_protected_api_call"),
+    ...RuntimeIngressDispatchCommonFields,
+    ...AuthMdProtectedApiCallDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("raw_sibling_auth_md_protected_api_call"),
+    ...RuntimeIngressDispatchCommonFields,
+    rawCommandRef: RuntimeIngressRefSchema,
+    rawCommandSummary: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([
+      "auth.md protected API call outside gateway"
+    ]),
+    ...AuthMdProtectedApiCallDispatchParameterFields
+  }),
+  exports_external.strictObject({
+    dispatchKind: exports_external.literal("ambiguous_auth_md_protected_api_call"),
+    ...RuntimeIngressDispatchCommonFields,
+    ambiguousReasonCodes: RuntimeIngressSmallListSchema(RuntimeIngressIdSchema).default([
+      "runtime_ingress_ambiguous_dispatch"
+    ]),
+    ...AuthMdProtectedApiCallDispatchParameterFields
+  })
+]);
+var RuntimeIngressDispatchBlockSchema = exports_external.strictObject({
+  principalIntentRef: RuntimeIngressRefSchema,
+  generatedCodeOrSpecRef: RuntimeIngressRefSchema,
+  dispatchBoundaryRef: RuntimeIngressRefSchema,
+  executionBlockRef: RuntimeIngressRefSchema.nullable().default(null),
+  graphNonce: exports_external.string().min(8).nullable().default(null),
+  truncationStatus: exports_external.enum(["complete", "truncated", "over_limit", "unknown"]).default("complete"),
+  unobservedRegionRefs: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([]),
+  evidenceRefs: RuntimeIngressSmallListSchema(RuntimeIngressRefSchema).default([]),
+  dispatches: exports_external.array(RuntimeIngressObservedDispatchSchema).min(1).max(RuntimeIngressDispatchLimit)
+}).superRefine((block, context) => {
+  const seenDispatchRefs = new Set;
+  block.dispatches.forEach((dispatch, index) => {
+    if (seenDispatchRefs.has(dispatch.dispatchRef)) {
+      context.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "Runtime ingress dispatchRef must be unique within a dispatch block.",
+        path: ["dispatches", index, "dispatchRef"]
+      });
+    }
+    seenDispatchRefs.add(dispatch.dispatchRef);
+  });
+});
+
+// src/runtime/ingress/index.ts
+var RuntimeIngressConfigSchema = exports_external.strictObject({
+  packageInstall: PackageInstallRuntimeConfigSchema.optional(),
+  x402Payment: X402PaymentRuntimeConfigSchema.optional(),
+  authMdProtectedApiCall: AuthMdProtectedApiCallRuntimeConfigSchema.optional()
+}).superRefine((config2, context) => {
+  if (!config2.packageInstall && !config2.x402Payment && !config2.authMdProtectedApiCall) {
+    context.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "Runtime ingress proposal requires at least one dispatch-family config.",
+      path: ["config"]
+    });
+  }
+});
+var RuntimeIngressProposalInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  config: RuntimeIngressConfigSchema,
+  dispatchBlock: RuntimeIngressDispatchBlockSchema
+}).superRefine((input, context) => {
+  const scopedConfigs = [
+    ["packageInstall", input.config.packageInstall],
+    ["x402Payment", input.config.x402Payment],
+    ["authMdProtectedApiCall", input.config.authMdProtectedApiCall]
+  ];
+  for (const [family, config2] of scopedConfigs) {
+    if (!config2)
+      continue;
+    if (config2.tenantId !== input.tenantId) {
+      context.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: `${family} runtime config tenantId must match the request tenantId.`,
+        path: ["config", family, "tenantId"]
+      });
+    }
+    if (config2.organizationId !== input.organizationId) {
+      context.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: `${family} runtime config organizationId must match the request organizationId.`,
+        path: ["config", family, "organizationId"]
+      });
+    }
+  }
+});
+async function proposeRuntimeIngressActionContracts(protocol, config2, blockValue) {
+  const block = RuntimeIngressDispatchBlockSchema.parse(blockValue);
+  assertRuntimeIngressSameEnvelope(config2, block);
+  const runtimeExecution = await protocol.createRuntimeExecution(await buildRuntimeIngressExecutionInput(config2, block));
+  const graph = await protocol.createGeneratedExecutionGraph(await buildRuntimeIngressGraphInput(config2, block, runtimeExecution), runtimeIngressGraphIssuerContext(config2, block, runtimeExecution));
+  const proposals = [];
+  const requiredPriorActionContractIds = [];
+  for (const [index, dispatch] of block.dispatches.entries()) {
+    const sequenceNumber = index + 1;
+    const compileInput = await buildCompileIntentInputForDispatch(config2, block, dispatch, sequenceNumber, graph, requiredPriorActionContractIds);
+    const toolCallDraft = await createFinalizedToolCallDraft(protocol, compileInput);
+    const intentCompilation = await protocol.compileIntent({
+      ...compileInput,
+      toolCallDraftId: toolCallDraft.toolCallDraftId
+    });
+    const refusalReasonCodes = refusalReasonCodesForCompilation(intentCompilation);
+    if (refusalReasonCodes.length > 0) {
+      proposals.push({
+        outcome: "intent_compilation_refused",
+        dispatchRef: dispatch.dispatchRef,
+        sequenceNumber,
+        toolCallDraft,
+        intentCompilation,
+        actionContract: null,
+        refusalReasonCodes
+      });
+      continue;
+    }
+    const actionContract = await protocol.proposeActionContract({
+      intentCompilationId: intentCompilation.intentCompilationId,
+      candidateActionId: intentCompilation.candidateAction.candidateActionId,
+      candidateDigest: requireCandidateDigest(intentCompilation.candidateAction.candidateDigest),
+      signingSecret: signingSecretForDispatch(config2, dispatch)
+    });
+    proposals.push({
+      outcome: "action_contract_proposed",
+      dispatchRef: dispatch.dispatchRef,
+      sequenceNumber,
+      toolCallDraft,
+      intentCompilation,
+      actionContract,
+      refusalReasonCodes: []
+    });
+    requiredPriorActionContractIds.push(actionContract.actionContractId);
+  }
+  const outcome = proposals.every((proposal) => proposal.outcome === "action_contract_proposed") ? "action_contracts_proposed" : "one_or_more_dispatches_refused";
+  return {
+    outcome,
+    responsePosture: runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals),
+    runtimeExecution,
+    generatedExecutionGraph: graph,
+    proposals
+  };
+}
+function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals) {
+  const reasonCodes = unique7([
+    ...graph.terminalReasonCodes,
+    ...proposals.flatMap((proposal) => proposal.refusalReasonCodes),
+    ...runtimeExecution.loopDetected ? ["runtime_ingress_loop_detected"] : [],
+    ...runtimeExecution.retryDetected ? ["runtime_ingress_retry_detected"] : [],
+    ...runtimeExecution.branchDetected ? ["runtime_ingress_branch_detected"] : []
+  ]);
+  const nextAction = outcome === "action_contracts_proposed" ? "read_evidence" : graph.coverageStatus === "contains_bypass_risk" ? "stop" : "recraft_request";
+  return {
+    schemaVersion: "handshake.runtime-ingress.outcome.v1",
+    authorityCreated: false,
+    authorityCertificateMinted: false,
+    credentialMaterialIncluded: false,
+    gatewayCheckPerformed: false,
+    greenlightCreated: false,
+    mutationAttempted: false,
+    mutationCommandIncluded: false,
+    rawInternalRecordIncluded: false,
+    receiptExportCreated: false,
+    reasonCodes,
+    nextAction,
+    retryability: nextAction === "recraft_request" ? "retryable_after_recraft" : "not_retryable",
+    redactionProfileRef: "runtime-ingress:v0.1-redacted",
+    evidenceRefs: unique7([
+      ...runtimeIngressEvidenceRefs(block),
+      `runtime_execution:${runtimeExecution.runtimeExecutionId}`,
+      `generated_execution_graph:${graph.generatedExecutionGraphId}`,
+      ...proposals.flatMap((proposal) => [
+        `tool_call_draft:${proposal.toolCallDraft.toolCallDraftId}`,
+        `intent_compilation:${proposal.intentCompilation.intentCompilationId}`
+      ])
+    ]),
+    runtimeExecutionRef: runtimeExecution.runtimeExecutionId,
+    generatedExecutionGraphRef: graph.generatedExecutionGraphId,
+    graphCoverageStatus: graph.coverageStatus,
+    toolCallDraftRefs: proposals.map((proposal) => proposal.toolCallDraft.toolCallDraftId),
+    intentCompilationRefs: proposals.map((proposal) => proposal.intentCompilation.intentCompilationId),
+    actionContractRefs: proposals.map((proposal) => proposal.actionContract?.actionContractId ?? null).filter((ref) => ref !== null),
+    refusalRefs: [],
+    dispatchCount: block.dispatches.length
+  };
+}
+async function buildRuntimeIngressExecutionInput(config2, block) {
+  const baseConfig = runtimeConfigForDispatch(config2, firstDispatch(block));
+  const generatedRefs = unique7([
+    block.generatedCodeOrSpecRef,
+    ...block.dispatches.map((dispatch, index) => dispatchGeneratedCodeOrSpecRef(block, dispatch, index + 1))
+  ]);
+  return {
+    tenantId: baseConfig.tenantId,
+    organizationId: baseConfig.organizationId,
+    principalIntentRef: block.principalIntentRef,
+    principalId: baseConfig.principalId,
+    agentId: baseConfig.agentId,
+    runId: baseConfig.runId,
+    runtimeAdapterId: baseConfig.runtimeAdapterId,
+    executionShape: block.dispatches.length === 1 ? "single_tool_call" : "tool_dispatch_chain",
+    runtimePosture: "hook_assisted",
+    executionBlockRef: block.executionBlockRef ?? block.generatedCodeOrSpecRef,
+    executionBlockDigest: await digestCanonical({
+      dispatchBoundaryRef: block.dispatchBoundaryRef,
+      generatedCodeOrSpecRef: block.generatedCodeOrSpecRef,
+      dispatches: block.dispatches
+    }),
+    generatedCodeOrSpecRefs: generatedRefs,
+    allowedToolCapabilityIds: unique7(block.dispatches.map((dispatch) => runtimeConfigForDispatch(config2, dispatch).toolCapabilityId)),
+    observedToolCallRefs: block.dispatches.map((dispatch) => dispatch.dispatchRef),
+    observedConsequentialCallCount: block.dispatches.length,
+    loopDetected: block.dispatches.some((dispatch) => dispatch.loopIteration !== null),
+    retryDetected: block.dispatches.some((dispatch) => dispatch.retryOfDispatchRef !== null),
+    branchDetected: block.dispatches.some((dispatch) => dispatch.branchRef !== null),
+    dynamicToolConstructionDetected: block.dispatches.some((dispatch) => dispatch.dynamicToolConstructionDetected),
+    unobservedRegionRefs: unique7([
+      ...block.unobservedRegionRefs,
+      ...block.dispatches.flatMap((dispatch) => dispatch.lateBoundParameterRefs)
+    ]),
+    accessPosture: "controlled_outbound",
+    uncertaintyMarkers: [],
+    refusalReasonCodes: runtimeIngressDispatchRefusalReasonCodes(block),
+    evidenceRefs: runtimeIngressEvidenceRefs(block)
+  };
+}
+async function buildRuntimeIngressGraphInput(config2, block, runtimeExecution) {
+  const nodes = await Promise.all(block.dispatches.map((dispatch, index) => buildRuntimeIngressGraphNode(config2, block, dispatch, index + 1)));
+  const nodeGatewayBindingDigests = nodes.map((node) => node.nodeGatewayBindingDigest).filter((digest) => Boolean(digest));
+  return {
+    runtimeExecutionId: runtimeExecution.runtimeExecutionId,
+    graphNonce: block.graphNonce ?? `nonce_${runtimeExecution.runtimeExecutionId}`,
+    parserVersion: "handshake-runtime-dispatch-ingress-0.2.4",
+    supportedGrammarVersion: supportedGrammarVersionForBlock(block),
+    entryNodeIds: nodes[0] ? [nodes[0].nodeId] : [],
+    edges: edgesForDispatches(block.dispatches),
+    maxNodeCount: Math.max(64, nodes.length),
+    maxEdgeCount: Math.max(128, Math.max(0, nodes.length - 1)),
+    maxDepth: Math.max(16, nodes.length),
+    maxGraphByteSize: 65536,
+    truncationStatus: block.truncationStatus,
+    catalogSnapshotDigest: await digestCanonical({
+      dispatchCatalogs: block.dispatches.map((dispatch) => {
+        const dispatchConfig = runtimeConfigForDispatch(config2, dispatch);
+        return {
+          toolCatalogRef: dispatchConfig.toolCatalogRef,
+          actionCatalogRef: dispatchConfig.actionCatalogRef,
+          toolCapabilityId: dispatchConfig.toolCapabilityId,
+          actionTypeId: dispatchConfig.actionTypeId
+        };
+      })
+    }),
+    gatewayRegistrySnapshotDigest: await digestCanonical({
+      gatewayRegistryEntries: block.dispatches.map((dispatch) => {
+        const dispatchConfig = runtimeConfigForDispatch(config2, dispatch);
+        return {
+          gatewayRegistryRef: dispatchConfig.gatewayRegistryRef,
+          gatewayRegistryEntryId: dispatchConfig.gatewayRegistryEntryId
+        };
+      })
+    }),
+    registryBindingSetDigest: await digestCanonical({ nodeGatewayBindingDigests }),
+    nodes
+  };
+}
+function runtimeIngressGraphIssuerContext(config2, block, runtimeExecution) {
+  const baseConfig = runtimeConfigForDispatch(config2, firstDispatch(block));
+  return {
+    tenantId: baseConfig.tenantId,
+    organizationId: baseConfig.organizationId,
+    principalIntentRef: block.principalIntentRef,
+    principalId: baseConfig.principalId,
+    agentId: baseConfig.agentId,
+    runId: baseConfig.runId,
+    runtimeAdapterId: baseConfig.runtimeAdapterId,
+    graphIssuerRef: `${baseConfig.runtimeAdapterId}:${block.dispatchBoundaryRef}`,
+    graphIssuerAuthority: "host_runtime_adapter",
+    graphIssuedAt: runtimeExecution.createdAt
+  };
+}
+async function buildRuntimeIngressGraphNode(config2, block, dispatch, sequenceNumber) {
+  const compileInput = await buildCompileIntentInputForDispatch(config2, block, dispatch, sequenceNumber, {
+    runtimeExecutionId: "runtime_execution_pending",
+    generatedExecutionGraphId: "generated_execution_graph_pending"
+  });
+  const candidate = compileInput.candidate;
+  const paramsDigest = await protectedActionParamsDigest({
+    parameters: candidate.parameters,
+    secretRefs: candidate.secretRefs,
+    gatewayCredentialRefs: candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: candidate.delegatedAuthorityRefs
+  });
+  const classification = nodeClassificationForDispatch(dispatch);
+  const nodeGatewayBindingDigest = classification === "candidate_action_eligible" ? await digestCanonical({
+    actionClass: candidate.actionClass,
+    toolCapabilityId: candidate.toolCapabilityId,
+    actionTypeId: candidate.actionTypeId,
+    gatewayRegistryEntryId: candidate.gatewayRegistryEntryId,
+    resourceRef: candidate.resourceRef,
+    paramsDigest
+  }) : null;
+  const sourceRef = dispatchGeneratedCodeOrSpecRef(block, dispatch, sequenceNumber);
+  return {
+    nodeId: runtimeIngressDispatchNodeId(sequenceNumber),
+    nodeKind: isRawSiblingDispatch(dispatch) ? "shell_command" : "observer_event",
+    classification,
+    actionClass: candidate.actionClass,
+    toolCapabilityId: candidate.toolCapabilityId,
+    actionTypeId: candidate.actionTypeId,
+    gatewayRegistryEntryId: candidate.gatewayRegistryEntryId,
+    resourceRef: candidate.resourceRef,
+    paramsDigest,
+    nodeGatewayBindingDigest,
+    sourceSpanDigest: await digestCanonical({
+      dispatchRef: dispatch.dispatchRef,
+      sourceRef,
+      sequenceNumber
+    }),
+    redactedArgvSummary: isRawSiblingDispatch(dispatch) ? dispatch.rawCommandSummary : [candidate.actionClass, candidate.resourceRef],
+    argvDigest: await digestCanonical({
+      dispatchKind: dispatch.dispatchKind,
+      dispatchRef: dispatch.dispatchRef,
+      sourceRef,
+      sequenceNumber,
+      paramsDigest
+    }),
+    argvRedactionStatus: "redacted",
+    stdinDigest: null,
+    stdinRedactionStatus: "digest_only",
+    envAllowlistDigest: null,
+    rawSecretMaterialDetected: false,
+    commandRiskClassifierRefs: ["runtime-dispatch-ingress-classifier"],
+    commandRiskClassifierPosture: isRawSiblingDispatch(dispatch) ? "bypass_detected" : classification === "candidate_action_eligible" ? "advisory_no_match" : "unknown",
+    commandRiskRuleRefs: [],
+    commandRiskBypassRefs: isRawSiblingDispatch(dispatch) ? [dispatch.rawCommandRef, dispatch.dispatchRef] : [],
+    unsupportedReasonCodes: unsupportedReasonCodesForDispatch(dispatch)
+  };
+}
+function edgesForDispatches(dispatches) {
+  return dispatches.slice(1).map((dispatch, index) => ({
+    fromNodeId: runtimeIngressDispatchNodeId(index + 1),
+    toNodeId: runtimeIngressDispatchNodeId(index + 2),
+    edgeKind: dispatch.retryOfDispatchRef ? "retry" : "sequence"
+  }));
+}
+function nodeClassificationForDispatch(dispatch) {
+  if (isRawSiblingDispatch(dispatch))
+    return "bypass_risk";
+  if (isAmbiguousDispatch(dispatch) || dispatch.dynamicToolConstructionDetected || dispatch.lateBoundParameterRefs.length > 0 || dispatchSpecificRefusalReasonCodes(dispatch).length > 0) {
+    return "ambiguous";
+  }
+  return "candidate_action_eligible";
+}
+function unsupportedReasonCodesForDispatch(dispatch) {
+  const reasonCodes = [];
+  if (isRawSiblingDispatch(dispatch)) {
+    reasonCodes.push("runtime_ingress_raw_sibling_bypass");
+  }
+  if (isAmbiguousDispatch(dispatch)) {
+    reasonCodes.push(...dispatch.ambiguousReasonCodes);
+  }
+  if (dispatch.dynamicToolConstructionDetected) {
+    reasonCodes.push("runtime_ingress_dynamic_tool_construction");
+  }
+  if (dispatch.lateBoundParameterRefs.length > 0) {
+    reasonCodes.push("runtime_ingress_late_bound_parameters");
+  }
+  reasonCodes.push(...dispatchSpecificRefusalReasonCodes(dispatch));
+  return [...new Set(reasonCodes)];
+}
+function runtimeIngressDispatchRefusalReasonCodes(block) {
+  return unique7(block.dispatches.flatMap((dispatch) => dispatchSpecificRefusalReasonCodes(dispatch)));
+}
+var runtimeIngressSameEnvelopeFields = [
+  "tenantId",
+  "organizationId",
+  "principalId",
+  "agentId",
+  "runId",
+  "runtimeAdapterId",
+  "operatingEnvelopeId",
+  "gatewayRegistryRef"
+];
+function assertRuntimeIngressSameEnvelope(config2, block) {
+  const familyConfigs = uniqueRuntimeIngressFamilyConfigs(config2, block);
+  if (familyConfigs.length <= 1)
+    return;
+  const base = familyConfigs[0];
+  if (!base)
+    return;
+  for (const candidate of familyConfigs.slice(1)) {
+    for (const field of runtimeIngressSameEnvelopeFields) {
+      if (candidate.config[field] !== base.config[field]) {
+        throw new Error([
+          "Runtime ingress mixed-family dispatch block requires one same-envelope projection.",
+          `${candidate.familyId} config ${field} does not match ${base.familyId}.`,
+          "Split the generated execution block into separate protected-action proposals or align the execution envelope before projection."
+        ].join(" "));
+      }
+    }
+  }
+}
+function uniqueRuntimeIngressFamilyConfigs(config2, block) {
+  const familyConfigs = new Map;
+  for (const dispatch of block.dispatches) {
+    const familyId = runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind);
+    if (!familyId)
+      throw new Error(`Runtime ingress dispatch family is not registered: ${dispatch.dispatchKind}`);
+    if (!familyConfigs.has(familyId)) {
+      familyConfigs.set(familyId, runtimeConfigForDispatch(config2, dispatch));
+    }
+  }
+  return [...familyConfigs].map(([familyId, familyConfig]) => ({ familyId, config: familyConfig }));
+}
+async function createFinalizedToolCallDraft(protocol, compileInput) {
+  const opened = await protocol.createToolCallDraft({
+    tenantId: compileInput.tenantId,
+    organizationId: compileInput.organizationId,
+    runtimeExecutionId: compileInput.runtimeExecutionId,
+    generatedExecutionGraphId: compileInput.generatedExecutionGraphId,
+    generatedExecutionNodeId: compileInput.generatedExecutionNodeId,
+    toolCapabilityId: compileInput.candidate.toolCapabilityId,
+    actionTypeId: compileInput.candidate.actionTypeId,
+    gatewayRegistryEntryId: compileInput.candidate.gatewayRegistryEntryId,
+    actionClass: compileInput.candidate.actionClass,
+    gatewayId: compileInput.candidate.gatewayId,
+    resourceRef: compileInput.candidate.resourceRef,
+    gatewayCredentialRefs: compileInput.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: compileInput.candidate.delegatedAuthorityRefs,
+    expiresAt: compileInput.candidate.expiresAt,
+    evidenceRefs: compileInput.requiredEvidenceRefs
+  });
+  return protocol.transitionToolCallDraft({
+    toolCallDraftId: opened.toolCallDraftId,
+    nextDraftState: "finalized",
+    parameters: compileInput.candidate.parameters,
+    nonSecretParamsSummary: compileInput.candidate.nonSecretParamsSummary,
+    secretRefs: compileInput.candidate.secretRefs,
+    gatewayCredentialRefs: compileInput.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: compileInput.candidate.delegatedAuthorityRefs,
+    finalizedAt: new Date().toISOString(),
+    expiresAt: compileInput.candidate.expiresAt,
+    evidenceRefs: compileInput.requiredEvidenceRefs
+  });
+}
+function firstDispatch(block) {
+  const dispatch = block.dispatches[0];
+  if (!dispatch)
+    throw new Error("Runtime ingress dispatch block must contain at least one dispatch.");
+  return dispatch;
+}
+function requireCandidateDigest(candidateDigest) {
+  if (!candidateDigest)
+    throw new Error("Contractable candidate is missing candidateDigest.");
+  return candidateDigest;
+}
+function refusalReasonCodesForCompilation(intentCompilation) {
+  return [...intentCompilation.uncertaintyMarkers, ...intentCompilation.overreachReasonCodes];
+}
+function unique7(values) {
+  return [...new Set(values)];
+}
+
+// src/http/routes/transition-scope-resolvers.ts
+function directBodyScope({ body }) {
+  const candidate = body;
+  if (typeof candidate.tenantId === "string" && typeof candidate.organizationId === "string") {
+    return { tenantId: candidate.tenantId, organizationId: candidate.organizationId };
+  }
+  throw new HandshakeProtocolError("transition_scope_unavailable", "Transition request body does not expose a tenant/org scope for hosted admission.", 400, { retryability: "terminal", commitState: "not_started" });
+}
+function recordScope(objectType, fieldName, missingCode) {
+  return async ({ body, store }) => {
+    const objectId = body[fieldName];
+    if (typeof objectId !== "string" || objectId.length === 0) {
+      throw new HandshakeProtocolError("transition_scope_reference_invalid", `Transition request body does not contain a valid ${fieldName} scope reference.`, 400, { retryability: "terminal", commitState: "not_started" });
+    }
+    const record2 = await store().getRecord(objectType, objectId);
+    if (!record2) {
+      throw referenceScopeNotFound(missingCode);
+    }
+    return {
+      tenantId: record2.tenantId,
+      organizationId: record2.organizationId,
+      referenceScopeMissingCode: missingCode
+    };
+  };
+}
+function hideReferenceScopeMismatch(error51, scope2) {
+  if (scope2.referenceScopeMissingCode && error51 instanceof HandshakeProtocolError && error51.code === "hosted_caller_scope_forbidden") {
+    throw referenceScopeNotFound(scope2.referenceScopeMissingCode);
+  }
+  throw error51;
+}
+function referenceScopeNotFound(missingCode) {
+  return new HandshakeProtocolError(missingCode, "Referenced protocol record was not found for hosted admission scope resolution.", 404, { retryability: "terminal", commitState: "not_started" });
+}
+
+// src/http/routes/transition-response-schemas.ts
+var PolicyEvaluationResponseSchema = exports_external.strictObject({
+  decision: PolicyDecisionSchema,
+  greenlight: GreenlightSchema.nullable(),
+  authorityCreated: exports_external.boolean(),
+  gatewayCheckPerformed: exports_external.literal(false),
+  mutationAttempted: exports_external.literal(false),
+  policyDecisionRef: exports_external.string().min(1),
+  greenlightRef: exports_external.string().min(1).nullable(),
+  refusalRef: exports_external.string().min(1).nullable(),
+  refusalReasonCode: exports_external.string().min(1).nullable(),
+  reviewRequired: exports_external.boolean(),
+  nextAction: exports_external.enum(["use_greenlight_at_gateway", "read_evidence", "request_review"]),
+  retryability: exports_external.literal("not_retryable"),
+  evidenceRefs: exports_external.array(exports_external.string().min(1))
+});
+var GatewayCheckResponseSchema = exports_external.strictObject({
+  gateAttempt: GatewayCheckAttemptSchema,
+  mutationAttempt: MutationAttemptSchema.nullable(),
+  receipt: ReceiptSchema,
+  proofGap: ProofGapSchema.nullable()
+});
+var SurfaceOperationReconciliationResponseSchema = exports_external.strictObject({
+  reconciliation: SurfaceOperationReconciliationSchema,
+  resolvedProofGaps: exports_external.array(ProofGapSchema),
+  createdProofGap: ProofGapSchema.nullable()
+});
+var BreakerDecisionResponseSchema = exports_external.strictObject({
+  breakerDecision: BreakerDecisionSchema,
+  isolationState: IsolationStateSchema
+});
+var RecoveryRecommendationStatusResponseSchema = exports_external.strictObject({
+  recoveryRecommendation: RecoveryRecommendationSchema,
+  statusTransition: RecoveryRecommendationStatusTransitionSchema
+});
+var RecoveryTerminalConflictResolutionResponseSchema = exports_external.strictObject({
+  proofGap: ProofGapSchema,
+  statusTransition: RecoveryRecommendationStatusTransitionSchema,
+  recoveryRecommendation: RecoveryRecommendationSchema
+});
+var RuntimeIngressResponsePostureSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.runtime-ingress.outcome.v1"),
+  authorityCreated: exports_external.literal(false),
+  authorityCertificateMinted: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  gatewayCheckPerformed: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false),
+  mutationAttempted: exports_external.literal(false),
+  mutationCommandIncluded: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  receiptExportCreated: exports_external.literal(false),
+  reasonCodes: exports_external.array(exports_external.string().min(1)),
+  nextAction: exports_external.enum(["read_evidence", "recraft_request", "stop"]),
+  retryability: exports_external.enum(["not_retryable", "retryable_after_recraft"]),
+  redactionProfileRef: exports_external.literal("runtime-ingress:v0.1-redacted"),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)),
+  runtimeExecutionRef: exports_external.string().min(1),
+  generatedExecutionGraphRef: exports_external.string().min(1),
+  graphCoverageStatus: GeneratedExecutionCoverageStatusSchema,
+  toolCallDraftRefs: exports_external.array(exports_external.string().min(1)),
+  intentCompilationRefs: exports_external.array(exports_external.string().min(1)),
+  actionContractRefs: exports_external.array(exports_external.string().min(1)),
+  refusalRefs: exports_external.array(exports_external.string().min(1)),
+  dispatchCount: exports_external.number().int().nonnegative()
+});
+var RuntimeIngressActionProposalResponseSchema = exports_external.discriminatedUnion("outcome", [
+  exports_external.strictObject({
+    outcome: exports_external.literal("action_contract_proposed"),
+    dispatchRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().positive(),
+    toolCallDraft: ToolCallDraftSchema,
+    intentCompilation: IntentCompilationRecordSchema,
+    actionContract: ActionContractSchema,
+    refusalReasonCodes: exports_external.tuple([])
+  }),
+  exports_external.strictObject({
+    outcome: exports_external.literal("intent_compilation_refused"),
+    dispatchRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().positive(),
+    toolCallDraft: ToolCallDraftSchema,
+    intentCompilation: IntentCompilationRecordSchema,
+    actionContract: exports_external.null(),
+    refusalReasonCodes: exports_external.array(exports_external.string().min(1))
+  })
+]);
+var RuntimeIngressProposalResponseSchema = exports_external.strictObject({
+  outcome: exports_external.enum(["action_contracts_proposed", "one_or_more_dispatches_refused"]),
+  responsePosture: RuntimeIngressResponsePostureSchema,
+  runtimeExecution: RuntimeExecutionRecordSchema,
+  generatedExecutionGraph: GeneratedExecutionGraphSchema,
+  proposals: exports_external.array(RuntimeIngressActionProposalResponseSchema)
+});
+
+// src/http/routes/transition-invokers.ts
+var transitionInvokers = {
+  registerToolCapability: async (kernel, body) => {
+    await kernel.putCatalogObject({ objectType: "tool_capability", payload: body });
+    return body;
+  },
+  registerActionType: async (kernel, body) => {
+    await kernel.putCatalogObject({ objectType: "action_type", payload: body });
+    return body;
+  },
+  registerGatewayRegistryEntry: async (kernel, body) => {
+    await kernel.putCatalogObject({ objectType: "gateway_registry_entry", payload: body });
+    return body;
+  },
+  registerOperatingEnvelope: async (kernel, body) => {
+    await kernel.putCatalogObject({ objectType: "operating_envelope", payload: body });
+    return body;
+  },
+  registerInstallProposalCompiledRecords: (kernel, body) => kernel.registerInstallProposalCompiledRecords(body),
+  registerGatewayCredentialRef: (kernel, body) => kernel.registerGatewayCredentialRef(body),
+  registerDelegatedAuthorityRef: (kernel, body) => kernel.registerDelegatedAuthorityRef(body),
+  transitionDelegatedAuthorityStatus: (kernel, body) => kernel.transitionDelegatedAuthorityStatus(body),
+  recordGatewayCustodyProofPacket: (kernel, body) => kernel.recordGatewayCustodyProofPacket(body),
+  recordCredentialResolutionEvidence: (kernel, body) => kernel.recordCredentialResolutionEvidence(body),
+  compileIntent: (kernel, body) => kernel.compileIntent(body),
+  createRuntimeExecution: (kernel, body) => kernel.createRuntimeExecution(body),
+  proposeRuntimeIngressActionContracts: (kernel, body) => {
+    const input = RuntimeIngressProposalInputSchema.parse(body);
+    const config2 = {
+      ...input.config.packageInstall ? { packageInstall: input.config.packageInstall } : {},
+      ...input.config.x402Payment ? { x402Payment: input.config.x402Payment } : {},
+      ...input.config.authMdProtectedApiCall ? { authMdProtectedApiCall: input.config.authMdProtectedApiCall } : {}
+    };
+    return proposeRuntimeIngressActionContracts(kernel, config2, input.dispatchBlock);
+  },
+  createBypassProbe: (kernel, body) => kernel.createBypassProbe(body),
+  createToolCallDraft: (kernel, body) => kernel.createToolCallDraft(body),
+  transitionToolCallDraft: (kernel, body) => kernel.transitionToolCallDraft(body),
+  createProtectedPathPosture: (kernel, body) => kernel.createProtectedPathPosture(body),
+  proposeActionContract: (kernel, body) => kernel.proposeActionContract(body),
+  evaluatePolicy: (kernel, body) => kernel.evaluatePolicy(body),
+  createReviewArtifact: (kernel, body) => kernel.createReviewArtifact(body),
+  createReviewDecision: (kernel, body) => kernel.createReviewDecision(body),
+  gatewayCheck: (kernel, body) => kernel.gatewayCheck(body),
+  reconcileSurfaceOperation: (kernel, body) => kernel.reconcileSurfaceOperation(body),
+  createIsolationState: (kernel, body) => kernel.createIsolationState(body),
+  createBreakerDecision: (kernel, body) => kernel.createBreakerDecision(body),
+  createReceiptExport: (kernel, body) => kernel.createReceiptExport(body),
+  createRecoveryRecommendation: (kernel, body) => kernel.createRecoveryRecommendation(body),
+  transitionRecoveryRecommendationStatus: (kernel, body) => kernel.transitionRecoveryRecommendationStatus(body),
+  resolveRecoveryTerminalConflictProofGap: (kernel, body) => kernel.resolveRecoveryTerminalConflictProofGap(body)
+};
+
+// src/http/routes/transition-route-registry.ts
+var transitionRouteDefinitions = [
+  route("registerToolCapability", "/v0.2/catalog/tool-capabilities", "control_plane", directBodyScope, "Register a durable runtime tool capability", ToolCapabilitySchema, "Tool capability", ToolCapabilitySchema),
+  route("registerActionType", "/v0.2/catalog/action-types", "control_plane", directBodyScope, "Register a durable consequential action type", ActionTypeSchema, "Action type", ActionTypeSchema),
+  route("registerGatewayRegistryEntry", "/v0.2/catalog/gateways", "control_plane", directBodyScope, "Register a durable gateway check binding", GatewayRegistryEntrySchema, "Gateway registry entry", GatewayRegistryEntrySchema),
+  route("registerOperatingEnvelope", "/v0.2/envelopes", "control_plane", directBodyScope, "Register an operating envelope that authorizes attempts, not mutation", OperatingEnvelopeSchema, "Operating envelope", OperatingEnvelopeSchema),
+  route("registerInstallProposalCompiledRecords", "/v0.2/install-proposals/compiled-records", "control_plane", directBodyScope, "Atomically register compiled install proposal records as setup evidence without minting authority", RegisterInstallProposalCompiledRecordsInputSchema, "Install setup result", InstallSetupResultSchema),
+  route("registerGatewayCredentialRef", "/v0.2/gateway-credential-refs", "gateway_custody", directBodyScope, "Register an opaque gateway-owned credential reference without exposing secret material", RegisterGatewayCredentialRefInputSchema, "Gateway credential ref", GatewayCredentialRefSchema),
+  route("registerDelegatedAuthorityRef", "/v0.2/delegated-authority-refs", "control_plane", directBodyScope, "Register a principal-scoped delegated authority ref without minting a greenlight", RegisterDelegatedAuthorityRefInputSchema, "Delegated authority ref", DelegatedAuthorityRefSchema),
+  route("transitionDelegatedAuthorityStatus", "/v0.2/delegated-authority-status-transitions", "control_plane", recordScope("delegated_authority_ref", "delegatedAuthorityRefId", "delegated_authority_ref_missing"), "Record terminal delegated authority status and authority-ref isolation without minting mutation authority", TransitionDelegatedAuthorityStatusInputSchema, "Delegated authority status transition", DelegatedAuthorityStatusTransitionSchema),
+  route("recordGatewayCustodyProofPacket", "/v0.2/gateway-custody-proof-packets", "gateway_custody", recordScope("gateway_credential_ref", "gatewayCredentialRefId", "gateway_credential_ref_missing"), "Record a redacted gateway custody proof packet without minting authority", RecordGatewayCustodyProofPacketInputSchema, "Gateway custody proof packet", GatewayCustodyProofPacketSchema),
+  route("recordCredentialResolutionEvidence", "/v0.2/credential-resolution-evidence", "gateway_custody", recordScope("action_contract", "actionContractId", "contract_missing"), "Record gateway-side credential resolution evidence after a passed gateway check", RecordCredentialResolutionEvidenceInputSchema, "Credential resolution evidence", CredentialResolutionEvidenceSchema),
+  route("compileIntent", "/v0.2/intent-compilations", "runtime_evidence", directBodyScope, "Record catalog-bound compilation from vague intent to candidate action", CompileIntentInputSchema, "Intent compilation record", IntentCompilationRecordSchema),
+  route("createRuntimeExecution", "/v0.2/runtime-executions", "runtime_evidence", directBodyScope, "Record generated execution-block evidence without minting authority", CreateRuntimeExecutionInputSchema, "Runtime execution record", RuntimeExecutionRecordSchema),
+  route("proposeRuntimeIngressActionContracts", "/v0.2/runtime-ingress/action-contracts", "runtime_evidence", directBodyScope, "Propose action contracts from a generated runtime dispatch block without policy or gateway authority", RuntimeIngressProposalInputSchema, "Runtime ingress proposal outcome", RuntimeIngressProposalResponseSchema),
+  route("createBypassProbe", "/v0.2/bypass-probes", "gateway_custody", directBodyScope, "Record protected-path bypass probe evidence without minting authority", CreateBypassProbeInputSchema, "Bypass probe", BypassProbeSchema),
+  route("createToolCallDraft", "/v0.2/tool-call-drafts", "runtime_evidence", directBodyScope, "Record generated tool-call draft state without minting candidate authority", CreateToolCallDraftInputSchema, "Tool call draft", ToolCallDraftSchema),
+  route("transitionToolCallDraft", "/v0.2/tool-call-draft-transitions", "runtime_evidence", recordScope("tool_call_draft", "toolCallDraftId", "tool_call_draft_missing"), "Transition a generated tool-call draft through a monotonic input state", TransitionToolCallDraftInputSchema, "Tool call draft", ToolCallDraftSchema),
+  route("createProtectedPathPosture", "/v0.2/protected-path-postures", "gateway_custody", directBodyScope, "Record current protected-path posture and atomically update the current pointer", CreateProtectedPathPostureInputSchema, "Protected path posture", ProtectedPathPostureSchema),
+  route("proposeActionContract", "/v0.2/action-contracts", "runtime_evidence", recordScope("intent_compilation", "intentCompilationId", "intent_compilation_missing"), "Propose exact action contract from a clean compilation record", ProposeActionContractInputSchema, "Action contract", ActionContractSchema),
+  route("evaluatePolicy", "/v0.2/policy-decisions", "control_plane", recordScope("action_contract", "actionContractId", "contract_missing"), "Evaluate an exact action contract against envelope and isolation state", EvaluatePolicyInputSchema, "Policy decision and optional one-use greenlight", PolicyEvaluationResponseSchema),
+  route("createReviewArtifact", "/v0.2/review-artifacts", "review_custody", recordScope("action_contract", "actionContractId", "contract_missing"), "Record a rendered review artifact bound to exact contract and policy input digests", CreateReviewArtifactInputSchema, "Review artifact record", ReviewArtifactRecordSchema),
+  route("createReviewDecision", "/v0.2/review-decisions", "review_custody", recordScope("action_contract", "actionContractId", "contract_missing"), "Record a review decision bound to an exact contract and policy input", CreateReviewDecisionInputSchema, "Review decision", ReviewDecisionSchema),
+  route("gatewayCheck", "/v0.2/gateway-check-attempts", "gateway_custody", recordScope("action_contract", "actionContractId", "contract_missing"), "Gateway-side check before mutation", GatewayCheckInputSchema, "Gateway check attempt, mutation outcome, receipt, and optional proof gap", GatewayCheckResponseSchema),
+  route("reconcileSurfaceOperation", "/v0.2/surface-operation-reconciliations", "gateway_custody", recordScope("mutation_attempt", "mutationAttemptId", "mutation_attempt_missing"), "Observe downstream protected-surface operation state without minting retry authority", ReconcileSurfaceOperationInputSchema, "Surface operation reconciliation and proof-gap changes", SurfaceOperationReconciliationResponseSchema),
+  route("createIsolationState", "/v0.2/isolation-states", "control_plane", directBodyScope, "Write durable isolation state checked by policy and gate", CreateIsolationInputSchema, "Isolation state", IsolationStateSchema),
+  route("createBreakerDecision", "/v0.2/breaker-decisions", "control_plane", directBodyScope, "Record a breaker decision and atomically create its isolation state", CreateBreakerDecisionInputSchema, "Breaker decision and resulting isolation state", BreakerDecisionResponseSchema),
+  route("createReceiptExport", "/v0.2/receipt-exports", "control_plane", recordScope("receipt", "receiptId", "receipt_missing"), "Export a tamper-evident receipt drop copy without creating execution proof", CreateReceiptExportInputSchema, "Receipt export", ReceiptExportSchema),
+  route("createRecoveryRecommendation", "/v0.2/recovery-recommendations", "control_plane", recordScope("receipt", "sourceReceiptId", "receipt_missing"), "Recommend a recovery path from refusal or proof-gap evidence without authorizing mutation", CreateRecoveryRecommendationInputSchema, "Recovery recommendation", RecoveryRecommendationSchema),
+  route("transitionRecoveryRecommendationStatus", "/v0.2/recovery-recommendation-status-transitions", "control_plane", recordScope("recovery_recommendation", "recoveryRecommendationId", "recovery_recommendation_missing"), "Record an explicit expired or superseded status transition for a recovery recommendation", TransitionRecoveryRecommendationStatusInputSchema, "Recovery recommendation status change", RecoveryRecommendationStatusResponseSchema),
+  route("resolveRecoveryTerminalConflictProofGap", "/v0.2/recovery-terminal-conflict-resolutions", "control_plane", recordScope("proof_gap", "proofGapId", "proof_gap_missing"), "Resolve a recovery terminal conflict proof gap against the winning terminal transition", ResolveRecoveryTerminalConflictInputSchema, "Resolved recovery terminal conflict proof gap", RecoveryTerminalConflictResolutionResponseSchema)
+];
+function route(routeId, path, role, scopeResolver, summary, requestSchema, responseDescription, responseSchema) {
+  return { routeId, path, role, scopeResolver, summary, requestSchema, responseDescription, responseSchema };
+}
+
+// src/http/openapi/index.ts
+var HealthResponseSchema = exports_external.strictObject({
+  ok: exports_external.boolean(),
+  protocol: exports_external.literal("handshake"),
+  version: exports_external.literal(PROTOCOL_VERSION)
+});
+var errorResponse2 = jsonResponse("Protocol transition error with failureClass (auth | hosted_admission | protected_action_refusal | proof_gap | replay_refusal | stale_admission | internal), failurePhase, and optional RFC 9457 problemType URI. Status discipline: auth 401/403, hosted_admission 403, clearance refusals/replay/stale 409, proof_gap 422.", TransitionErrorResponseSchema);
+var openApiDocument = {
+  openapi: "3.1.0",
+  info: {
+    title: "Handshake Protocol Kernel",
+    version: PROTOCOL_VERSION,
+    description: "Contracted execution protocol for reducing agent-generated actions to exact policy-evaluated gateway-checked contracts."
+  },
+  components: {
+    securitySchemes: {
+      handshakeControlPlaneBearer: bearerSecurityScheme("Deployment-mode control-plane custody. Local bearer tokens are fixture custody, not production org auth."),
+      handshakeRuntimeEvidenceBearer: bearerSecurityScheme("Deployment-mode runtime-evidence custody. Local bearer tokens are fixture custody, not production org auth."),
+      handshakeGatewayCustodyBearer: bearerSecurityScheme("Deployment-mode gateway custody. Local bearer tokens are fixture custody, not production org auth."),
+      handshakeReviewCustodyBearer: bearerSecurityScheme("Deployment-mode review custody. Local bearer tokens are fixture custody, not production org auth.")
+    }
+  },
+  paths: {
+    "/health": {
+      get: { summary: "Health check", responses: { "200": jsonResponse("Worker is alive", HealthResponseSchema) } }
+    },
+    "/v0.2/hosted/readiness": {
+      get: {
+        summary: "Read hosted admission and redacted evidence readiness posture",
+        description: "Readiness posture only; not hosted mutation authority, payment management, settlement, provider custody, or compliance certification.",
+        security: transitionSecurity("control_plane"),
+        responses: {
+          "200": jsonResponse("Hosted readiness posture report", HostedReadinessReportSchema),
+          "401": errorResponse2,
+          "403": errorResponse2,
+          "500": errorResponse2,
+          "503": errorResponse2
+        }
+      }
+    },
+    ...Object.fromEntries(transitionRouteDefinitions.map((route2) => [route2.path, openApiPathFor(route2)])),
+    ...Object.fromEntries(evidenceReadRouteDefinitions.map((route2) => [route2.openApiPath, openApiEvidenceReadPathFor(route2)]))
+  }
+};
+function openApiPathFor(route2) {
+  return {
+    post: {
+      summary: route2.summary,
+      security: transitionSecurity(route2.role),
+      parameters: transitionHeaderParameters(),
+      requestBody: jsonRequest(route2.requestSchema),
+      responses: {
+        "201": jsonResponse(route2.responseDescription, route2.responseSchema),
+        "400": errorResponse2,
+        "401": errorResponse2,
+        "403": errorResponse2,
+        "404": errorResponse2,
+        "409": errorResponse2,
+        "412": errorResponse2,
+        "422": errorResponse2,
+        "500": errorResponse2,
+        "503": errorResponse2
+      }
+    }
+  };
+}
+function openApiEvidenceReadPathFor(route2) {
+  return {
+    get: {
+      summary: route2.summary,
+      description: route2.responseDescription,
+      security: route2.roles.map((role) => ({ [transitionCallerSecuritySchemeName(role)]: [] })),
+      parameters: route2.pathParameters.map((parameter) => pathParameter(parameter.name, parameter.description)),
+      responses: {
+        "200": jsonResponse(route2.responseDescription, route2.responseSchema),
+        "401": errorResponse2,
+        "403": errorResponse2,
+        "404": errorResponse2,
+        "409": errorResponse2,
+        "422": errorResponse2,
+        "500": errorResponse2,
+        "503": errorResponse2
+      }
+    }
+  };
+}
+function jsonRequest(schema) {
+  return {
+    required: true,
+    content: {
+      "application/json": {
+        schema: schemaToJson(schema)
+      }
+    }
+  };
+}
+function jsonResponse(description, schema) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: schemaToJson(schema)
+      }
+    }
+  };
+}
+function transitionSecurity(role) {
+  return [{ [transitionCallerSecuritySchemeName(role)]: [] }];
+}
+function transitionHeaderParameters() {
+  return [
+    headerParameter("X-Handshake-Protocol-Version", true, "Protocol version expected by the caller."),
+    headerParameter("X-Handshake-Request-Identity", true, "Opaque request correlation identity echoed on accepted transitions."),
+    headerParameter("X-Handshake-Originating-Identity", false, "Optional originating identity accepted only as sha256 digest or opaque ref evidence.")
+  ];
+}
+function headerParameter(name, required2, description) {
+  return {
+    name,
+    in: "header",
+    required: required2,
+    description,
+    schema: { type: "string" }
+  };
+}
+function pathParameter(name, description) {
+  return {
+    name,
+    in: "path",
+    required: true,
+    description,
+    schema: { type: "string" }
+  };
+}
+function bearerSecurityScheme(description) {
+  return {
+    type: "http",
+    scheme: "bearer",
+    description
+  };
+}
+function schemaToJson(schema) {
+  return exports_external.toJSONSchema(schema, { target: "draft-2020-12", unrepresentable: "any", reused: "ref" });
+}
+
+// src/http/mutation-route-manifest.ts
+var routeFamilyById = {
+  registerToolCapability: "catalog_install_write",
+  registerActionType: "catalog_install_write",
+  registerGatewayRegistryEntry: "gateway_credential_write",
+  registerOperatingEnvelope: "catalog_install_write",
+  registerInstallProposalCompiledRecords: "catalog_install_write",
+  registerGatewayCredentialRef: "gateway_credential_write",
+  registerDelegatedAuthorityRef: "delegated_authority_write",
+  transitionDelegatedAuthorityStatus: "delegated_authority_write",
+  recordGatewayCustodyProofPacket: "gateway_credential_write",
+  recordCredentialResolutionEvidence: "gateway_credential_write",
+  compileIntent: "runtime_evidence_write",
+  createRuntimeExecution: "runtime_evidence_write",
+  proposeRuntimeIngressActionContracts: "runtime_ingress_proposal_write",
+  createBypassProbe: "bypass_probe_write",
+  createToolCallDraft: "tool_call_draft_write",
+  transitionToolCallDraft: "tool_call_draft_write",
+  createProtectedPathPosture: "protected_path_posture_write",
+  proposeActionContract: "action_contract_proposal_write",
+  evaluatePolicy: "policy_decision_write",
+  createReviewArtifact: "runtime_evidence_write",
+  createReviewDecision: "runtime_evidence_write",
+  gatewayCheck: "gateway_check_write",
+  reconcileSurfaceOperation: "surface_reconciliation_write",
+  createIsolationState: "isolation_write",
+  createBreakerDecision: "isolation_write",
+  createReceiptExport: "receipt_export_write",
+  createRecoveryRecommendation: "recovery_write",
+  transitionRecoveryRecommendationStatus: "recovery_write",
+  resolveRecoveryTerminalConflictProofGap: "recovery_write"
+};
+var mutationRouteDefinitions = transitionRouteDefinitions.map((route2) => ({
+  routeId: route2.routeId,
+  path: route2.path,
+  role: route2.role,
+  summary: route2.summary,
+  surfaceRouteFamily: routeFamilyById[route2.routeId],
+  requiresAdapterGatewayCheck: true
+}));
+function assertMutationRouteManifestParity(routes = transitionRouteDefinitions) {
+  const manifestPaths = new Set(mutationRouteDefinitions.map((row) => row.path));
+  const transitionPaths = new Set(routes.map((row) => row.path));
+  const missing = [...transitionPaths].filter((path) => !manifestPaths.has(path)).sort();
+  const extra = [...manifestPaths].filter((path) => !transitionPaths.has(path)).sort();
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(`mutation-route-manifest drift: missing=${missing.join(", ") || "none"} extra=${extra.join(", ") || "none"}`);
+  }
+  if (mutationRouteDefinitions.length !== routes.length) {
+    throw new Error(`mutation-route-manifest count drift: manifest=${mutationRouteDefinitions.length} transitions=${routes.length}`);
+  }
+}
+assertMutationRouteManifestParity();
+
+// src/http/admission/transition-sequence-matrix.ts
+var transitionSequenceMatrix = {
+  registerToolCapability: [],
+  registerActionType: [],
+  registerGatewayRegistryEntry: [],
+  registerOperatingEnvelope: [],
+  registerInstallProposalCompiledRecords: [],
+  registerGatewayCredentialRef: [],
+  registerDelegatedAuthorityRef: [],
+  compileIntent: [],
+  createRuntimeExecution: [],
+  proposeRuntimeIngressActionContracts: [],
+  createBypassProbe: [],
+  createToolCallDraft: [],
+  createProtectedPathPosture: [],
+  createIsolationState: [],
+  createBreakerDecision: [],
+  transitionDelegatedAuthorityStatus: ["registerDelegatedAuthorityRef"],
+  recordGatewayCustodyProofPacket: ["registerGatewayCredentialRef"],
+  transitionToolCallDraft: ["createToolCallDraft"],
+  proposeActionContract: ["compileIntent"],
+  recordCredentialResolutionEvidence: ["proposeActionContract"],
+  evaluatePolicy: ["proposeActionContract"],
+  createReviewArtifact: ["proposeActionContract"],
+  createReviewDecision: ["proposeActionContract"],
+  gatewayCheck: ["proposeActionContract"],
+  reconcileSurfaceOperation: ["gatewayCheck"],
+  createReceiptExport: ["gatewayCheck"],
+  createRecoveryRecommendation: ["gatewayCheck"],
+  transitionRecoveryRecommendationStatus: ["createRecoveryRecommendation"],
+  resolveRecoveryTerminalConflictProofGap: ["gatewayCheck"]
+};
+function assertTransitionSequenceMatrixCoverage() {
+  const registeredRouteIds = new Set(transitionRouteDefinitions.map((route2) => route2.routeId));
+  const matrixRouteIds = new Set(Object.keys(transitionSequenceMatrix));
+  for (const routeId of registeredRouteIds) {
+    if (!matrixRouteIds.has(routeId)) {
+      throw new Error(`Transition route ${routeId} has no declared sequence-matrix entry.`);
+    }
+  }
+  for (const routeId of matrixRouteIds) {
+    if (!registeredRouteIds.has(routeId)) {
+      throw new Error(`Sequence-matrix entry ${routeId} does not map to a registered transition route.`);
+    }
+    for (const prerequisite of transitionSequenceMatrix[routeId]) {
+      if (!registeredRouteIds.has(prerequisite)) {
+        throw new Error(`Sequence-matrix entry ${routeId} references unknown prerequisite ${prerequisite}.`);
+      }
+    }
+  }
+  assertAcyclicSequenceMatrix();
+}
+function assertAcyclicSequenceMatrix() {
+  const visiting = new Set;
+  const settled = new Set;
+  const walk = (routeId, trail) => {
+    if (settled.has(routeId))
+      return;
+    if (visiting.has(routeId)) {
+      throw new Error(`Transition sequence matrix has a prerequisite cycle: ${[...trail, routeId].join(" -> ")}.`);
+    }
+    visiting.add(routeId);
+    for (const prerequisite of transitionSequenceMatrix[routeId] ?? []) {
+      walk(prerequisite, [...trail, routeId]);
+    }
+    visiting.delete(routeId);
+    settled.add(routeId);
+  };
+  for (const routeId of Object.keys(transitionSequenceMatrix)) {
+    walk(routeId, []);
+  }
+}
+
+// src/http/app.ts
+assertMutationRouteManifestParity();
+assertTransitionSequenceMatrixCoverage();
+var MAX_TRANSITION_REQUEST_BODY_BYTES = 256 * 1024;
+function createApp(options = {}) {
+  const fallbackStore = options.store ?? (options.allowEphemeralStore ? new InMemoryProtocolStore : null);
+  const app = new Hono2;
+  app.onError((error51, c) => {
+    const result = transitionErrorResult(error51);
+    return c.json(result.body, result.status);
+  });
+  app.get("/health", (c) => c.json({ ok: true, protocol: "handshake", version: PROTOCOL_VERSION }));
+  app.get("/openapi.json", (c) => c.json(openApiDocument));
+  for (const route2 of transitionRouteDefinitions) {
+    app.post(route2.path, (c) => handleTransition(c, options, fallbackStore, route2));
+  }
+  for (const route2 of evidenceReadRouteDefinitions) {
+    app.get(route2.honoPath, (c) => handleEvidenceRead(c, options, fallbackStore, route2));
+  }
+  app.get("/v0.2/hosted/readiness", (c) => handleHostedReadiness(c, options, fallbackStore));
+  app.get("/v0.2/verifier/metadata", (c) => handleVerifierMetadata(c));
+  app.get("/v0.2/verifier/key-set", (c) => handleVerifierKeySet(c, options));
+  app.get("/v0.2/verifier/jwks.json", (c) => handleVerifierJwks(c, options));
+  app.get("/v0.2/verifier/status/:subjectKind/:subjectRef", (c) => handleVerifierStatus(c, options));
+  app.post("/v0.2/verifier/authority-certificates/verify", (c) => handleHostedAuthorityCertificateVerify(c, options));
+  app.get("/v0.2/records/:objectType/:objectId", async (c) => {
+    return handleInternalRecordRead(c, options, fallbackStore);
+  });
+  return app;
+}
+async function parseBody2(c, schema) {
+  const contentLength = c.req.header("content-length");
+  if (contentLength && Number(contentLength) > MAX_TRANSITION_REQUEST_BODY_BYTES) {
+    throwTransitionBodyTooLarge();
+  }
+  const text = await c.req.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_TRANSITION_REQUEST_BODY_BYTES) {
+    throwTransitionBodyTooLarge();
+  }
+  let json2;
+  try {
+    json2 = JSON.parse(text);
+  } catch {
+    throw new HandshakeProtocolError("invalid_request", "Transition request body is not valid JSON.", 400, {
+      retryability: "terminal",
+      commitState: "not_started"
+    });
+  }
+  return schema.parse(json2);
+}
+function throwTransitionBodyTooLarge() {
+  throw new HandshakeProtocolError("transition_request_body_too_large", "Transition request body exceeds the source-owned size limit.", 413, {
+    retryability: "terminal",
+    commitState: "not_started"
+  });
+}
+async function handleTransition(c, options, fallbackStore, route2) {
+  const errorContext = {
+    transitionName: route2.routeId,
+    callerCustodyRole: route2.role,
+    requestIdentity: null
+  };
+  try {
+    const admission = await authorizeTransitionAdmission(c, options, route2, errorContext);
+    if (admission.failure)
+      return admission.failure;
+    const headerContext = await transitionRequestHeaderContextFor(c, {
+      callerCustodyRole: route2.role,
+      transitionName: route2.routeId,
+      routePattern: route2.path,
+      ...admission.callerEvidence ? { callerEvidence: admission.callerEvidence } : {}
+    });
+    errorContext.requestIdentity = headerContext.requestIdentity;
+    const body = await parseBody2(c, route2.requestSchema);
+    if (admission.hostedIdentity) {
+      const scope2 = await route2.scopeResolver({
+        body,
+        store: () => storeFor(c, fallbackStore)
+      });
+      try {
+        assertHostedCallerScope(admission.hostedIdentity, scope2);
+      } catch (error51) {
+        hideReferenceScopeMismatch(error51, scope2);
+      }
+    }
+    const requestContext = await transitionRequestContextDraftFor(headerContext, body);
+    const result = await transitionInvokers[route2.routeId](kernelFor(c, fallbackStore, requestContext), body);
+    c.header("X-Handshake-Request-Identity", requestContext.requestIdentity);
+    c.header(HANDSHAKE_REQUEST_IDENTITY_HEADER, requestContext.requestIdentity);
+    return c.json(result, 201);
+  } catch (error51) {
+    const result = transitionErrorResult(error51, errorContext);
+    if (errorContext.requestIdentity) {
+      c.header("X-Handshake-Request-Identity", errorContext.requestIdentity);
+      c.header(HANDSHAKE_REQUEST_IDENTITY_HEADER, errorContext.requestIdentity);
+    }
+    return c.json(result.body, result.status);
+  }
+}
+// src/sdk/surface-clients/install-client.ts
+class InstallClient {
+  transport;
+  constructor(baseUrl, options, fetchImpl) {
+    this.transport = new RoleScopedTransport(baseUrl, { ...options, role: "control_plane" }, fetchImpl);
+  }
+  async registerInstallProposalCompiledRecords(input) {
+    const proposal = InstallProposalSchema.parse(input);
+    return this.transport.post("/v0.2/install-proposals/compiled-records", proposal);
+  }
+}
+// src/cli/service-operator/bootstrap.ts
+var X402_ACTION_FAMILY = "x402_payment.exact";
+var ServiceBootstrapInputSchema = exports_external.union([
+  X402InstallProposalInputSchema,
+  exports_external.strictObject({
+    actionFamily: exports_external.string().min(1).optional(),
+    installInput: X402InstallProposalInputSchema
+  })
+]);
+function defaultX402BootstrapInstallInput(overrides = {}) {
+  const { endpointEvidence, walletGatewayProfile, spendBounds, ...restOverrides } = overrides;
+  const createdAt = restOverrides.createdAt ?? nowIso();
+  const digest = `sha256:${"d".repeat(64)}`;
+  return {
+    tenantId: "tenant_demo",
+    organizationId: "org_demo",
+    createdAt,
+    endpointEvidence: {
+      endpointUrl: "https://api.example.com/mcp/premium-context",
+      payee: "0xpayee",
+      network: "base-sepolia",
+      token: "USDC",
+      maxAtomicAmount: "2500",
+      paymentRequirementsDigest: digest,
+      facilitatorRef: "facilitator:local",
+      evidenceRefs: ["evidence:x402-payment-required"],
+      ...endpointEvidence
+    },
+    walletGatewayProfile: {
+      walletGatewayId: "wallet_gateway_local",
+      gatewayId: "gateway_x402_wallet",
+      signerCustodyStatus: "fixture_gateway_held",
+      signerRef: "secretref:service-bootstrap-fixture-signer",
+      authorityHolderRef: "gateway-authority:x402-wallet",
+      supportedNetworks: ["base-sepolia"],
+      supportedTokens: ["USDC"],
+      ...walletGatewayProfile
+    },
+    spendBounds: {
+      principalId: "principal_demo",
+      agentId: "agent_demo",
+      runtimeAdapterId: "runtime_codex",
+      objectiveRef: "intent:service-operator-bootstrap",
+      allowedDomains: ["api.example.com"],
+      allowedPayees: ["0xpayee"],
+      allowedNetworks: ["base-sepolia"],
+      allowedTokens: ["USDC"],
+      maxAtomicAmountPerCall: "2500",
+      maxAtomicAmountPerSession: "10000",
+      maxAtomicAmountPerDay: "20000",
+      reviewThresholdAtomicAmount: "5000",
+      spendWindowEnforcementStatus: "not_enforced_local_metadata",
+      issuedAt: createdAt,
+      expiresAt: futureIsoFromNow(),
+      ...spendBounds
+    },
+    ...restOverrides
+  };
+}
+function installProposalFromX402(proposal) {
+  return {
+    installProposalId: proposal.installProposalId,
+    schemaVersion: proposal.schemaVersion,
+    tenantId: proposal.tenantId,
+    organizationId: proposal.organizationId,
+    createdAt: proposal.createdAt,
+    adapterPackId: proposal.adapterPackId,
+    adapterPackVersion: proposal.adapterPackVersion,
+    actionFamily: proposal.actionFamily,
+    protectedSurfaceKind: proposal.protectedSurfaceKind,
+    resourceRef: proposal.resourceRef,
+    status: proposal.status,
+    humanSummary: proposal.humanSummary,
+    refusalReasonCodes: proposal.refusalReasonCodes,
+    compiledRecords: proposal.compiledRecords,
+    policyPackRef: proposal.policyPackRef,
+    policyPackVersion: proposal.policyPackVersion,
+    bypassProbePlan: proposal.bypassProbePlan,
+    receiptExpectationRefs: proposal.receiptExpectationRefs,
+    installDigest: proposal.installDigest
+  };
+}
+async function runServiceBootstrap(input) {
+  const parsed = ServiceBootstrapInputSchema.parse(input.installInput);
+  const actionFamily = "installInput" in parsed ? parsed.actionFamily ?? X402_ACTION_FAMILY : X402_ACTION_FAMILY;
+  if (actionFamily !== X402_ACTION_FAMILY) {
+    return refusedBootstrapResult({
+      actionFamily,
+      installProposalId: "install_unsupported_family",
+      installDigest: `sha256:${"0".repeat(64)}`,
+      reasonCodes: ["service_bootstrap_x402_only"]
+    });
+  }
+  const installInput = "installInput" in parsed ? parsed.installInput : parsed;
+  const proposal = await compileX402InstallProposal(installInput);
+  const store = input.store ?? new InMemoryProtocolStore;
+  const tokens = input.callerAuthTokens ?? {
+    control_plane: "service_bootstrap_control_plane",
+    runtime_evidence: "service_bootstrap_runtime_evidence",
+    gateway_custody: "service_bootstrap_gateway_custody",
+    review_custody: "service_bootstrap_review_custody"
+  };
+  const installClient = installClientForStore(store, tokens);
+  const registration = await installClient.registerInstallProposalCompiledRecords(installProposalFromX402(proposal));
+  return {
+    outcome: registration.outcome,
+    actionFamily: proposal.actionFamily,
+    installProposalId: proposal.installProposalId,
+    installDigest: proposal.installDigest,
+    reasonCodes: registration.outcome === "install_proposal_refused" ? registration.reasonCodes : proposal.refusalReasonCodes,
+    recordRefs: registration.recordRefs,
+    policyPackRef: proposal.policyPackRef,
+    policyPackVersion: proposal.policyPackVersion,
+    authorityBoundary: {
+      authorityCreated: false,
+      greenlightCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false
+    }
+  };
+}
+async function serviceBootstrapCommand(input) {
+  const result = await runServiceBootstrap({
+    installInput: input.installInput ?? defaultX402BootstrapInstallInput()
+  });
+  return cliOutput({
+    command: "service bootstrap",
+    plane: "operator",
+    ok: result.outcome === "compiled_records_registered",
+    reasonCodes: [...result.reasonCodes],
+    nextAction: result.outcome === "compiled_records_registered" ? "read_result" : "fix_install",
+    retryability: result.outcome === "compiled_records_registered" ? "not_retryable" : "retryable_after_fix",
+    redactionProfileRef: "cli-service-bootstrap:v1-redacted",
+    nonClaims: [
+      ...cliNonClaims,
+      "live wallet mutation",
+      "second action-family install",
+      "orphan catalog without compiled-records transition"
+    ],
+    warnings: [
+      "Service bootstrap registers compiled catalog records via control-plane InstallClient only.",
+      "No greenlight, gateway check, signer use, or protected mutation was performed.",
+      "x402_payment.exact is the only supported action family in phase 04."
+    ],
+    result
+  });
+}
+function workerBindingsFromTokens(tokens) {
+  const env = {};
+  if (tokens.control_plane !== undefined)
+    env.HANDSHAKE_CONTROL_PLANE_TOKEN = tokens.control_plane;
+  if (tokens.runtime_evidence !== undefined)
+    env.HANDSHAKE_RUNTIME_EVIDENCE_TOKEN = tokens.runtime_evidence;
+  if (tokens.gateway_custody !== undefined)
+    env.HANDSHAKE_GATEWAY_CUSTODY_TOKEN = tokens.gateway_custody;
+  if (tokens.review_custody !== undefined)
+    env.HANDSHAKE_REVIEW_CUSTODY_TOKEN = tokens.review_custody;
+  return env;
+}
+function installClientForStore(store, tokens) {
+  const controlPlaneToken = tokens.control_plane;
+  if (!controlPlaneToken) {
+    throw new Error("service bootstrap requires a control_plane caller auth token.");
+  }
+  const app = createApp({ store, callerAuthTokens: tokens });
+  const env = workerBindingsFromTokens(tokens);
+  const fetchImpl = async (requestInput, init) => {
+    const url2 = new URL(String(requestInput), "http://handshake.test");
+    return app.request(`${url2.pathname}${url2.search}`, init, env);
+  };
+  return new InstallClient("http://handshake.test", {
+    roleCredential: controlPlaneToken,
+    requestIdentityFactory: () => "service-bootstrap-request",
+    originatingIdentity: "ref:cli/service-operator-bootstrap"
+  }, fetchImpl);
+}
+function refusedBootstrapResult(input) {
+  return {
+    outcome: "install_proposal_refused",
+    actionFamily: input.actionFamily,
+    installProposalId: input.installProposalId,
+    installDigest: input.installDigest,
+    reasonCodes: input.reasonCodes,
+    recordRefs: null,
+    policyPackRef: null,
+    policyPackVersion: null,
+    authorityBoundary: {
+      authorityCreated: false,
+      greenlightCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false
+    }
+  };
+}
+function futureIsoFromNow(minutes = 10) {
+  return new Date(Date.now() + minutes * 60000).toISOString();
+}
+
+// src/cli/x402/index.ts
+import { mkdir as mkdir2, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname2, join as join3 } from "node:path";
+
+// src/adapters/x402-payment/conformance.ts
+var x402FirstWedgeUnsupportedSurfaces = [
+  "upto",
+  "batch-settlement",
+  "lifecycle-hooks",
+  "mcp-auto-pay",
+  "signed-offers",
+  "signed-receipts",
+  "seller-middleware",
+  "facilitator-operation",
+  "settlement-finality"
+];
+var X402FirstWedgeUnsupportedSurfaceSchema = exports_external.enum(x402FirstWedgeUnsupportedSurfaces);
+var X402FirstWedgeSurfaceSchema = exports_external.union([exports_external.literal("exact"), X402FirstWedgeUnsupportedSurfaceSchema]);
+var X402FirstWedgeEvidenceLabelSchema = exports_external.enum([
+  "local_gateway_check",
+  "gateway_credential_resolution",
+  "gateway_signer_invocation",
+  "payment_payload_created",
+  "downstream_reconciliation_recorded",
+  "payment_response_received",
+  "payment_response_missing",
+  "local_reference_downstream_fixture",
+  "facilitator_verify_attempted",
+  "facilitator_verify_succeeded",
+  "facilitator_verify_failed",
+  "facilitator_settle_attempted",
+  "settlement_succeeded",
+  "settlement_failed",
+  "settlement_unknown"
+]);
+var X402AuthorityCertificateEvidenceProfileSchema = exports_external.strictObject({
+  profileKind: exports_external.literal("authority_certificate_x402_exact_evidence_profile"),
+  authorityCreated: exports_external.literal(false),
+  verificationOutcome: exports_external.enum(["verified", "refused", "proof_gap"]),
+  evidenceProfile: exports_external.enum(["x402_exact_per_call", "unsupported_action_class", "unverified_certificate", "proof_gap"]),
+  actionClass: exports_external.string().min(1).nullable(),
+  actionContractRef: exports_external.string().min(1).nullable(),
+  gatewayAdmissionStatus: exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]).nullable(),
+  downstreamOutcomeStatus: exports_external.enum(["not_started", "pending", "succeeded", "refused", "failed", "unknown"]).nullable(),
+  exactPerCallProtectedAction: exports_external.boolean(),
+  gatewayCheckEvidenceRef: exports_external.string().min(1).nullable(),
+  receiptRef: exports_external.string().min(1).nullable(),
+  proofGapRefs: exports_external.array(exports_external.string().min(1)),
+  refusalRefs: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)),
+  provesPaymentSuccess: exports_external.literal(false),
+  provesSettlementFinality: exports_external.literal(false),
+  provesFacilitatorOperation: exports_external.literal(false),
+  provesProviderCustody: exports_external.literal(false),
+  managesPayment: exports_external.literal(false),
+  nonClaims: exports_external.array(exports_external.string().min(1))
+});
+var x402FirstWedgeEvidenceLabelClassifications = {
+  facilitator_settle_attempted: evidenceLabel("facilitator_settle_attempted", "facilitator_settlement", {
+    firstWedgeOperation: "unsupported_facilitator_operation",
+    settlementFinality: "settlement_unknown"
+  }),
+  facilitator_verify_attempted: evidenceLabel("facilitator_verify_attempted", "facilitator_verify"),
+  facilitator_verify_failed: evidenceLabel("facilitator_verify_failed", "facilitator_verify"),
+  facilitator_verify_succeeded: evidenceLabel("facilitator_verify_succeeded", "facilitator_verify"),
+  local_gateway_check: evidenceLabel("local_gateway_check", "gateway_check"),
+  gateway_credential_resolution: evidenceLabel("gateway_credential_resolution", "gateway_credential_resolution"),
+  gateway_signer_invocation: evidenceLabel("gateway_signer_invocation", "gateway_signer_invocation"),
+  local_reference_downstream_fixture: evidenceLabel("local_reference_downstream_fixture", "local_reference_fixture"),
+  downstream_reconciliation_recorded: evidenceLabel("downstream_reconciliation_recorded", "downstream_reconciliation"),
+  payment_payload_created: evidenceLabel("payment_payload_created", "gateway_held_payment_credential"),
+  payment_response_missing: evidenceLabel("payment_response_missing", "payment_response", {
+    settlementFinality: "settlement_unknown"
+  }),
+  payment_response_received: evidenceLabel("payment_response_received", "payment_response", {
+    settlementFinality: "settlement_unknown"
+  }),
+  settlement_failed: evidenceLabel("settlement_failed", "facilitator_settlement", {
+    firstWedgeOperation: "unsupported_facilitator_operation",
+    settlementFinality: "settlement_failed"
+  }),
+  settlement_succeeded: evidenceLabel("settlement_succeeded", "facilitator_settlement", {
+    firstWedgeOperation: "unsupported_facilitator_operation",
+    settlementFinality: "settlement_succeeded"
+  }),
+  settlement_unknown: evidenceLabel("settlement_unknown", "facilitator_settlement", {
+    firstWedgeOperation: "unsupported_facilitator_operation",
+    settlementFinality: "settlement_unknown"
+  })
+};
+var X402PaymentConformanceReason = {
+  browserSidePaymentNotBlocked: "x402_browser_side_payment_not_blocked",
+  directCoreSigningNotBlocked: "x402_direct_core_signing_not_blocked",
+  directX402ClientNotBlocked: "x402_direct_x402_client_not_blocked",
+  failureClosedProbeFailed: "x402_failure_closed_probe_failed",
+  mcpDirectPaymentNotBlocked: "x402_mcp_direct_payment_not_blocked",
+  packageScriptPaymentNotBlocked: "x402_package_script_payment_not_blocked",
+  paidAxiosClientNotBlocked: "x402_paid_axios_client_not_blocked",
+  paidFetchClientNotBlocked: "x402_paid_fetch_client_not_blocked",
+  rawNetworkPaymentNotBlocked: "x402_raw_network_payment_not_blocked",
+  rawPaymentSignatureHeaderNotBlocked: "x402_raw_payment_signature_header_not_blocked",
+  rawPaymentSignatureInjectionNotBlocked: "x402_raw_payment_signature_injection_not_blocked",
+  rawPrivateKeyEnvNotAbsent: "x402_raw_private_key_env_not_absent",
+  siblingWrapperNotBlocked: "x402_sibling_wrapper_not_blocked",
+  signerNotGatewayHeld: "x402_signer_not_gateway_held",
+  tokenPassthroughNotBlocked: "x402_token_passthrough_not_blocked",
+  unmanagedMcpServerNotBlocked: "x402_unmanaged_mcp_server_not_blocked",
+  unmanagedToolPacketNotBlocked: "x402_unmanaged_tool_packet_not_blocked",
+  wrapperDriftPresent: "x402_wrapper_drift_present"
+};
+var X402PaymentConformancePostureSchema = exports_external.strictObject({
+  signerCustodyStatus: exports_external.enum(["gateway_held", "fixture_gateway_held", "agent_exposed", "unknown"]),
+  rawPrivateKeyEnvStatus: exports_external.enum(["absent", "present", "unknown"]),
+  directCoreClientSigningStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  directX402ClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  paidFetchClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  paidAxiosClientStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  packageScriptPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  browserSidePaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  rawNetworkPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  rawPaymentSignatureHeaderStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  rawPaymentSignatureInjectionStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  siblingX402WrapperStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  mcpDirectPaymentStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  unmanagedMcpServerStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  unmanagedToolPacketStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]).default("absent"),
+  tokenPassthroughStatus: exports_external.enum(["blocked", "absent", "present", "unknown"]),
+  wrapperDriftStatus: exports_external.enum(["absent", "present", "unknown"]),
+  failureClosedStatus: exports_external.enum(["passed", "failed", "unknown"])
+});
+function checkX402PaymentInstallConformance(postureValue) {
+  const posture = X402PaymentConformancePostureSchema.parse(postureValue);
+  const reasonCodes = [];
+  if (!["gateway_held", "fixture_gateway_held"].includes(posture.signerCustodyStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.signerNotGatewayHeld);
+  }
+  if (posture.rawPrivateKeyEnvStatus !== "absent") {
+    reasonCodes.push(X402PaymentConformanceReason.rawPrivateKeyEnvNotAbsent);
+  }
+  if (!["blocked", "absent"].includes(posture.directCoreClientSigningStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.directCoreSigningNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.directX402ClientStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.directX402ClientNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.paidFetchClientStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.paidFetchClientNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.paidAxiosClientStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.paidAxiosClientNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.packageScriptPaymentStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.packageScriptPaymentNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.browserSidePaymentStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.browserSidePaymentNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.rawNetworkPaymentStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.rawNetworkPaymentNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.rawPaymentSignatureHeaderStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.rawPaymentSignatureHeaderNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.rawPaymentSignatureInjectionStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.rawPaymentSignatureInjectionNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.siblingX402WrapperStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.siblingWrapperNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.mcpDirectPaymentStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.mcpDirectPaymentNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.unmanagedMcpServerStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.unmanagedMcpServerNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.unmanagedToolPacketStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.unmanagedToolPacketNotBlocked);
+  }
+  if (!["blocked", "absent"].includes(posture.tokenPassthroughStatus)) {
+    reasonCodes.push(X402PaymentConformanceReason.tokenPassthroughNotBlocked);
+  }
+  if (posture.wrapperDriftStatus !== "absent")
+    reasonCodes.push(X402PaymentConformanceReason.wrapperDriftPresent);
+  if (posture.failureClosedStatus !== "passed") {
+    reasonCodes.push(X402PaymentConformanceReason.failureClosedProbeFailed);
+  }
+  return {
+    adapterPackId: "adapter_pack_x402_payment_exact",
+    passed: reasonCodes.length === 0,
+    requiredProbeKinds: requiredGatewayCheckedBypassProbeKinds,
+    reasonCodes: reasonCodes.sort()
+  };
+}
+function evidenceLabel(label, evidenceRole, options = {}) {
+  return {
+    authorityCreated: false,
+    evidenceRole,
+    firstWedgeOperation: options.firstWedgeOperation ?? "supported_evidence_only",
+    label,
+    settlementFinality: options.settlementFinality ?? "not_settlement_finality"
+  };
+}
+
+// src/adapters/x402-payment/bypass-probes.ts
+var x402ProbeSpecs = [
+  {
+    probeKind: "credential_custody",
+    evaluate(posture) {
+      return {
+        passed: posture.signerCustodyStatus === "gateway_held",
+        evidenceDetails: [
+          posture.signerCustodyStatus === "gateway_held" ? "signer_gateway_held" : "signer_not_real_gateway_held"
+        ]
+      };
+    }
+  },
+  {
+    probeKind: "raw_sibling_blocking",
+    evaluate(posture) {
+      const checks3 = [
+        ["raw_private_key_env", posture.rawPrivateKeyEnvStatus === "absent", posture.rawPrivateKeyEnvStatus],
+        [
+          "direct_core_client_signing",
+          blockedOrAbsent(posture.directCoreClientSigningStatus),
+          statusLabel(posture.directCoreClientSigningStatus)
+        ],
+        [
+          "direct_x402_client",
+          blockedOrAbsent(posture.directX402ClientStatus),
+          statusLabel(posture.directX402ClientStatus)
+        ],
+        [
+          "paid_fetch_client",
+          blockedOrAbsent(posture.paidFetchClientStatus),
+          statusLabel(posture.paidFetchClientStatus)
+        ],
+        [
+          "paid_axios_client",
+          blockedOrAbsent(posture.paidAxiosClientStatus),
+          statusLabel(posture.paidAxiosClientStatus)
+        ],
+        [
+          "package_script_payment",
+          blockedOrAbsent(posture.packageScriptPaymentStatus),
+          statusLabel(posture.packageScriptPaymentStatus)
+        ],
+        [
+          "browser_side_payment",
+          blockedOrAbsent(posture.browserSidePaymentStatus),
+          statusLabel(posture.browserSidePaymentStatus)
+        ],
+        [
+          "raw_network_payment",
+          blockedOrAbsent(posture.rawNetworkPaymentStatus),
+          statusLabel(posture.rawNetworkPaymentStatus)
+        ],
+        [
+          "raw_payment_signature_header",
+          blockedOrAbsent(posture.rawPaymentSignatureHeaderStatus),
+          statusLabel(posture.rawPaymentSignatureHeaderStatus)
+        ],
+        [
+          "raw_payment_signature_injection",
+          blockedOrAbsent(posture.rawPaymentSignatureInjectionStatus),
+          statusLabel(posture.rawPaymentSignatureInjectionStatus)
+        ],
+        [
+          "sibling_x402_wrapper",
+          blockedOrAbsent(posture.siblingX402WrapperStatus),
+          statusLabel(posture.siblingX402WrapperStatus)
+        ]
+      ];
+      const failedDetails = checks3.filter(([, passed]) => !passed).map(([name, , status3]) => `${name}_${status3}_reachable`);
+      return {
+        passed: failedDetails.length === 0,
+        evidenceDetails: failedDetails.length === 0 ? [
+          "raw_private_key_env_absent",
+          "direct_core_client_signing_blocked",
+          "direct_x402_client_absent",
+          "paid_fetch_client_blocked",
+          "paid_axios_client_absent",
+          "package_script_payment_absent",
+          "browser_side_payment_absent",
+          "raw_network_payment_absent",
+          "raw_payment_signature_header_blocked",
+          "raw_payment_signature_injection_absent",
+          "sibling_x402_wrapper_blocked"
+        ] : failedDetails
+      };
+    }
+  },
+  {
+    probeKind: "mcp_direct_call_blocking",
+    evaluate(posture) {
+      const checks3 = [
+        ["mcp_direct_payment", statusLabel(posture.mcpDirectPaymentStatus)],
+        ["unmanaged_mcp_server", statusLabel(posture.unmanagedMcpServerStatus)],
+        ["unmanaged_tool_packet", statusLabel(posture.unmanagedToolPacketStatus)]
+      ];
+      const failedDetails = checks3.filter(([, status3]) => !blockedOrAbsent(status3)).map(([name, status3]) => `${name}_${status3}_reachable`);
+      return {
+        passed: failedDetails.length === 0,
+        evidenceDetails: failedDetails.length === 0 ? ["mcp_direct_payment_blocked", "unmanaged_mcp_server_absent", "unmanaged_tool_packet_absent"] : failedDetails
+      };
+    }
+  },
+  {
+    probeKind: "token_passthrough_blocking",
+    evaluate(posture) {
+      return {
+        passed: ["blocked", "absent"].includes(posture.tokenPassthroughStatus),
+        evidenceDetails: [
+          ["blocked", "absent"].includes(posture.tokenPassthroughStatus) ? "token_passthrough_blocked" : "token_passthrough_reachable"
+        ]
+      };
+    }
+  },
+  {
+    probeKind: "wrapper_drift",
+    evaluate(posture) {
+      return {
+        passed: posture.wrapperDriftStatus === "absent",
+        evidenceDetails: [posture.wrapperDriftStatus === "absent" ? "wrapper_drift_absent" : "wrapper_drift_present"]
+      };
+    }
+  },
+  {
+    probeKind: "failure_closed",
+    evaluate(posture) {
+      return {
+        passed: posture.failureClosedStatus === "passed",
+        evidenceDetails: [posture.failureClosedStatus === "passed" ? "failure_closed_passed" : "failure_closed_failed"]
+      };
+    }
+  }
+];
+function x402PaymentHostileBypassProbeExecutors(surface) {
+  return x402ProbeSpecs.map((spec) => ({
+    probeKind: spec.probeKind,
+    async execute(scope2) {
+      const posture = X402PaymentConformancePostureSchema.parse(await surface.readConformancePosture(scope2));
+      const evaluation = spec.evaluate(posture);
+      const probeOutcome = evaluation.passed ? "passed" : "failed";
+      return {
+        probeOutcome,
+        sourceAuthority: "gateway_probe",
+        reasonCodes: [evaluation.passed ? "bypass_probe_passed" : "protected_path_probe_failed"],
+        evidenceRefs: evaluation.evidenceDetails.map((detail) => `evidence:x402-hostile-probe:${spec.probeKind}:${detail}`)
+      };
+    }
+  }));
+}
+function blockedOrAbsent(status3) {
+  return status3 === undefined || status3 === "blocked" || status3 === "absent";
+}
+function statusLabel(status3) {
+  return status3 ?? "absent";
+}
+
 // src/cli/x402/index.ts
 var X402InstallCommandInputSchema = exports_external.union([
   X402InstallProposalInputSchema,
@@ -18953,6 +35559,7 @@ async function installX402PaymentCommand(input) {
     evidenceRefs: [recordedRef].filter((ref) => typeof ref === "string"),
     warnings: [
       "Compiled local x402 posture only; trusted readiness requires control-plane install registration and gateway posture evidence.",
+      "Trusted readiness is pre-contract service context only; it is not ServiceWorkflowAdmission, ServiceWorkflowHandle, policy, greenlight, gateway check, or mutation authority.",
       "No greenlight, signer use, gateway check, or mutation was performed."
     ],
     result: {
@@ -18975,7 +35582,8 @@ async function probesX402PaymentCommand(input) {
     redactionProfileRef: "cli-x402-probes:v1-redacted",
     evidenceRefs: [recordedRef].filter((ref) => typeof ref === "string"),
     warnings: [
-      "Probe report classifies caller-supplied gateway posture evidence; it is not provider certification, authority, or execution proof."
+      "Probe report classifies caller-supplied gateway posture evidence; it is not provider certification, authority, or execution proof.",
+      "Probe evidence is pre-contract service context only; it is not ServiceWorkflowAdmission, ServiceWorkflowHandle, policy, greenlight, gateway check, or mutation authority."
     ],
     result: {
       ...report,
@@ -18998,6 +35606,7 @@ async function registerX402GatewayReadinessCommand(input) {
     evidenceRefs: [recordedRef, ...outcome.record?.evidenceRefs ?? []].filter((ref) => typeof ref === "string"),
     warnings: [
       "Trusted readiness binds pre-contract install, probe, gateway, policy, and credential posture only.",
+      "Trusted readiness is pre-contract service context only; it is not ServiceWorkflowAdmission, ServiceWorkflowHandle, policy, greenlight, gateway check, or mutation authority.",
       "No greenlight, signer use, gateway check, payment payload, or mutation was performed."
     ],
     result: outcome.record ? { ...outcome.record, localRecordRef: recordedRef } : {
@@ -19139,12 +35748,15 @@ async function buildLocalInstallRecord(input) {
     unsupportedX402Surfaces: x402FirstWedgeUnsupportedSurfaces,
     refusalReasonCodes: input.proposal.refusalReasonCodes,
     compiledRecordsIncluded: false,
-    compiledRecordRefs: compiled ? {
-      toolCapabilityRef: compiled.toolCapability.toolCapabilityId,
-      actionTypeRef: compiled.actionType.actionTypeId,
-      gatewayRegistryEntryRef: compiled.gatewayRegistryEntry.gatewayRegistryEntryId,
-      operatingEnvelopeRef: compiled.operatingEnvelope.envelopeId
-    } : null,
+    compiledRecordRefs: compiled ? (() => {
+      const gatewayRegistryEntry = requireInstallProposalGatewayRegistryEntry(compiled.gatewayRegistryEntry);
+      return {
+        toolCapabilityRef: compiled.toolCapability.toolCapabilityId,
+        actionTypeRef: compiled.actionType.actionTypeId,
+        gatewayRegistryEntryRef: gatewayRegistryEntry.gatewayRegistryEntryId,
+        operatingEnvelopeRef: compiled.operatingEnvelope.envelopeId
+      };
+    })() : null,
     controlPlaneRegistrationRequired: true,
     controlPlaneRegistrationPerformed: false,
     readinessAuthority: "local_compilation",
@@ -19429,14 +36041,14 @@ function localProbeFreshness(input) {
 }
 async function writeLocalInstallRecord(cwd, record2) {
   const project = await readLocalProjectConfig(cwd);
-  const ref = join2(project.stateRootRef, "projects", project.projectId, "x402", "install.json");
+  const ref = join3(project.stateRootRef, "projects", project.projectId, "x402", "install.json");
   await writeJson(ref, record2);
   await updateLocalProjectConfig(cwd, { x402InstallRef: ref });
   return ref;
 }
 async function writeLocalProbeReport(cwd, report) {
   const project = await readLocalProjectConfig(cwd);
-  const ref = join2(project.stateRootRef, "projects", project.projectId, "x402", "probes.json");
+  const ref = join3(project.stateRootRef, "projects", project.projectId, "x402", "probes.json");
   await writeJson(ref, report);
   await updateLocalProjectConfig(cwd, { x402ProbeReportRef: ref });
   return ref;
@@ -19449,7 +36061,7 @@ async function writeLocalGatewayReadinessRecord(cwd, record2) {
   return ref;
 }
 function localGatewayReadinessRecordRef(project) {
-  return join2(project.stateRootRef, "projects", project.projectId, "x402", "gateway-readiness.json");
+  return join3(project.stateRootRef, "projects", project.projectId, "x402", "gateway-readiness.json");
 }
 async function buildProtectedToolReadinessSnapshot(input) {
   const gatewayReadinessDigest = await digestCanonical({
@@ -19542,6 +36154,122 @@ async function writeJson(path, value) {
 `, { mode: 384 });
 }
 
+// src/cli/quickstart/x402.ts
+function defaultConformancePosture() {
+  return {
+    signerCustodyStatus: "fixture_gateway_held",
+    rawPrivateKeyEnvStatus: "absent",
+    directCoreClientSigningStatus: "blocked",
+    paidFetchClientStatus: "blocked",
+    paidAxiosClientStatus: "blocked",
+    rawPaymentSignatureHeaderStatus: "blocked",
+    siblingX402WrapperStatus: "blocked",
+    mcpDirectPaymentStatus: "blocked",
+    tokenPassthroughStatus: "blocked",
+    wrapperDriftStatus: "absent",
+    failureClosedStatus: "passed"
+  };
+}
+async function runX402Quickstart(input) {
+  const compileStep = await installX402PaymentCommand({
+    cwd: input.cwd,
+    inputValue: defaultX402BootstrapInstallInput(),
+    recordLocal: false
+  });
+  const steps = [
+    stepEnvelope("compile_install_proposal", "install x402-payment", compileStep)
+  ];
+  const conformanceStep = await x402PaymentConformanceCommand(defaultConformancePosture());
+  steps.push(stepEnvelope("conformance_posture", "conformance x402-payment", conformanceStep));
+  const ok3 = steps.every((step) => step.ok);
+  return cliOutput({
+    command: "quickstart x402",
+    plane: "operator",
+    ok: ok3,
+    reasonCodes: steps.flatMap((step) => step.reasonCodes),
+    nextAction: ok3 ? "read_result" : "fix_install",
+    retryability: ok3 ? "not_retryable" : "retryable_after_fix",
+    redactionProfileRef: "cli-quickstart-x402:v1-redacted",
+    nonClaims: [...cliNonClaims, "live control-plane registration", "signer use"],
+    warnings: [
+      "Quickstart compiles local x402 install posture and runs conformance classification.",
+      "No greenlight, gateway check, wallet mutation, or live registration was performed."
+    ],
+    result: { steps }
+  });
+}
+function stepEnvelope(stepId, command, output) {
+  return {
+    stepId,
+    command,
+    ok: output.ok,
+    reasonCodes: output.reasonCodes,
+    evidenceRefs: output.evidenceRefs,
+    authorityCreated: false,
+    greenlightCreated: false,
+    gatewayCheckPerformed: false,
+    mutationAttempted: false
+  };
+}
+
+// src/cli/quickstart/agent-spine.ts
+async function runAgentSpineQuickstart(input) {
+  const doctorOutput = await hostDoctorCommand({ cwd: input.cwd });
+  const steps = [
+    stepEnvelope2("host_doctor", "host doctor", doctorOutput)
+  ];
+  if (doctorOutput.ok) {
+    const x402Output = await runX402Quickstart({ cwd: input.cwd });
+    const x402Steps = x402Output.result && typeof x402Output.result === "object" && "steps" in x402Output.result ? x402Output.result.steps : [];
+    for (const step of x402Steps) {
+      steps.push(step);
+    }
+    if (x402Output.ok) {
+      const simulateOutput = await simulateX402PaymentCommand({ cwd: input.cwd });
+      steps.push(stepEnvelope2("simulate_x402_payment", "simulate x402-payment", simulateOutput));
+    }
+  }
+  const ok3 = steps.every((step) => step.ok);
+  return cliOutput({
+    command: "quickstart agent-spine",
+    plane: "operator",
+    ok: ok3,
+    reasonCodes: steps.flatMap((step) => step.reasonCodes),
+    nextAction: ok3 ? "read_result" : "fix_install",
+    retryability: ok3 ? "not_retryable" : "retryable_after_fix",
+    redactionProfileRef: "cli-quickstart-agent-spine:v1-redacted",
+    nonClaims: [
+      ...cliNonClaims,
+      "bundled execute API",
+      "greenlight reuse",
+      "live wallet mutation",
+      "authority creation"
+    ],
+    warnings: [
+      "Convenience sequencer only — equivalent to host doctor, quickstart x402, then simulate x402-payment in order.",
+      "No greenlight, gateway check, signer use, or protected mutation was performed."
+    ],
+    result: {
+      recommendedConvenience: true,
+      canonicalDiscreteCommands: ["host doctor", "quickstart x402", "simulate x402-payment"],
+      steps
+    }
+  });
+}
+function stepEnvelope2(stepId, command, output) {
+  return {
+    stepId,
+    command,
+    ok: output.ok,
+    reasonCodes: output.reasonCodes,
+    evidenceRefs: output.evidenceRefs,
+    authorityCreated: false,
+    greenlightCreated: false,
+    gatewayCheckPerformed: false,
+    mutationAttempted: false
+  };
+}
+
 // src/cli/main.ts
 async function runCliCommand(argv) {
   const [group, subcommand, maybePath, ...rest] = argv;
@@ -19578,6 +36306,26 @@ async function runCliCommand(argv) {
       errorCode: "cli_required_argument_missing",
       message: "evidence aps-report requires <path>.",
       nextAction: "fix_arguments"
+    });
+  }
+  if (group === "evidence" && subcommand === "fetch") {
+    const contractId = optionValue(argv, "--contract-id");
+    if (!contractId) {
+      return cliCommandErrorOutput({
+        argv,
+        errorCode: "cli_required_argument_missing",
+        message: "evidence fetch requires --contract-id <id>.",
+        nextAction: "fix_arguments"
+      });
+    }
+    const baseUrl = optionValue(argv, "--base-url");
+    const cwd2 = optionValue(argv, "--cwd");
+    const roleCredential = optionValue(argv, "--role-credential");
+    return evidenceFetchCommand({
+      contractId,
+      ...baseUrl ? { baseUrl } : {},
+      ...cwd2 ? { cwd: cwd2 } : {},
+      ...roleCredential ? { roleCredential } : {}
     });
   }
   if (group === "evidence" && subcommand === "contract-view" && maybePath) {
@@ -19691,6 +36439,26 @@ async function runCliCommand(argv) {
       nextAction: "fix_arguments"
     });
   }
+  if (group === "service" && subcommand === "bootstrap") {
+    const inputPath = argv.find((part) => !part.startsWith("--") && part !== "service" && part !== "bootstrap");
+    return serviceBootstrapCommand({
+      installInput: inputPath ? await readJsonFile(inputPath) : undefined
+    });
+  }
+  const cwd = optionValue(argv, "--cwd") ?? process.cwd();
+  if (group === "host" && subcommand === "doctor") {
+    return hostDoctorCommand({ cwd });
+  }
+  if (group === "quickstart" && subcommand === "x402") {
+    const inputPath = argv.find((part) => !part.startsWith("--") && part !== "quickstart" && part !== "x402");
+    return runX402Quickstart({ cwd, installInputPath: inputPath ?? null });
+  }
+  if (group === "quickstart" && subcommand === "agent-spine") {
+    return runAgentSpineQuickstart({ cwd });
+  }
+  if (group === "simulate" && subcommand === "x402-payment") {
+    return simulateX402PaymentCommand({ cwd });
+  }
   return cliCommandErrorOutput({
     argv,
     errorCode: "cli_command_unsupported",
@@ -19708,7 +36476,10 @@ function cliCommandErrorOutput(input) {
     retryability: "retryable_after_fix",
     commitState: "not_started",
     redactionProfileRef: "cli-error:v1-redacted",
-    warnings: ["Command failed before any authority, gateway check, signer use, or protected mutation."],
+    warnings: [
+      "Command failed before any authority, gateway check, signer use, or protected mutation.",
+      "No ServiceWorkflowAdmission, ServiceWorkflowHandle, clearance, policy decision, greenlight, gateway check, signer use, or protected mutation was created."
+    ],
     result: {
       errorCode: input.errorCode,
       message: input.message,
@@ -19726,7 +36497,7 @@ function cliCommandExceptionOutput(argv, error51) {
 async function readJsonFile(path) {
   let text;
   try {
-    text = await readFile2(path, "utf8");
+    text = await readFile3(path, "utf8");
   } catch {
     throw new CliInputFileUnreadableError;
   }

@@ -1,0 +1,586 @@
+import { z } from "zod";
+import { type NegotiationDecision, type NegotiationOffer, type NegotiationResolution, type ResolveNegotiationInput } from "../../protocol/areas/negotiation";
+export declare const A2ANegotiationAdapterApplyRequestAuthorityBoundarySchema: z.ZodObject<{
+    adapterApplyCreatedAuthority: z.ZodLiteral<false>;
+    negotiationEvidenceCommitted: z.ZodLiteral<false>;
+    actionContractCreated: z.ZodLiteral<false>;
+    policyEvaluated: z.ZodLiteral<false>;
+    greenlightIssued: z.ZodLiteral<false>;
+    gatewayCheckPerformed: z.ZodLiteral<false>;
+    mutationAttempted: z.ZodLiteral<false>;
+    rawTranscriptIncluded: z.ZodLiteral<false>;
+    credentialMaterialIncluded: z.ZodLiteral<false>;
+    paymentMaterialIncluded: z.ZodLiteral<false>;
+    signerMaterialIncluded: z.ZodLiteral<false>;
+}, z.core.$strict>;
+export type A2ANegotiationAdapterApplyRequestAuthorityBoundary = z.infer<typeof A2ANegotiationAdapterApplyRequestAuthorityBoundarySchema>;
+export declare const A2ANegotiationAdapterApplyResultAuthorityBoundarySchema: z.ZodObject<{
+    adapterApplyCreatedAuthority: z.ZodLiteral<false>;
+    negotiationEvidenceCommitted: z.ZodBoolean;
+    actionContractCreated: z.ZodLiteral<false>;
+    policyEvaluated: z.ZodLiteral<false>;
+    greenlightIssued: z.ZodLiteral<false>;
+    gatewayCheckPerformed: z.ZodLiteral<false>;
+    mutationAttempted: z.ZodLiteral<false>;
+    rawTranscriptIncluded: z.ZodLiteral<false>;
+    credentialMaterialIncluded: z.ZodLiteral<false>;
+    paymentMaterialIncluded: z.ZodLiteral<false>;
+    signerMaterialIncluded: z.ZodLiteral<false>;
+}, z.core.$strict>;
+export type A2ANegotiationAdapterApplyResultAuthorityBoundary = z.infer<typeof A2ANegotiationAdapterApplyResultAuthorityBoundarySchema>;
+export declare const A2ANegotiationAppliedWriteSchema: z.ZodObject<{
+    writeKind: z.ZodEnum<{
+        negotiation_offer: "negotiation_offer";
+        negotiation_decision: "negotiation_decision";
+        negotiation_resolution_input: "negotiation_resolution_input";
+    }>;
+    transition: z.ZodEnum<{
+        recordNegotiationOffer: "recordNegotiationOffer";
+        recordNegotiationDecision: "recordNegotiationDecision";
+        resolveNegotiation: "resolveNegotiation";
+    }>;
+    objectId: z.ZodString;
+    committedObjectRef: z.ZodString;
+    commitState: z.ZodLiteral<"committed">;
+}, z.core.$strict>;
+export type A2ANegotiationAppliedWrite = z.infer<typeof A2ANegotiationAppliedWriteSchema>;
+export declare const A2ANegotiationFailedWriteSchema: z.ZodObject<{
+    writeKind: z.ZodEnum<{
+        negotiation_offer: "negotiation_offer";
+        negotiation_decision: "negotiation_decision";
+        negotiation_resolution_input: "negotiation_resolution_input";
+    }>;
+    transition: z.ZodEnum<{
+        recordNegotiationOffer: "recordNegotiationOffer";
+        recordNegotiationDecision: "recordNegotiationDecision";
+        resolveNegotiation: "resolveNegotiation";
+    }>;
+    objectId: z.ZodString;
+    failureReasonCode: z.ZodString;
+    failureMessage: z.ZodString;
+    commitState: z.ZodEnum<{
+        unknown: "unknown";
+        not_applicable: "not_applicable";
+        not_started: "not_started";
+        not_committed: "not_committed";
+        committed: "committed";
+    }>;
+}, z.core.$strict>;
+export type A2ANegotiationFailedWrite = z.infer<typeof A2ANegotiationFailedWriteSchema>;
+export declare const A2ANegotiationAdapterApplyRequestSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    applyKind: z.ZodLiteral<"a2a_negotiation_adapter_apply_request">;
+    applyId: z.ZodString;
+    moveResult: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        resultKind: z.ZodLiteral<"a2a_negotiation_adapter_move_result">;
+        requestId: z.ZodString;
+        adapterId: z.ZodString;
+        sourceProtocol: z.ZodEnum<{
+            runtime_evidence: "runtime_evidence";
+            a2a: "a2a";
+            acp: "acp";
+            anp: "anp";
+            ap2: "ap2";
+            ucp: "ucp";
+            x402: "x402";
+            local_reference: "local_reference";
+        }>;
+        negotiationSessionId: z.ZodString;
+        ingressCheckpointId: z.ZodString;
+        requestedMove: z.ZodEnum<{
+            request_for_proposal: "request_for_proposal";
+            offer: "offer";
+            counter: "counter";
+            accept: "accept";
+            reject: "reject";
+            withdraw: "withdraw";
+            expire: "expire";
+            dispute: "dispute";
+        }>;
+        resultOutcome: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refuse: "refuse";
+            compiled: "compiled";
+        }>;
+        plan: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+            schemaVersion: z.ZodLiteral<"0.2.4">;
+            tenantId: z.ZodString;
+            organizationId: z.ZodString;
+            createdAt: z.ZodString;
+            planKind: z.ZodLiteral<"a2a_negotiation_move_plan">;
+            planId: z.ZodString;
+            negotiationSessionId: z.ZodString;
+            ingressCheckpointId: z.ZodString;
+            requestedMove: z.ZodEnum<{
+                request_for_proposal: "request_for_proposal";
+                offer: "offer";
+                counter: "counter";
+                accept: "accept";
+                reject: "reject";
+                withdraw: "withdraw";
+                expire: "expire";
+                dispute: "dispute";
+            }>;
+            planOutcome: z.ZodEnum<{
+                proof_gap: "proof_gap";
+                refuse: "refuse";
+                emit_offer: "emit_offer";
+                emit_counter_offer_decision_and_resolution: "emit_counter_offer_decision_and_resolution";
+                emit_decision_and_resolution: "emit_decision_and_resolution";
+            }>;
+            orderedTransitionCalls: z.ZodDefault<z.ZodArray<z.ZodEnum<{
+                recordNegotiationOffer: "recordNegotiationOffer";
+                recordNegotiationDecision: "recordNegotiationDecision";
+                resolveNegotiation: "resolveNegotiation";
+            }>>>;
+            offer: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationOfferId: z.ZodString;
+                negotiationSessionId: z.ZodString;
+                offerVersionId: z.ZodString;
+                offerSequence: z.ZodNumber;
+                offeredByPartyId: z.ZodString;
+                previousOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                supersedesOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                offerContentDigest: z.ZodString;
+                offerObjectRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                offerContentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                externalProtocolEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodObject<{
+                    protocol: z.ZodEnum<{
+                        mcp: "mcp";
+                        a2a: "a2a";
+                        acp: "acp";
+                        anp: "anp";
+                        ap2: "ap2";
+                        ucp: "ucp";
+                        payment_protocol: "payment_protocol";
+                        runtime_handoff: "runtime_handoff";
+                        other: "other";
+                    }>;
+                    protocolVersion: z.ZodString;
+                    objectKind: z.ZodString;
+                    objectRef: z.ZodString;
+                    objectDigest: z.ZodString;
+                    evidencePosture: z.ZodLiteral<"imported_evidence_only">;
+                    evidenceUse: z.ZodEnum<{
+                        conversation_context: "conversation_context";
+                        descriptor_context: "descriptor_context";
+                        runtime_context: "runtime_context";
+                        mandate_context_evidence: "mandate_context_evidence";
+                        tool_context: "tool_context";
+                        handoff_context: "handoff_context";
+                        other_context: "other_context";
+                    }>;
+                    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>>>;
+                generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                declaredAssumptions: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                uncertaintyMarkers: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                clearingEvidenceRefs: z.ZodDefault<z.ZodObject<{
+                    correlationRef: z.ZodOptional<z.ZodString>;
+                    obligationRef: z.ZodOptional<z.ZodString>;
+                    counterpartyRef: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>;
+                expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            }, z.core.$strict>>>;
+            decision: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationDecisionId: z.ZodString;
+                negotiationSessionId: z.ZodString;
+                decidedOfferVersionId: z.ZodString;
+                decidedOfferSequence: z.ZodNumber;
+                decidedByPartyId: z.ZodString;
+                decision: z.ZodEnum<{
+                    counter: "counter";
+                    accept: "accept";
+                    reject: "reject";
+                    withdraw: "withdraw";
+                    expire: "expire";
+                }>;
+                reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                counterOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                decisionDigest: z.ZodString;
+            }, z.core.$strict>>>;
+            resolutionInput: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationResolutionId: z.ZodString;
+                resolverPolicy: z.ZodObject<{
+                    schemaVersion: z.ZodLiteral<"0.2.4">;
+                    tenantId: z.ZodString;
+                    organizationId: z.ZodString;
+                    createdAt: z.ZodString;
+                    negotiationResolverPolicyId: z.ZodString;
+                    resolverVersion: z.ZodString;
+                    resolverPolicyDigest: z.ZodString;
+                    resolverKind: z.ZodEnum<{
+                        bilateral_protected_action_terms_v1: "bilateral_protected_action_terms_v1";
+                        contract_net_protected_action_terms_v1: "contract_net_protected_action_terms_v1";
+                    }>;
+                    allowedMoves: z.ZodArray<z.ZodEnum<{
+                        request_for_proposal: "request_for_proposal";
+                        offer: "offer";
+                        counter: "counter";
+                        accept: "accept";
+                        reject: "reject";
+                        withdraw: "withdraw";
+                        expire: "expire";
+                        dispute: "dispute";
+                    }>>;
+                    requiredPartyProofPosture: z.ZodEnum<{
+                        allow_self_attested_with_gap: "allow_self_attested_with_gap";
+                        require_host_verified_refs: "require_host_verified_refs";
+                    }>;
+                    staleOfferPolicy: z.ZodLiteral<"reject_accepting_non_current_offer">;
+                    replayPolicy: z.ZodLiteral<"reject_duplicate_decision_and_binding">;
+                    unknownConstraintPolicy: z.ZodLiteral<"proof_gap">;
+                    authorityPosture: z.ZodLiteral<"non_authority_resolver">;
+                    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>;
+                negotiationSessionId: z.ZodString;
+                evaluatedMove: z.ZodEnum<{
+                    request_for_proposal: "request_for_proposal";
+                    offer: "offer";
+                    counter: "counter";
+                    accept: "accept";
+                    reject: "reject";
+                    withdraw: "withdraw";
+                    expire: "expire";
+                    dispute: "dispute";
+                }>;
+                decisionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                candidateObligation: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                    obligationRef: z.ZodString;
+                    obligationDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                    actionTypeId: z.ZodString;
+                    actionClass: z.ZodString;
+                    resourceRef: z.ZodString;
+                    counterpartyRef: z.ZodString;
+                    maxUses: z.ZodDefault<z.ZodLiteral<1>>;
+                    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>>>;
+                unknownConstraintRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                resolutionDigest: z.ZodString;
+            }, z.core.$strict>>>;
+            stopReasonCode: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            authorityBoundary: z.ZodObject<{
+                protocolRecordsCommitted: z.ZodLiteral<false>;
+                actionContractCreated: z.ZodLiteral<false>;
+                authorityCreated: z.ZodLiteral<false>;
+                policyEvaluated: z.ZodLiteral<false>;
+                greenlightIssued: z.ZodLiteral<false>;
+                gatewayCheckPerformed: z.ZodLiteral<false>;
+                mutationAttempted: z.ZodLiteral<false>;
+            }, z.core.$strict>;
+        }, z.core.$strict>>>;
+        orderedProtocolWrites: z.ZodDefault<z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
+            writeKind: z.ZodLiteral<"negotiation_offer">;
+            transition: z.ZodLiteral<"recordNegotiationOffer">;
+            objectId: z.ZodString;
+            payload: z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationOfferId: z.ZodString;
+                negotiationSessionId: z.ZodString;
+                offerVersionId: z.ZodString;
+                offerSequence: z.ZodNumber;
+                offeredByPartyId: z.ZodString;
+                previousOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                supersedesOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                offerContentDigest: z.ZodString;
+                offerObjectRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                offerContentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                externalProtocolEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodObject<{
+                    protocol: z.ZodEnum<{
+                        mcp: "mcp";
+                        a2a: "a2a";
+                        acp: "acp";
+                        anp: "anp";
+                        ap2: "ap2";
+                        ucp: "ucp";
+                        payment_protocol: "payment_protocol";
+                        runtime_handoff: "runtime_handoff";
+                        other: "other";
+                    }>;
+                    protocolVersion: z.ZodString;
+                    objectKind: z.ZodString;
+                    objectRef: z.ZodString;
+                    objectDigest: z.ZodString;
+                    evidencePosture: z.ZodLiteral<"imported_evidence_only">;
+                    evidenceUse: z.ZodEnum<{
+                        conversation_context: "conversation_context";
+                        descriptor_context: "descriptor_context";
+                        runtime_context: "runtime_context";
+                        mandate_context_evidence: "mandate_context_evidence";
+                        tool_context: "tool_context";
+                        handoff_context: "handoff_context";
+                        other_context: "other_context";
+                    }>;
+                    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>>>;
+                generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                declaredAssumptions: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                uncertaintyMarkers: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                clearingEvidenceRefs: z.ZodDefault<z.ZodObject<{
+                    correlationRef: z.ZodOptional<z.ZodString>;
+                    obligationRef: z.ZodOptional<z.ZodString>;
+                    counterpartyRef: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>;
+                expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            }, z.core.$strict>;
+        }, z.core.$strict>, z.ZodObject<{
+            writeKind: z.ZodLiteral<"negotiation_decision">;
+            transition: z.ZodLiteral<"recordNegotiationDecision">;
+            objectId: z.ZodString;
+            payload: z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationDecisionId: z.ZodString;
+                negotiationSessionId: z.ZodString;
+                decidedOfferVersionId: z.ZodString;
+                decidedOfferSequence: z.ZodNumber;
+                decidedByPartyId: z.ZodString;
+                decision: z.ZodEnum<{
+                    counter: "counter";
+                    accept: "accept";
+                    reject: "reject";
+                    withdraw: "withdraw";
+                    expire: "expire";
+                }>;
+                reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                counterOfferVersionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                decisionDigest: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>, z.ZodObject<{
+            writeKind: z.ZodLiteral<"negotiation_resolution_input">;
+            transition: z.ZodLiteral<"resolveNegotiation">;
+            objectId: z.ZodString;
+            payload: z.ZodObject<{
+                schemaVersion: z.ZodLiteral<"0.2.4">;
+                tenantId: z.ZodString;
+                organizationId: z.ZodString;
+                createdAt: z.ZodString;
+                negotiationResolutionId: z.ZodString;
+                resolverPolicy: z.ZodObject<{
+                    schemaVersion: z.ZodLiteral<"0.2.4">;
+                    tenantId: z.ZodString;
+                    organizationId: z.ZodString;
+                    createdAt: z.ZodString;
+                    negotiationResolverPolicyId: z.ZodString;
+                    resolverVersion: z.ZodString;
+                    resolverPolicyDigest: z.ZodString;
+                    resolverKind: z.ZodEnum<{
+                        bilateral_protected_action_terms_v1: "bilateral_protected_action_terms_v1";
+                        contract_net_protected_action_terms_v1: "contract_net_protected_action_terms_v1";
+                    }>;
+                    allowedMoves: z.ZodArray<z.ZodEnum<{
+                        request_for_proposal: "request_for_proposal";
+                        offer: "offer";
+                        counter: "counter";
+                        accept: "accept";
+                        reject: "reject";
+                        withdraw: "withdraw";
+                        expire: "expire";
+                        dispute: "dispute";
+                    }>>;
+                    requiredPartyProofPosture: z.ZodEnum<{
+                        allow_self_attested_with_gap: "allow_self_attested_with_gap";
+                        require_host_verified_refs: "require_host_verified_refs";
+                    }>;
+                    staleOfferPolicy: z.ZodLiteral<"reject_accepting_non_current_offer">;
+                    replayPolicy: z.ZodLiteral<"reject_duplicate_decision_and_binding">;
+                    unknownConstraintPolicy: z.ZodLiteral<"proof_gap">;
+                    authorityPosture: z.ZodLiteral<"non_authority_resolver">;
+                    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>;
+                negotiationSessionId: z.ZodString;
+                evaluatedMove: z.ZodEnum<{
+                    request_for_proposal: "request_for_proposal";
+                    offer: "offer";
+                    counter: "counter";
+                    accept: "accept";
+                    reject: "reject";
+                    withdraw: "withdraw";
+                    expire: "expire";
+                    dispute: "dispute";
+                }>;
+                decisionId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                candidateObligation: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                    obligationRef: z.ZodString;
+                    obligationDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+                    actionTypeId: z.ZodString;
+                    actionClass: z.ZodString;
+                    resourceRef: z.ZodString;
+                    counterpartyRef: z.ZodString;
+                    maxUses: z.ZodDefault<z.ZodLiteral<1>>;
+                    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>>>;
+                unknownConstraintRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                resolutionDigest: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>], "writeKind">>>;
+        stopReasonCode: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        authorityBoundary: z.ZodObject<{
+            adapterRequestCreatedAuthority: z.ZodLiteral<false>;
+            protocolRecordsCommitted: z.ZodLiteral<false>;
+            actionContractCreated: z.ZodLiteral<false>;
+            policyEvaluated: z.ZodLiteral<false>;
+            greenlightIssued: z.ZodLiteral<false>;
+            gatewayCheckPerformed: z.ZodLiteral<false>;
+            mutationAttempted: z.ZodLiteral<false>;
+            rawTranscriptIncluded: z.ZodLiteral<false>;
+            credentialMaterialIncluded: z.ZodLiteral<false>;
+            paymentMaterialIncluded: z.ZodLiteral<false>;
+            signerMaterialIncluded: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+    }, z.core.$strict>;
+    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    authorityBoundary: z.ZodObject<{
+        adapterApplyCreatedAuthority: z.ZodLiteral<false>;
+        negotiationEvidenceCommitted: z.ZodLiteral<false>;
+        actionContractCreated: z.ZodLiteral<false>;
+        policyEvaluated: z.ZodLiteral<false>;
+        greenlightIssued: z.ZodLiteral<false>;
+        gatewayCheckPerformed: z.ZodLiteral<false>;
+        mutationAttempted: z.ZodLiteral<false>;
+        rawTranscriptIncluded: z.ZodLiteral<false>;
+        credentialMaterialIncluded: z.ZodLiteral<false>;
+        paymentMaterialIncluded: z.ZodLiteral<false>;
+        signerMaterialIncluded: z.ZodLiteral<false>;
+    }, z.core.$strict>;
+}, z.core.$strict>;
+export type A2ANegotiationAdapterApplyRequest = z.infer<typeof A2ANegotiationAdapterApplyRequestSchema>;
+export declare const A2ANegotiationAdapterApplyResultSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    resultKind: z.ZodLiteral<"a2a_negotiation_adapter_apply_result">;
+    applyId: z.ZodString;
+    adapterId: z.ZodString;
+    sourceProtocol: z.ZodEnum<{
+        runtime_evidence: "runtime_evidence";
+        a2a: "a2a";
+        acp: "acp";
+        anp: "anp";
+        ap2: "ap2";
+        ucp: "ucp";
+        x402: "x402";
+        local_reference: "local_reference";
+    }>;
+    negotiationSessionId: z.ZodString;
+    ingressCheckpointId: z.ZodString;
+    requestedMove: z.ZodEnum<{
+        request_for_proposal: "request_for_proposal";
+        offer: "offer";
+        counter: "counter";
+        accept: "accept";
+        reject: "reject";
+        withdraw: "withdraw";
+        expire: "expire";
+        dispute: "dispute";
+    }>;
+    applyOutcome: z.ZodEnum<{
+        proof_gap: "proof_gap";
+        applied: "applied";
+        not_compiled: "not_compiled";
+        write_failed: "write_failed";
+        partial_commit_proof_gap: "partial_commit_proof_gap";
+    }>;
+    appliedWrites: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        writeKind: z.ZodEnum<{
+            negotiation_offer: "negotiation_offer";
+            negotiation_decision: "negotiation_decision";
+            negotiation_resolution_input: "negotiation_resolution_input";
+        }>;
+        transition: z.ZodEnum<{
+            recordNegotiationOffer: "recordNegotiationOffer";
+            recordNegotiationDecision: "recordNegotiationDecision";
+            resolveNegotiation: "resolveNegotiation";
+        }>;
+        objectId: z.ZodString;
+        committedObjectRef: z.ZodString;
+        commitState: z.ZodLiteral<"committed">;
+    }, z.core.$strict>>>;
+    failedWrite: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        writeKind: z.ZodEnum<{
+            negotiation_offer: "negotiation_offer";
+            negotiation_decision: "negotiation_decision";
+            negotiation_resolution_input: "negotiation_resolution_input";
+        }>;
+        transition: z.ZodEnum<{
+            recordNegotiationOffer: "recordNegotiationOffer";
+            recordNegotiationDecision: "recordNegotiationDecision";
+            resolveNegotiation: "resolveNegotiation";
+        }>;
+        objectId: z.ZodString;
+        failureReasonCode: z.ZodString;
+        failureMessage: z.ZodString;
+        commitState: z.ZodEnum<{
+            unknown: "unknown";
+            not_applicable: "not_applicable";
+            not_started: "not_started";
+            not_committed: "not_committed";
+            committed: "committed";
+        }>;
+    }, z.core.$strict>>>;
+    stopReasonCode: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    authorityBoundary: z.ZodObject<{
+        adapterApplyCreatedAuthority: z.ZodLiteral<false>;
+        negotiationEvidenceCommitted: z.ZodBoolean;
+        actionContractCreated: z.ZodLiteral<false>;
+        policyEvaluated: z.ZodLiteral<false>;
+        greenlightIssued: z.ZodLiteral<false>;
+        gatewayCheckPerformed: z.ZodLiteral<false>;
+        mutationAttempted: z.ZodLiteral<false>;
+        rawTranscriptIncluded: z.ZodLiteral<false>;
+        credentialMaterialIncluded: z.ZodLiteral<false>;
+        paymentMaterialIncluded: z.ZodLiteral<false>;
+        signerMaterialIncluded: z.ZodLiteral<false>;
+    }, z.core.$strict>;
+}, z.core.$strict>;
+export type A2ANegotiationAdapterApplyResult = z.infer<typeof A2ANegotiationAdapterApplyResultSchema>;
+export type A2ANegotiationAdapterApplyTarget = {
+    recordNegotiationOffer(payload: NegotiationOffer): Promise<NegotiationOffer> | NegotiationOffer;
+    recordNegotiationDecision(payload: NegotiationDecision): Promise<NegotiationDecision> | NegotiationDecision;
+    resolveNegotiation(payload: ResolveNegotiationInput): Promise<NegotiationResolution> | NegotiationResolution;
+};
+export declare function applyA2ANegotiationAdapterMoveResult(target: A2ANegotiationAdapterApplyTarget, requestValue: A2ANegotiationAdapterApplyRequest): Promise<A2ANegotiationAdapterApplyResult>;

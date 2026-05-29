@@ -1,8 +1,8 @@
 import type { ContractStreamEvent } from "../events/schemas";
 import type { ProtocolObjectType } from "../areas/object-registry/schemas";
-export type KernelTransitionMethod = "putCatalogObject" | "registerInstallProposalCompiledRecords" | "compileIntent" | "createRuntimeExecution" | "createGeneratedExecutionGraph" | "registerGatewayCredentialRef" | "registerDelegatedAuthorityRef" | "transitionDelegatedAuthorityStatus" | "recordGatewayCustodyProofPacket" | "recordCredentialResolutionEvidence" | "createBypassProbe" | "createToolCallDraft" | "transitionToolCallDraft" | "createProtectedPathPosture" | "proposeActionContract" | "createAuthorityCertificate" | "evaluatePolicy" | "createReviewArtifact" | "createReviewDecision" | "gatewayCheck" | "reconcileSurfaceOperation" | "createIsolationState" | "createBreakerDecision" | "createReceiptExport" | "createRecoveryRecommendation" | "transitionRecoveryRecommendationStatus" | "resolveRecoveryTerminalConflictProofGap";
-export type ProtocolTransitionId = "registerToolCapability" | "registerActionType" | "registerGatewayRegistryEntry" | "registerOperatingEnvelope" | "registerInstallProposalCompiledRecords" | "compileIntent" | "createRuntimeExecution" | "createGeneratedExecutionGraph" | "registerGatewayCredentialRef" | "registerDelegatedAuthorityRef" | "transitionDelegatedAuthorityStatus" | "recordGatewayCustodyProofPacket" | "recordCredentialResolutionEvidence" | "createBypassProbe" | "createToolCallDraft" | "transitionToolCallDraft" | "createProtectedPathPosture" | "proposeActionContract" | "createAuthorityCertificate" | "evaluatePolicy" | "createReviewArtifact" | "createReviewDecision" | "gatewayCheck" | "reconcileSurfaceOperation" | "createIsolationState" | "createBreakerDecision" | "createReceiptExport" | "createRecoveryRecommendation" | "transitionRecoveryRecommendationStatus" | "resolveRecoveryTerminalConflictProofGap";
-export type ProtocolTransitionPhase = "catalog" | "install_setup" | "intent_compilation" | "runtime_evidence" | "generated_execution_graph" | "credential_custody" | "delegated_authority" | "protected_path_posture" | "action_contract" | "authority_certificate" | "policy" | "review" | "gateway" | "operation_lifecycle" | "isolation" | "receipt_export" | "recovery";
+export type KernelTransitionMethod = "putCatalogObject" | "registerInstallProposalCompiledRecords" | "compileIntent" | "createRuntimeExecution" | "createGeneratedExecutionGraph" | "registerGatewayCredentialRef" | "registerDelegatedAuthorityRef" | "transitionDelegatedAuthorityStatus" | "recordGatewayCustodyProofPacket" | "recordCredentialResolutionEvidence" | "createBypassProbe" | "createToolCallDraft" | "transitionToolCallDraft" | "createProtectedPathPosture" | "proposeActionContract" | "recordNegotiationSession" | "recordNegotiationOffer" | "recordNegotiationDecision" | "recordLinkedAgreement" | "recordAgreementObligationBinding" | "transitionAgreementStatus" | "createAuthorityCertificate" | "evaluatePolicy" | "createReviewArtifact" | "createReviewDecision" | "gatewayCheck" | "reconcileSurfaceOperation" | "createIsolationState" | "createBreakerDecision" | "createReceiptExport" | "createRecoveryRecommendation" | "transitionRecoveryRecommendationStatus" | "resolveRecoveryTerminalConflictProofGap";
+export type ProtocolTransitionId = "registerToolCapability" | "registerActionType" | "registerGatewayRegistryEntry" | "registerOperatingEnvelope" | "registerInstallProposalCompiledRecords" | "compileIntent" | "createRuntimeExecution" | "createGeneratedExecutionGraph" | "registerGatewayCredentialRef" | "registerDelegatedAuthorityRef" | "transitionDelegatedAuthorityStatus" | "recordGatewayCustodyProofPacket" | "recordCredentialResolutionEvidence" | "createBypassProbe" | "createToolCallDraft" | "transitionToolCallDraft" | "createProtectedPathPosture" | "proposeActionContract" | "recordNegotiationSession" | "recordNegotiationOffer" | "recordNegotiationDecision" | "recordLinkedAgreement" | "recordAgreementObligationBinding" | "transitionAgreementStatus" | "createAuthorityCertificate" | "evaluatePolicy" | "createReviewArtifact" | "createReviewDecision" | "gatewayCheck" | "reconcileSurfaceOperation" | "createIsolationState" | "createBreakerDecision" | "createReceiptExport" | "createRecoveryRecommendation" | "transitionRecoveryRecommendationStatus" | "resolveRecoveryTerminalConflictProofGap";
+export type ProtocolTransitionPhase = "catalog" | "install_setup" | "intent_compilation" | "runtime_evidence" | "generated_execution_graph" | "credential_custody" | "delegated_authority" | "protected_path_posture" | "action_contract" | "negotiation" | "authority_certificate" | "policy" | "review" | "gateway" | "operation_lifecycle" | "isolation" | "receipt_export" | "recovery";
 export type TransitionOutcomeClass = "recorded" | "idempotent" | "greenlight" | "refusal" | "review_required" | "proof_gap" | "replay_refusal" | "conflict" | "recovery" | "exported";
 export type ProtocolNavigationEntry = {
     transitionId: ProtocolTransitionId;
@@ -13,8 +13,11 @@ export type ProtocolNavigationEntry = {
     eventsEmitted: readonly ContractStreamEvent["eventType"][];
     authorityBoundary: string;
     evidenceObligation: string;
+    integratorParity?: boolean;
 };
+export declare const integratorParityTransitionIds: readonly ["registerToolCapability", "registerActionType", "registerGatewayRegistryEntry", "registerOperatingEnvelope", "registerInstallProposalCompiledRecords", "registerDelegatedAuthorityRef", "compileIntent", "proposeActionContract", "evaluatePolicy", "gatewayCheck", "reconcileSurfaceOperation"];
 export declare const protocolNavigation: readonly [ProtocolNavigationEntry, ProtocolNavigationEntry, ProtocolNavigationEntry, ProtocolNavigationEntry, {
+    readonly integratorParity: true;
     readonly transitionId: "registerInstallProposalCompiledRecords";
     readonly kernelMethod: "registerInstallProposalCompiledRecords";
     readonly phase: "install_setup";
@@ -24,6 +27,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "install setup evidence only";
     readonly evidenceObligation: "atomically register compiled setup records or refusal without issuing policy, greenlight, gate, credential, mutation, receipt, or certificate authority";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "compileIntent";
     readonly kernelMethod: "compileIntent";
     readonly phase: "intent_compilation";
@@ -60,6 +64,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "gateway credential custody evidence only";
     readonly evidenceObligation: "record opaque gateway credential ref without exposing secret material or minting authority";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "registerDelegatedAuthorityRef";
     readonly kernelMethod: "registerDelegatedAuthorityRef";
     readonly phase: "delegated_authority";
@@ -132,6 +137,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "protected path posture evidence only";
     readonly evidenceObligation: "record current posture consulted later by policy and gateway checks";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "proposeActionContract";
     readonly kernelMethod: "proposeActionContract";
     readonly phase: "action_contract";
@@ -140,6 +146,60 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly eventsEmitted: readonly ["action_proposed", "recovery_status_changed", "proof_gap_recorded"];
     readonly authorityBoundary: "proposed exact action only";
     readonly evidenceObligation: "bind a contractable candidate or record refusal/proof-gap evidence";
+}, {
+    readonly transitionId: "recordNegotiationSession";
+    readonly kernelMethod: "recordNegotiationSession";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["negotiation_session", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["negotiation_session_recorded"];
+    readonly authorityBoundary: "negotiation context evidence only";
+    readonly evidenceObligation: "record parties, runtime posture, assumptions, uncertainty, and imported protocol evidence without issuing policy, greenlight, gate, mutation, receipt, or certificate authority";
+}, {
+    readonly transitionId: "recordNegotiationOffer";
+    readonly kernelMethod: "recordNegotiationOffer";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["negotiation_offer", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["negotiation_offer_recorded"];
+    readonly authorityBoundary: "offer evidence only";
+    readonly evidenceObligation: "record a specific offer version and reconstruction refs without turning accepted terms into protected-action authority";
+}, {
+    readonly transitionId: "recordNegotiationDecision";
+    readonly kernelMethod: "recordNegotiationDecision";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["negotiation_decision", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["negotiation_decision_recorded"];
+    readonly authorityBoundary: "decision evidence only";
+    readonly evidenceObligation: "record accept, reject, counter, withdraw, or expire against one current offer version without issuing an action contract or greenlight";
+}, {
+    readonly transitionId: "recordLinkedAgreement";
+    readonly kernelMethod: "recordLinkedAgreement";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["linked_agreement", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["linked_agreement_recorded"];
+    readonly authorityBoundary: "accepted agreement evidence only";
+    readonly evidenceObligation: "bind the accepted decision, offer digest, accepting party, and counterparty ref without authorizing any mutation";
+}, {
+    readonly transitionId: "recordAgreementObligationBinding";
+    readonly kernelMethod: "recordAgreementObligationBinding";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["agreement_obligation_binding", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["agreement_obligation_binding_recorded"];
+    readonly authorityBoundary: "obligation-to-contract evidence only";
+    readonly evidenceObligation: "bind one active agreement obligation to one exact action contract digest, params digest, action type, resource, and counterparty before policy may consider it";
+}, {
+    readonly transitionId: "transitionAgreementStatus";
+    readonly kernelMethod: "transitionAgreementStatus";
+    readonly phase: "negotiation";
+    readonly outcomeClasses: readonly ["recorded", "conflict"];
+    readonly recordsWritten: readonly ["agreement_status_transition", "contract_stream_event"];
+    readonly eventsEmitted: readonly ["agreement_status_transition_recorded"];
+    readonly authorityBoundary: "agreement lifecycle evidence only";
+    readonly evidenceObligation: "record withdrawal, dispute, expiry, supersession, or resolution so future policy can refuse stale agreement-backed contracts";
 }, {
     readonly transitionId: "createAuthorityCertificate";
     readonly kernelMethod: "createAuthorityCertificate";
@@ -150,6 +210,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "terminal signed evidence only";
     readonly evidenceObligation: "sign canonical terminal evidence after receipt, durable refusal, proof-gap, or replay-refusal terminalization";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "evaluatePolicy";
     readonly kernelMethod: "evaluatePolicy";
     readonly phase: "policy";
@@ -177,6 +238,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "review decision evidence only";
     readonly evidenceObligation: "bind decision to the exact review artifact and policy input";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "gatewayCheck";
     readonly kernelMethod: "gatewayCheck";
     readonly phase: "gateway";
@@ -186,6 +248,7 @@ export declare const protocolNavigation: readonly [ProtocolNavigationEntry, Prot
     readonly authorityBoundary: "one exact gateway-checked mutation attempt";
     readonly evidenceObligation: "reload contract, greenlight, posture, isolation, sequence, and gateway policy before mutation";
 }, {
+    readonly integratorParity: true;
     readonly transitionId: "reconcileSurfaceOperation";
     readonly kernelMethod: "reconcileSurfaceOperation";
     readonly phase: "operation_lifecycle";

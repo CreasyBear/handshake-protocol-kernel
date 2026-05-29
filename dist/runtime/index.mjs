@@ -14749,7 +14749,54 @@ async function protectedActionParamsDigest(input) {
 function toHex(buffer) {
   return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+// src/protocol/foundation/ids.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var protocolIdSourceStorage = new AsyncLocalStorage;
+// src/adapters/http-profile/schemas.ts
+var HttpProtectedMutationProfileSchema = exports_external.strictObject({
+  targetHttpMethod: exports_external.string().min(1),
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
+
+// src/adapters/http-profile/canonicalize.ts
+function canonicalizeHttpProfile(input) {
+  const parsed = HttpProtectedMutationProfileSchema.parse(input);
+  if (parsed.dynamicEndpointConstructionObserved || parsed.dynamicHostConstructionObserved) {
+    throw new exports_external.ZodError([
+      {
+        code: "custom",
+        message: "dynamic endpoint or host construction is not allowed on protected HTTP profiles",
+        path: ["dynamicEndpointConstructionObserved"]
+      }
+    ]);
+  }
+  return {
+    ...parsed,
+    targetHttpMethod: parsed.targetHttpMethod.trim().toUpperCase(),
+    pathTemplate: parsed.pathTemplate.trim()
+  };
+}
+
 // src/adapters/auth-md/profiles.ts
+var AuthMdProtectedApiCallAllowedHttpMethodSchema = exports_external.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+var AuthMdProtectedApiCallHeaderAllowlistSchema = exports_external.array(exports_external.enum(["accept", "content-type", "authorization", "x-request-id", "x-idempotency-key"]));
+var AuthMdProtectedApiCallExactTransportSchema = exports_external.strictObject({
+  targetHttpMethod: AuthMdProtectedApiCallAllowedHttpMethodSchema,
+  endpointUrl: exports_external.string().url(),
+  pathTemplate: exports_external.string().min(1).refine((value) => value.startsWith("/"), { message: "pathTemplate must start with /" }),
+  requestBodyDigest: DigestSchema.nullable().default(null),
+  selectedHeadersDigest: DigestSchema,
+  dynamicEndpointConstructionObserved: exports_external.boolean().default(false),
+  dynamicHostConstructionObserved: exports_external.boolean().default(false),
+  retryAuthorityReuseDetected: exports_external.boolean().default(false)
+});
 var AUTH_MD_REGISTERED_CREDENTIAL_PROFILE = "auth_md_registered_credential.v0";
 var AUTH_MD_DISCOVERY_REDACTION_PROFILE = "auth-md-discovery:v0-redacted";
 var AUTH_MD_REGISTRATION_REDACTION_PROFILE = "auth-md-registration:v0-redacted";
@@ -15211,6 +15258,15 @@ var AuthMdProtectedApiCallRuntimeConfigSchema = exports_external.strictObject({
   contractExpiresAt: exports_external.string().datetime({ offset: true }),
   signingSecret: exports_external.string().min(1).optional()
 });
+async function buildAuthMdProtectedApiCallCompileIntentInput(configValue, attemptValue) {
+  const config2 = AuthMdProtectedApiCallRuntimeConfigSchema.parse(configValue);
+  const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
+  const refusalReasonCodes = authMdProtectedApiCallRefusalReasonCodes(attempt);
+  if (refusalReasonCodes.length > 0) {
+    throw new Error(`auth.md protected API call refused before compilation: ${refusalReasonCodes.join(",")}`);
+  }
+  return buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, attempt);
+}
 async function buildAuthMdProtectedApiCallCompileIntentInputForRuntimeRefusal(configValue, attemptValue) {
   const config2 = AuthMdProtectedApiCallRuntimeConfigSchema.parse(configValue);
   const attempt = AuthMdProtectedApiCallAttemptSchema.parse(attemptValue);
@@ -15250,6 +15306,19 @@ async function buildAuthMdProtectedApiCallCompileIntentInputUnchecked(config2, a
     dynamicHostConstructionObserved: attempt.dynamicHostConstructionObserved,
     retryAuthorityReuseDetected: attempt.retryAuthorityReuseDetected
   });
+  const refusalReasonCodes = authMdProtectedApiCallRefusalReasonCodes(attempt);
+  if (refusalReasonCodes.length === 0) {
+    canonicalizeHttpProfile({
+      targetHttpMethod: parameters.targetHttpMethod,
+      endpointUrl: parameters.endpointUrl,
+      pathTemplate: parameters.pathTemplate,
+      requestBodyDigest: parameters.requestBodyDigest,
+      selectedHeadersDigest: parameters.selectedHeadersDigest,
+      dynamicEndpointConstructionObserved: parameters.dynamicEndpointConstructionObserved,
+      dynamicHostConstructionObserved: parameters.dynamicHostConstructionObserved,
+      retryAuthorityReuseDetected: parameters.retryAuthorityReuseDetected
+    });
+  }
   const idempotencyDigest = await digestCanonical({
     profile: AUTH_MD_PROTECTED_API_CALL_PROFILE,
     protectedResource: attempt.protectedResource,
@@ -15744,7 +15813,7 @@ var InstallProposalBypassProbePlanItemSchema = exports_external.strictObject({
 var InstallProposalCompiledKernelRecordsSchema = exports_external.strictObject({
   toolCapability: ToolCapabilitySchema,
   actionType: ActionTypeSchema,
-  gatewayRegistryEntry: GatewayRegistryEntrySchema,
+  gatewayRegistryEntry: GatewayRegistryEntrySchema.nullable(),
   operatingEnvelope: OperatingEnvelopeSchema
 });
 var InstallProposalSchema = exports_external.strictObject({
@@ -15913,7 +15982,8 @@ var X402PaymentAttemptSchema = exports_external.strictObject({
   sdkPackageVersions: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
   extensionKeys: exports_external.array(exports_external.string().min(1)).default([]),
   sequenceNumber: exports_external.number().int().nonnegative().default(1),
-  requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([])
+  requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema.default({})
 });
 var X402PaymentRuntimeConfigSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -16081,6 +16151,7 @@ async function buildX402PaymentCompileIntentInputUnchecked(runtimeConfig, attemp
         ...runtimeConfig.gatewayCredentialBinding.evidenceExpectationRefs,
         ...runtimeConfig.delegatedAuthorityBinding.evidenceExpectationRefs
       ]),
+      clearingEvidenceRefs: attempt.clearingEvidenceRefs,
       bounds: {
         endpointDomain,
         payee: attempt.payee,
@@ -16307,7 +16378,9 @@ async function buildCompileIntentInputForDispatch(config2, block, dispatch, sequ
     return buildPackageInstallCompileIntentInput(requirePackageInstallConfig(config2), packageInstallToolCallForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds));
   }
   if (isAuthMdProtectedApiCallDispatch(dispatch)) {
-    return buildAuthMdProtectedApiCallCompileIntentInputForRuntimeRefusal(requireAuthMdProtectedApiCallConfig(config2), authMdProtectedApiCallAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds));
+    const attempt2 = authMdProtectedApiCallAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds);
+    const buildAuthMdCompileInput = authMdProtectedApiCallRefusalReasonCodes(attempt2).length > 0 ? buildAuthMdProtectedApiCallCompileIntentInputForRuntimeRefusal : buildAuthMdProtectedApiCallCompileIntentInput;
+    return buildAuthMdCompileInput(requireAuthMdProtectedApiCallConfig(config2), attempt2);
   }
   const attempt = x402PaymentAttemptForDispatch(block, dispatch, sequenceNumber, graphRefs, requiredPriorActionContractIds);
   const buildX402CompileInput = x402DispatchRefusalReasonCodes(dispatch).length > 0 ? buildX402PaymentCompileIntentInputForRuntimeRefusal : buildX402PaymentCompileIntentInput;
@@ -16728,6 +16801,7 @@ var RuntimeIngressProposalInputSchema = exports_external.strictObject({
 });
 async function proposeRuntimeIngressActionContracts(protocol, config2, blockValue) {
   const block = RuntimeIngressDispatchBlockSchema.parse(blockValue);
+  assertRuntimeIngressSameEnvelope(config2, block);
   const runtimeExecution = await protocol.createRuntimeExecution(await buildRuntimeIngressExecutionInput(config2, block));
   const graph = await protocol.createGeneratedExecutionGraph(await buildRuntimeIngressGraphInput(config2, block, runtimeExecution), runtimeIngressGraphIssuerContext(config2, block, runtimeExecution));
   const proposals = [];
@@ -17008,6 +17082,47 @@ function unsupportedReasonCodesForDispatch(dispatch) {
 }
 function runtimeIngressDispatchRefusalReasonCodes(block) {
   return unique4(block.dispatches.flatMap((dispatch) => dispatchSpecificRefusalReasonCodes(dispatch)));
+}
+var runtimeIngressSameEnvelopeFields = [
+  "tenantId",
+  "organizationId",
+  "principalId",
+  "agentId",
+  "runId",
+  "runtimeAdapterId",
+  "operatingEnvelopeId",
+  "gatewayRegistryRef"
+];
+function assertRuntimeIngressSameEnvelope(config2, block) {
+  const familyConfigs = uniqueRuntimeIngressFamilyConfigs(config2, block);
+  if (familyConfigs.length <= 1)
+    return;
+  const base = familyConfigs[0];
+  if (!base)
+    return;
+  for (const candidate of familyConfigs.slice(1)) {
+    for (const field of runtimeIngressSameEnvelopeFields) {
+      if (candidate.config[field] !== base.config[field]) {
+        throw new Error([
+          "Runtime ingress mixed-family dispatch block requires one same-envelope projection.",
+          `${candidate.familyId} config ${field} does not match ${base.familyId}.`,
+          "Split the generated execution block into separate protected-action proposals or align the execution envelope before projection."
+        ].join(" "));
+      }
+    }
+  }
+}
+function uniqueRuntimeIngressFamilyConfigs(config2, block) {
+  const familyConfigs = new Map;
+  for (const dispatch of block.dispatches) {
+    const familyId = runtimeIngressFamilyIdForDispatchKind(dispatch.dispatchKind);
+    if (!familyId)
+      throw new Error(`Runtime ingress dispatch family is not registered: ${dispatch.dispatchKind}`);
+    if (!familyConfigs.has(familyId)) {
+      familyConfigs.set(familyId, runtimeConfigForDispatch(config2, dispatch));
+    }
+  }
+  return [...familyConfigs].map(([familyId, familyConfig]) => ({ familyId, config: familyConfig }));
 }
 async function createFinalizedToolCallDraft(protocol, compileInput) {
   const opened = await protocol.createToolCallDraft({

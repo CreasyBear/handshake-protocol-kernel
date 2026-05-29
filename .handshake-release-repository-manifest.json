@@ -1,15 +1,15 @@
 {
   "manifestKind": "handshake.release_repository_artifact_projection",
   "manifestVersion": "v1",
-  "generatedAt": "2026-05-25T07:04:04.862Z",
+  "generatedAt": "2026-05-29T14:33:47.948Z",
   "repositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel",
   "package": {
     "name": "handshake-protocol-kernel",
-    "version": "0.2.7",
+    "version": "0.2.8",
     "mcpName": "io.github.CreasyBear/handshake-protocol-kernel",
     "repositoryUrl": "git+https://github.com/CreasyBear/handshake-protocol-kernel.git",
     "serverJsonName": "io.github.CreasyBear/handshake-protocol-kernel",
-    "serverJsonVersion": "0.2.7",
+    "serverJsonVersion": "0.2.8",
     "serverJsonRepositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel"
   },
   "authorityBoundary": {
@@ -44,8 +44,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "10c84ebb59d9652933c5bc8a9b7c767611037d381c448f1ede16445ebe94d613",
-      "sizeBytes": 4414,
+      "sha256": "d41308a38cc6f54c423cd57b85d0cbdb813a9ef2a9f3ba79707151244ffeefff",
+      "sizeBytes": 6649,
       "executable": false
     },
     {
@@ -56,14 +56,20 @@
     },
     {
       "path": "dist/adapter-sdk/index.mjs",
-      "sha256": "3263cd66fef8ea06812fffd8a1f056b0d7f32fdedbefbd6fd2d1eb456e036bd4",
-      "sizeBytes": 526708,
+      "sha256": "411bcc6b156316880552602689b432fbe199a653b226d2bd2163f395fe780ff9",
+      "sizeBytes": 526860,
       "executable": false
     },
     {
       "path": "dist/adapters/auth-md-x402-interlock/index.d.ts",
       "sha256": "aa7bcbd4200300b7b13990b29f00dc93b580b839622fbfec15d884eed9a0487b",
       "sizeBytes": 26,
+      "executable": false
+    },
+    {
+      "path": "dist/adapters/auth-md-x402-interlock/index.mjs",
+      "sha256": "bf3761facaab0b62a4d5ea037a4d0c506a863c5f852f65e86e55ef5b4d072bc2",
+      "sizeBytes": 499641,
       "executable": false
     },
     {
@@ -86,8 +92,8 @@
     },
     {
       "path": "dist/adapters/auth-md/gateway.d.ts",
-      "sha256": "8eacb471a7c1fad476cab16c4fcc2eca9ee1e5d264a4b149c1d0599273df12f9",
-      "sizeBytes": 4313,
+      "sha256": "6ddf5275f943ff7a718228330f725349156afb5107e04d29c6b6e63dfde24a1a",
+      "sizeBytes": 4882,
       "executable": false
     },
     {
@@ -98,8 +104,8 @@
     },
     {
       "path": "dist/adapters/auth-md/profiles.d.ts",
-      "sha256": "1a7f8094ebcaf169ea145d3edbe9ff1d75fb49d3ba9a84a074fbbd3060f98719",
-      "sizeBytes": 32246,
+      "sha256": "c4e551d5fb11bb357debd404e60b9d646d5567d4da08c1ef946d3bdd0e49e8ec",
+      "sizeBytes": 33939,
       "executable": false
     },
     {
@@ -112,6 +118,30 @@
       "path": "dist/adapters/downstream-failure-evidence.d.ts",
       "sha256": "0fe61c217efede62ae36955abfda82be3efd5438de24bc274eca4b007d2bf06c",
       "sizeBytes": 553,
+      "executable": false
+    },
+    {
+      "path": "dist/adapters/http-profile/canonicalize.d.ts",
+      "sha256": "fc6fda1cecf86cb4c798d453ee74576c7c9749e45100f17ed674f6868bc22dfd",
+      "sizeBytes": 179,
+      "executable": false
+    },
+    {
+      "path": "dist/adapters/http-profile/generic-gateway-skeleton.d.ts",
+      "sha256": "f8216fb80caba0077d35f722880a5f65e56dd6853a6bfd7584d13340a2a21296",
+      "sizeBytes": 401,
+      "executable": false
+    },
+    {
+      "path": "dist/adapters/http-profile/index.d.ts",
+      "sha256": "1ce3eb17ce2197774f14cdb6de480b9eda44b334e9af12c84479e9e5219cca07",
+      "sizeBytes": 327,
+      "executable": false
+    },
+    {
+      "path": "dist/adapters/http-profile/schemas.d.ts",
+      "sha256": "b74f233668393cbc3735a61a6513c1b6154c28bd64585727cc76e3da55b68191",
+      "sizeBytes": 607,
       "executable": false
     },
     {
@@ -170,8 +200,8 @@
     },
     {
       "path": "dist/adapters/x402-payment/action-proposal.d.ts",
-      "sha256": "a1973fafbae9ebc6cfab5014e8d6217fcbc78b68ff4f049e214c9442a536bf11",
-      "sizeBytes": 7927,
+      "sha256": "c0dfd02493a0aadca4014d8dcbdbcaf970c91ff3b8e91b271b6d3e2a607618f7",
+      "sizeBytes": 8175,
       "executable": false
     },
     {
@@ -194,8 +224,8 @@
     },
     {
       "path": "dist/adapters/x402-payment/install-proposal.d.ts",
-      "sha256": "00d6fe91743fbb6db1924172b12b4774485ec1755c8f10d20c7bf3f330dd53c3",
-      "sizeBytes": 17045,
+      "sha256": "6d11000aa86074365b4f9fc80fe4f106588674470f490ab3fba73a2f3148b78f",
+      "sizeBytes": 17060,
       "executable": false
     },
     {
@@ -266,8 +296,8 @@
     },
     {
       "path": "dist/adapters/x402-payment/wallet-gateway.d.ts",
-      "sha256": "91016f3d4a01667640ec74caf7855f1d2bf8e41eca65d62709220a513f4f9a9f",
-      "sizeBytes": 7402,
+      "sha256": "18cf429e79e94dfbca210b30b6ef9b01bf1574467ea3bd77318ce398521045c9",
+      "sizeBytes": 8135,
       "executable": false
     },
     {
@@ -278,14 +308,14 @@
     },
     {
       "path": "dist/bin/handshake-mcp.mjs",
-      "sha256": "e8db6f3518ca2f507a6cd2ef4708f49c8ea73a20b88b2b58e20ecf8cb67e25de",
-      "sizeBytes": 899335,
+      "sha256": "4a59889bcffbf653a139bffe2c37276557d30e3ef6dff03367f4132ae8c6cbf9",
+      "sizeBytes": 950367,
       "executable": false
     },
     {
       "path": "dist/bin/handshake.mjs",
-      "sha256": "b1c08eba7b295c19d7d0acb7a2bcfab711401492ca189bbe25a17396826805a0",
-      "sizeBytes": 741127,
+      "sha256": "825685f5765f29b33690018e4553f7addd614663369445d7a8a0cf1602d1775a",
+      "sizeBytes": 1539024,
       "executable": false
     },
     {
@@ -302,8 +332,8 @@
     },
     {
       "path": "dist/cli/command-manifest.d.ts",
-      "sha256": "bf789893418feef50b69a393084898facb6e1cdf30cbe64b46a3e3c0d7e6b382",
-      "sizeBytes": 12170,
+      "sha256": "123d772957ce7a84bd9220bb73a95f9c6d92ff526889c8bfda0d7bfe81754801",
+      "sizeBytes": 20935,
       "executable": false
     },
     {
@@ -313,15 +343,39 @@
       "executable": false
     },
     {
+      "path": "dist/cli/demo/x402.d.ts",
+      "sha256": "0d02e22b7801f02757a6c84da1a6e6f3e864b080351bf67a08c5d98b9331da88",
+      "sizeBytes": 1410,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/evidence/fetch.d.ts",
+      "sha256": "18c69da7c52a43f59d1ce65a3ea9a2203d7101f0f7176c4787719a87a24e5c2a",
+      "sizeBytes": 13016,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/evidence/operation-readback-view.d.ts",
+      "sha256": "6851e1d09753067f99d77fea57ae194533b1178b77e975b1a230a9edbdf8b26b",
+      "sizeBytes": 1782,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/host/doctor.d.ts",
+      "sha256": "516727fe103cc5a737e80c553c6f0ce77b8696d7d4206a96554ac57f3d14cea1",
+      "sizeBytes": 1243,
+      "executable": false
+    },
+    {
       "path": "dist/cli/index.d.ts",
-      "sha256": "3a6e42892db10e413d948117429d5b67937cf5ed8c59cdd5cf63f87acdf03144",
-      "sizeBytes": 940,
+      "sha256": "231040da57afee1b81b4edd9485a2fe15a0b3e5a933bd0d2e80d879332e1a432",
+      "sizeBytes": 1312,
       "executable": false
     },
     {
       "path": "dist/cli/index.mjs",
-      "sha256": "6c8abfa0082e5b86935ff442a088a4491eed06ce2423239d8283433e25c9159f",
-      "sizeBytes": 740140,
+      "sha256": "4a3f8e7995ec99926a41a722c36645bfb48516ab6dcea0d9a0fc62cb350c5205",
+      "sizeBytes": 1538222,
       "executable": false
     },
     {
@@ -338,20 +392,74 @@
     },
     {
       "path": "dist/cli/main.d.ts",
-      "sha256": "6c5b2c81ef6516180f3dba68ba3b7ee9ffa8353a4539fd2ac45ef259fe1ee72a",
-      "sizeBytes": 1014,
+      "sha256": "90e57806fcd7e0b096bc55c50d77a7e7bc9a2048c6181a0456e1f2f43018caf1",
+      "sizeBytes": 1144,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/mcp/doctor.d.ts",
+      "sha256": "6ea1a4bed3e0b406f40cf87131a94c6aeb82b1ea7902aff5f66f919af21fc405",
+      "sizeBytes": 1242,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/operation-readback-view.d.ts",
+      "sha256": "7aaa9a45795688974bbed284f320323b64408abaa634c1a47cca79a160b0b020",
+      "sizeBytes": 2237,
       "executable": false
     },
     {
       "path": "dist/cli/output.d.ts",
-      "sha256": "3370e97f9f32bb0ca3b18ac9b81bc17140c5691685f7c6b15d36786a8da641b7",
-      "sizeBytes": 2294,
+      "sha256": "c5cbc3873ddee303cdd833182868b9a160995dabd07d2b70a8c23b9a42bdcd55",
+      "sizeBytes": 2344,
       "executable": false
     },
     {
       "path": "dist/cli/projection-evidence.d.ts",
-      "sha256": "f5367f3cad54012aea17bd717485c0c9ae33a6127cba1a3b2ddee0599b66598e",
-      "sizeBytes": 7780,
+      "sha256": "0099ec567b80ca53872bb52ff0c9d81d89a501d9f301d28065f135c0a91e6abf",
+      "sizeBytes": 7991,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/quality/report.d.ts",
+      "sha256": "3056b5963813ebeb8dceb91613f1e6950d7a3229d56cd75b0e06ce693316c7ef",
+      "sizeBytes": 1003,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/quickstart/agent-spine.d.ts",
+      "sha256": "70f91daf976743c67f5b7b11486eb708346807be268f82de8644c4f5a9c94afc",
+      "sizeBytes": 354,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/quickstart/x402.d.ts",
+      "sha256": "7895e24a7612fe580a980785557cdf93499ea1a2f6bcb78fbcc97815bf6bd3cc",
+      "sizeBytes": 489,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/service-operator/bootstrap.d.ts",
+      "sha256": "632a2cb26aad5f061a44aface296b0420ba47e9c8d7d6eb12f768d4979921c1b",
+      "sizeBytes": 1845,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/service/bootstrap.d.ts",
+      "sha256": "c42d444de9023a9af75c574ec17415a5cf47a4461fa988800dffbdc455a87126",
+      "sizeBytes": 1451,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/simulate/x402-payment.d.ts",
+      "sha256": "937871450bdacee4787bb52822aea2c49db95bbd47015c5d7d627b2916961639",
+      "sizeBytes": 238,
+      "executable": false
+    },
+    {
+      "path": "dist/cli/state/inspect.d.ts",
+      "sha256": "43e85063b03c66deaf85eb846297472fdd2d807b8343d20b6966e184339d0670",
+      "sizeBytes": 6656,
       "executable": false
     },
     {
@@ -373,6 +481,12 @@
       "executable": false
     },
     {
+      "path": "dist/cli/x402/readiness.d.ts",
+      "sha256": "a18c54fa4869d85a9f1313aa6b16b1685915020c125b0971f23255c1d02c16a6",
+      "sizeBytes": 2427,
+      "executable": false
+    },
+    {
       "path": "dist/conformance/index.d.ts",
       "sha256": "b69a0ccc313c3ea60e426ccddff43bb089ab53318e0ff123003f2c7fd51cc553",
       "sizeBytes": 1944,
@@ -380,8 +494,8 @@
     },
     {
       "path": "dist/conformance/index.mjs",
-      "sha256": "35920c0ab1fea0b1a941e3c48105b0d67e2511db0229954c1fcddac3eed31529",
-      "sizeBytes": 643064,
+      "sha256": "05747112455c1ee1bd4883d777da2708e9e82fb16b3c754f5b0fe6d28cd0428e",
+      "sizeBytes": 664081,
       "executable": false
     },
     {
@@ -398,8 +512,44 @@
     },
     {
       "path": "dist/experimental.mjs",
-      "sha256": "c1006c582849c2378c24f2244489b50e708356c35de7905c0db8bf1d0b2b82e1",
-      "sizeBytes": 838360,
+      "sha256": "9e2d814ba507be9063ab75ae060ad407a789b2233beabad499941be6de266af8",
+      "sizeBytes": 867978,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/hosted-admission-config.d.ts",
+      "sha256": "225e2347f0aa3ce9621ad769cdac12032a81c0c6acead38ccc4e8d5fdb59c614",
+      "sizeBytes": 15717,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/hosted-caller-identity.d.ts",
+      "sha256": "1d5867bc629ee181333683f6d731449daa4d277baacee6872aea01f878c25814",
+      "sizeBytes": 6718,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/hosted-verifier-adapter.d.ts",
+      "sha256": "82fe46dc2080c40a032b7032358fd3d69f420ae5fe7ad301d8caac7bffe942f4",
+      "sizeBytes": 5086,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/index.d.ts",
+      "sha256": "9ae9e5cfe34f643a68e877f8127f387af760dda2e6fa01c644d91ba201fcdc31",
+      "sizeBytes": 1954,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/index.mjs",
+      "sha256": "5683c7dd403310adbcdb08fd1ecaef74385cf73f64428633ef54f531d4c251f1",
+      "sizeBytes": 722572,
+      "executable": false
+    },
+    {
+      "path": "dist/hosted-admission/roles.d.ts",
+      "sha256": "d4385f3fdd31e8b99c926ae4f392a42b56c9fedb1ba2a23248ba22fa94285bc9",
+      "sizeBytes": 112,
       "executable": false
     },
     {
@@ -410,14 +560,20 @@
     },
     {
       "path": "dist/http/admission/hosted-admission-config.d.ts",
-      "sha256": "ff223ee1742a6acb2167b42bcf4b656211c9fa862f09b1973fb955a6c6b8f278",
-      "sizeBytes": 15226,
+      "sha256": "6e2e9dfbb5838aaa7eb6d7e9d5a9c01a5f032b2bbd2e4421d69fd02cd38a8a51",
+      "sizeBytes": 64,
       "executable": false
     },
     {
       "path": "dist/http/admission/hosted-caller-identity.d.ts",
-      "sha256": "ec98205a336ad1aadfbea2b32311ccba031b29d71f5a464677709d5b41ce651a",
-      "sizeBytes": 2881,
+      "sha256": "a5c5092f93605fe3039751ecdeb33554e8c8dad4ad3db023d95a1c6105b51c99",
+      "sizeBytes": 63,
+      "executable": false
+    },
+    {
+      "path": "dist/http/admission/hosted-verifier-adapter.d.ts",
+      "sha256": "927440a852f73e3c0b791775fbf3fd30a27e843d3422d1cb6ffbcf1b1f929ad3",
+      "sizeBytes": 64,
       "executable": false
     },
     {
@@ -430,6 +586,12 @@
       "path": "dist/http/admission/request-context.d.ts",
       "sha256": "e324a6df75300e24af5d6113a2824d10435ddac63f1582ad7a98e8362b6273de",
       "sizeBytes": 1071,
+      "executable": false
+    },
+    {
+      "path": "dist/http/admission/transition-sequence-matrix.d.ts",
+      "sha256": "9b9a850b3bdf4373dfe898edf5c817ea9d7a854ec72bb54b3d1df79075c5c8d2",
+      "sizeBytes": 1030,
       "executable": false
     },
     {
@@ -446,8 +608,8 @@
     },
     {
       "path": "dist/http/errors/codes.d.ts",
-      "sha256": "59f2d1138d277d9f60db33d85de01d07efbe83040f900458ca12384bd29d9956",
-      "sizeBytes": 1943,
+      "sha256": "ac40fac98762f611d7ffd9ea09686c2a356e6f88a01f1631c500d1e64f9b74ae",
+      "sizeBytes": 2093,
       "executable": false
     },
     {
@@ -458,8 +620,8 @@
     },
     {
       "path": "dist/http/errors/transition-error-envelope.d.ts",
-      "sha256": "d6eb5c877561511e38469bb75325473f1773ba176a0a5df32165e218ba4b690d",
-      "sizeBytes": 3634,
+      "sha256": "9e6ab55769db1a39cbae845e4b393fe5e3d9c8d009ab7cbc227ecb75f4a119c9",
+      "sizeBytes": 5875,
       "executable": false
     },
     {
@@ -475,6 +637,12 @@
       "executable": false
     },
     {
+      "path": "dist/http/handlers/hosted-record-scope.d.ts",
+      "sha256": "f4d6e09c65c14a00edf5ffdaa57e290690a2dd49f79fecde6e414e2888e2ace0",
+      "sizeBytes": 484,
+      "executable": false
+    },
+    {
       "path": "dist/http/handlers/index.d.ts",
       "sha256": "edd98d2a3e4dfbbcd73f8cb0479cc2f102013aafcb49222c2b23169c2a9f00be",
       "sizeBytes": 109,
@@ -487,15 +655,33 @@
       "executable": false
     },
     {
+      "path": "dist/http/handlers/raw-read-audit.d.ts",
+      "sha256": "58d613fb088c299b24159f74430afe6cd6798c3f790f529bd7e8e9c8c9c82652",
+      "sizeBytes": 4854,
+      "executable": false
+    },
+    {
+      "path": "dist/http/handlers/scoped-evidence-record.d.ts",
+      "sha256": "ae236d2e8b6e076780ce1bd4ec80fb798eccdfdf592a6322431fb1f70afad76f",
+      "sizeBytes": 1330,
+      "executable": false
+    },
+    {
       "path": "dist/http/handlers/verifier.d.ts",
       "sha256": "a32d183a3e661a78a5da126c39690daa2bb0b86aa69f910d384353cc896ab1cd",
       "sizeBytes": 730,
       "executable": false
     },
     {
+      "path": "dist/http/mutation-route-manifest.d.ts",
+      "sha256": "5c46aef94fbed87453a712d35fd8dce1d118046b779ace4ffb4f229d8679ef5e",
+      "sizeBytes": 2643,
+      "executable": false
+    },
+    {
       "path": "dist/http/navigation/index.d.ts",
-      "sha256": "763295cc25d2a83f271995fd3a98f87536eca28409a8e00f24c6fe85635293fd",
-      "sizeBytes": 4899,
+      "sha256": "1710081d8d836629618683c5762989e2a991f7d360d3dcf9518524cfa4b8a0e8",
+      "sizeBytes": 5360,
       "executable": false
     },
     {
@@ -506,8 +692,8 @@
     },
     {
       "path": "dist/http/routes/evidence-read-route-registry.d.ts",
-      "sha256": "a61354c03a4e81bf44b2a1c65a8fe9359a80f0ff6f5f5b190f93b72ce0e43bf4",
-      "sizeBytes": 38467,
+      "sha256": "7bd5d0ba5cff9c85f76c1f7395a6fe55080a397bc81f7c9eaef9c4bf1b900acb",
+      "sizeBytes": 52842,
       "executable": false
     },
     {
@@ -518,13 +704,13 @@
     },
     {
       "path": "dist/http/routes/transition-invokers.d.ts",
-      "sha256": "1131b576e2553c1a2f68a8b12af6458147e2b4544a5b81ec492464fe98c142b6",
-      "sizeBytes": 42176,
+      "sha256": "1f9c71f4beaaae220a45a6c6ddea3d18affb969ac68d473e2e6da5ccaa18107c",
+      "sizeBytes": 42183,
       "executable": false
     },
     {
       "path": "dist/http/routes/transition-response-schemas.d.ts",
-      "sha256": "d32c8aa7c21e92ee3d3e605d3a6755ff7267ff376080c9812cbb2b38ab93c7a8",
+      "sha256": "ff3a04ab6ccfdd6707404cb55149bffd21fb92ad526e65ae0d0382e069b1ed51",
       "sizeBytes": 107700,
       "executable": false
     },
@@ -554,14 +740,14 @@
     },
     {
       "path": "dist/index.d.ts",
-      "sha256": "1b90c517f93b95aaa666202dec13fdfc0369aca5b33e464f32272e5c1e0eea14",
-      "sizeBytes": 1765,
+      "sha256": "3146cd1d884376327f9f2c0d15200dee4c7477b4d23a80d6d23e6a0d8ccbf865",
+      "sizeBytes": 2207,
       "executable": false
     },
     {
       "path": "dist/index.mjs",
-      "sha256": "85bde879bb70fcf5e825dc6cc46d7c774dcfeb90eed4d9c5b32c56f09931f9a9",
-      "sizeBytes": 1292772,
+      "sha256": "7f8e7d2b7e2ab311e5a623facfc7dc9d90bf9f1b35d8eb4fd5f570e65f308c85",
+      "sizeBytes": 1433880,
       "executable": false
     },
     {
@@ -572,8 +758,8 @@
     },
     {
       "path": "dist/install/install-proposal/index.d.ts",
-      "sha256": "e0a6d0071966d02bb109bde3dafd8a38fb70b3d464f88f2ba658f55675ee7cb0",
-      "sizeBytes": 17059,
+      "sha256": "d3f546aeca540277b0f25e59a34a2c1b91386a22666bea072fd4e0f0f6099668",
+      "sizeBytes": 17237,
       "executable": false
     },
     {
@@ -584,8 +770,8 @@
     },
     {
       "path": "dist/mcp/catalog.d.ts",
-      "sha256": "b13c622c911f5086c9f73044d95aaac8e4b4977e31463514ee01bc5767d55402",
-      "sizeBytes": 24063,
+      "sha256": "264959dad5b140b84c51b702de6d9d2abf2bc3310b65fcf9d1b86129dd815661",
+      "sizeBytes": 25649,
       "executable": false
     },
     {
@@ -596,20 +782,20 @@
     },
     {
       "path": "dist/mcp/index.d.ts",
-      "sha256": "3188af4dbeefbafe847e07fb2eb76a4ed7d2c3424bc73a52d560a56f46d00639",
-      "sizeBytes": 750,
+      "sha256": "61f4fc80aff9de07e7ba353741824151051b759d8441588cdad6d94977706fd0",
+      "sizeBytes": 779,
       "executable": false
     },
     {
       "path": "dist/mcp/index.mjs",
-      "sha256": "66dd5654e235d60af75826fda309d737a0d4c64f9ab00aa9d08119385a4eafd7",
-      "sizeBytes": 560574,
+      "sha256": "2697e9b7bc31604fdde5296710d79d4faacba427df35ef1b36393db3c89f60b7",
+      "sizeBytes": 611736,
       "executable": false
     },
     {
       "path": "dist/mcp/output.d.ts",
-      "sha256": "a81af2e308029d41c9c78aa672f1ceb7a277a27d8a1f335a6765bfdfc82dc027",
-      "sizeBytes": 13590,
+      "sha256": "04093f10176250c127656d9bec54550bb102f39dbe1bbf647f655e2e8a97a17e",
+      "sizeBytes": 14208,
       "executable": false
     },
     {
@@ -626,8 +812,8 @@
     },
     {
       "path": "dist/mcp/resources.d.ts",
-      "sha256": "8a88b2e9d353d69a9f32ea367b8280144e033af9fb36f3124c602b4f19784ad0",
-      "sizeBytes": 1992,
+      "sha256": "d10cc57286df13d7f18602031429d73dc5093f98681ac7aaa4e460a6ee79e70c",
+      "sizeBytes": 2287,
       "executable": false
     },
     {
@@ -650,8 +836,8 @@
     },
     {
       "path": "dist/mcp/x402-proposal.d.ts",
-      "sha256": "0a58a35f60d49c22e573d98177a189db5c6fab0ff242b0fc03a4c591337a16ec",
-      "sizeBytes": 4542,
+      "sha256": "9154e3e47e1218fdb226996024ef512102b98681baf680ff2af93cd8cbdc2911",
+      "sizeBytes": 4846,
       "executable": false
     },
     {
@@ -668,8 +854,8 @@
     },
     {
       "path": "dist/protocol/areas/action-attempt-lifecycle/schemas.d.ts",
-      "sha256": "6ff8543b4eeedf652aab7742bce87f20b712ff1ced9ac050476b2fbe1171dc47",
-      "sizeBytes": 7175,
+      "sha256": "550e3e02cde26531a59ff059e5e7c879938d4e43a3aece1e4c973dc5bccabb10",
+      "sizeBytes": 7451,
       "executable": false
     },
     {
@@ -734,7 +920,7 @@
     },
     {
       "path": "dist/protocol/areas/authority-certificate/schemas.d.ts",
-      "sha256": "63570e3f35ec851095dd2d879396798e73280d39fea9c148b29623eddf986777",
+      "sha256": "a38194472a0bb5b28107142ed77c025f9070c7cf462bee08471b08a3da23446a",
       "sizeBytes": 45168,
       "executable": false
     },
@@ -980,8 +1166,8 @@
     },
     {
       "path": "dist/protocol/areas/idempotency-ledger/entries.d.ts",
-      "sha256": "b5417ee52e41c04c1fd5cdd355f6d0d739f2bb2e86518b7b441d8e0af209653c",
-      "sizeBytes": 2271,
+      "sha256": "606ad152f4ef8a01bfc82025a2be0ca86e8aa5869dd40f2a133a34a140c8a9b1",
+      "sizeBytes": 2371,
       "executable": false
     },
     {
@@ -1016,14 +1202,14 @@
     },
     {
       "path": "dist/protocol/areas/install-setup/inputs.d.ts",
-      "sha256": "4521e08b8031247a682b322351b58b3088b3227b963a96ad6e7bd2b50d5c5faf",
-      "sizeBytes": 9141,
+      "sha256": "f0adf79599fcb4e72fa21fd1ccaded2374dee407b7e582be95de15152b94f951",
+      "sizeBytes": 9156,
       "executable": false
     },
     {
       "path": "dist/protocol/areas/install-setup/schemas.d.ts",
-      "sha256": "58ec984912267678055ae599d9255e4bd128f088f4648b72e0eb90ca68d3c580",
-      "sizeBytes": 22230,
+      "sha256": "a671ccafab33eafd58664a8a8eba99fab58826d8200203d0d063f4f6ec735608",
+      "sizeBytes": 22260,
       "executable": false
     },
     {
@@ -1088,7 +1274,7 @@
     },
     {
       "path": "dist/protocol/areas/isolation-breaker/inputs.d.ts",
-      "sha256": "2101e8f7635c532b377413934762071cc074567e52b1a7b040c3fce3a534d9bb",
+      "sha256": "e33de0b583a8155c94dc92c30372e7ad30b3ae8b0e10e5d62a6df4317bf7abb2",
       "sizeBytes": 3277,
       "executable": false
     },
@@ -1100,7 +1286,7 @@
     },
     {
       "path": "dist/protocol/areas/isolation-breaker/schemas.d.ts",
-      "sha256": "cdb6052ab6f47039bbca77c4a49d0882b5c1fe447a6e0fe33c563213376257bb",
+      "sha256": "992b378efb3cf71cb6e2726759471b516008cec9c549320d4bbc385c44bfbde5",
       "sizeBytes": 4299,
       "executable": false
     },
@@ -1111,15 +1297,51 @@
       "executable": false
     },
     {
+      "path": "dist/protocol/areas/negotiation/index.d.ts",
+      "sha256": "ee8138ed1376daa215f3f833e97c744db2970553daf7b082396adc9c36838501",
+      "sizeBytes": 110,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/negotiation/inputs.d.ts",
+      "sha256": "7ac62359055b9909f65fa8274505be3cf7850fa3b859abfe16318973a083cd58",
+      "sizeBytes": 441,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/negotiation/policy.d.ts",
+      "sha256": "fcb1eef42b23dc80227fac79ede4cc5d0d927d590d0e46101232b23e6f426a0a",
+      "sizeBytes": 1137,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/negotiation/schemas.d.ts",
+      "sha256": "069db1b72c2676425c687b0b99cafdf0bf72d03672e76decdc5affdafa3d9353",
+      "sizeBytes": 13221,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/negotiation/transitions.d.ts",
+      "sha256": "4e22a2641f7d8bf2682eb002673e69f3ab8c162b0fdeab23c1630a0c04e16970",
+      "sizeBytes": 1514,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/negotiation/types.d.ts",
+      "sha256": "6ffcf8467034896c698ba6885fc6b71ed16077816aa7d71eb84131adb6758b83",
+      "sizeBytes": 99,
+      "executable": false
+    },
+    {
       "path": "dist/protocol/areas/object-registry/index.d.ts",
-      "sha256": "f04ca2aa0e4cd5864934380bad5d6da2822f75c1368c86f1595d6a4b4b39cff2",
-      "sizeBytes": 5125,
+      "sha256": "a4b91286b27fb9e448125f62fdb0ab174bffa826f18795269ef8b27cd38d26a2",
+      "sizeBytes": 5770,
       "executable": false
     },
     {
       "path": "dist/protocol/areas/object-registry/schemas.d.ts",
-      "sha256": "921085cd335dd51dd5cd594a38e88e3e1ceb3f68f24fe2cb74132583ebcc3b87",
-      "sizeBytes": 104851,
+      "sha256": "4892684013ce99f8a13c401054c7bace996428376986b7d6229979b10b92d2cc",
+      "sizeBytes": 117463,
       "executable": false
     },
     {
@@ -1190,8 +1412,8 @@
     },
     {
       "path": "dist/protocol/areas/policy-greenlight/policy-record/index.d.ts",
-      "sha256": "c1928114c422ea716883ea4588e50fe7af755bc5c2332ff362c4a7f50129dc6e",
-      "sizeBytes": 1925,
+      "sha256": "8381d53286958f3e83192930850dce43537ce7b633168ca8a96f5f957c2d7baa",
+      "sizeBytes": 2039,
       "executable": false
     },
     {
@@ -1262,7 +1484,7 @@
     },
     {
       "path": "dist/protocol/areas/protected-action-representation/schemas.d.ts",
-      "sha256": "9d0c31dc3687d305651373331d60146698276162b5d4bfa4cd4f3aeef38098f2",
+      "sha256": "bc7e67ee37c0ff514aff63c80ca0e1214330f87f48c9dce0325c42a54b5d0e50",
       "sizeBytes": 8395,
       "executable": false
     },
@@ -1448,13 +1670,13 @@
     },
     {
       "path": "dist/protocol/areas/review-binding/inputs.d.ts",
-      "sha256": "0f60b87c3736d4d704e41ba78787f4379cb008f94912195947156326bee08085",
+      "sha256": "b63ffdee091679b1f5973c6a33cf44458bdabaeb833a7da1c117906c3be6f282",
       "sizeBytes": 1887,
       "executable": false
     },
     {
       "path": "dist/protocol/areas/review-binding/schemas.d.ts",
-      "sha256": "abfa980f5493cea79caf89043f0720122953587c8713a87fc5fcde703f9d5996",
+      "sha256": "8b1c87a147ba6c2730479e3b430ecd7345d5eab1ffc6fdc6540e9db4cc5e8100",
       "sizeBytes": 2900,
       "executable": false
     },
@@ -1562,8 +1784,8 @@
     },
     {
       "path": "dist/protocol/events/schemas.d.ts",
-      "sha256": "3835f6000f6ed60442afdd1eb6277d1e7922807b59b04e2a0dab0c7c7e1d19a8",
-      "sizeBytes": 3181,
+      "sha256": "910678ff5b9162487b8f2ed698b92187b129781217bd996957c9b0d051a66a1a",
+      "sizeBytes": 3627,
       "executable": false
     },
     {
@@ -1574,20 +1796,26 @@
     },
     {
       "path": "dist/protocol/evidence-projections/index.d.ts",
-      "sha256": "9c2d7da2fbab3a39cf0b3465ce262eb1261b9f200ff98346747e71576c90d231",
-      "sizeBytes": 86,
+      "sha256": "4924d628bb465df651034d56af795696413bb869cff0f1896c4d6c6923583d16",
+      "sizeBytes": 118,
       "executable": false
     },
     {
       "path": "dist/protocol/evidence-projections/projections.d.ts",
-      "sha256": "8ed356221a3b2b7965ebe63f1f8897676d3d97e8963c181323e777e393d695f5",
-      "sizeBytes": 2784,
+      "sha256": "7e6c5254a1f5b8fb5837a1386561835312b24d1d0cc7f4f9ae2b7a75b07de32a",
+      "sizeBytes": 3099,
       "executable": false
     },
     {
       "path": "dist/protocol/evidence-projections/schemas.d.ts",
-      "sha256": "d8978e95a3a6235ffcd0d7350be55d4229e4f03815de099734a2730c232a33ee",
-      "sizeBytes": 28220,
+      "sha256": "5e686c5f2e7db8ea4992214999bc89d2590688adc746991e7c7c341ba45ba1c8",
+      "sizeBytes": 43732,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/evidence-projections/store-reader.d.ts",
+      "sha256": "93006dc7b6462bffd61bc5debfb10556efc5762458679c13f1554df104514cc4",
+      "sizeBytes": 518,
       "executable": false
     },
     {
@@ -1609,15 +1837,33 @@
       "executable": false
     },
     {
+      "path": "dist/protocol/foundation/failure-class.d.ts",
+      "sha256": "434f2d2dc5f9b6dfe1603b3fe374434a57d80887c658b67db4e0de006a8e7f21",
+      "sizeBytes": 922,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/failure-class/index.d.ts",
+      "sha256": "5610a91703cf819ac53692492100df5627bddc2dc1f24ee99c14170c229115f6",
+      "sizeBytes": 1005,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/host-trusted-binding.d.ts",
+      "sha256": "7680eb0d69bfc404511cc97d9157753cf3fa8e0820e8b95d5fd1b58e485ad15a",
+      "sizeBytes": 923,
+      "executable": false
+    },
+    {
       "path": "dist/protocol/foundation/ids.d.ts",
-      "sha256": "1a968c594b85459934462dbde787a9ec0470dbfc974d8f78778e266563f9873e",
-      "sizeBytes": 100,
+      "sha256": "1dfe9bd192f7a50b03a9e24921451f5a29786e32346da11180c21a2dec3d47be",
+      "sizeBytes": 298,
       "executable": false
     },
     {
       "path": "dist/protocol/foundation/index.d.ts",
-      "sha256": "1bd3c5bc9795d67bbedb3657c349f97ffb00179cc85f9c72518ef07aecd49a8e",
-      "sizeBytes": 213,
+      "sha256": "3ee6c3f2a8d56cb32add07fb5e2d1f03bb741bb0b39bf974500d7a8e9d5ea5ff",
+      "sizeBytes": 279,
       "executable": false
     },
     {
@@ -1627,15 +1873,39 @@
       "executable": false
     },
     {
+      "path": "dist/protocol/foundation/reason-code-remediation.d.ts",
+      "sha256": "0edc0d532edd9e08db03989ddc7fa58c8c27b9efb24752c87201103ce8258bb2",
+      "sizeBytes": 3945,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/reason-code-remediation/index.d.ts",
+      "sha256": "285b42f24cba9d9914e4204a4f508e7031826f86bbf876ce70409cd9cc358f96",
+      "sizeBytes": 299,
+      "executable": false
+    },
+    {
       "path": "dist/protocol/foundation/reason-codes.d.ts",
-      "sha256": "8f8ac02d5a9c7cad1a93c71b0839d083fa777a791b47c457fcedbfa44dfea07e",
-      "sizeBytes": 8342,
+      "sha256": "1071493496a2d09651cfc20dadd6c352fa441c3bf4b3bc6107d94b8f5b756d00",
+      "sizeBytes": 10080,
       "executable": false
     },
     {
       "path": "dist/protocol/foundation/schema-core.d.ts",
       "sha256": "c3196d5ee4c43dd9baa0a766660afd733ac937b418ad160a3b6ef33e13444315",
       "sizeBytes": 1293,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/telemetry-context.d.ts",
+      "sha256": "85b07a5652d22204ca7672fedfa4ba5c578ba360847777462ae91958320b9c04",
+      "sizeBytes": 2552,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/telemetry-context/index.d.ts",
+      "sha256": "85b07a5652d22204ca7672fedfa4ba5c578ba360847777462ae91958320b9c04",
+      "sizeBytes": 2552,
       "executable": false
     },
     {
@@ -1646,14 +1916,14 @@
     },
     {
       "path": "dist/protocol/kernel.d.ts",
-      "sha256": "f1f588942721c224948ae21690cdc2ab475e5b2d240b265705ed1403844c965a",
-      "sizeBytes": 5666,
+      "sha256": "c76c17f50d5008c551dee58ab973d791c27383a37aa26fa1016e5eb59ff92179",
+      "sizeBytes": 6383,
       "executable": false
     },
     {
       "path": "dist/protocol/navigation/index.d.ts",
-      "sha256": "0215a3a040f2a5d0c8313c5768da1d35f73c20d0dceaf8f3623f11e54051e93f",
-      "sizeBytes": 18922,
+      "sha256": "d84f51b2e8b54230030152c7495c2bac05a254fbb100e121456e8aea150b49de",
+      "sizeBytes": 23647,
       "executable": false
     },
     {
@@ -1718,8 +1988,8 @@
     },
     {
       "path": "dist/runtime/index.mjs",
-      "sha256": "f6f73e3d0393fa8f9727a4c170ed56fcc3672424cf22b2ae100a574f56e238ff",
-      "sizeBytes": 625126,
+      "sha256": "d450c49ce1169168964d21c8c116f5655a433d3951116d4628a3869db4e21390",
+      "sizeBytes": 630665,
       "executable": false
     },
     {
@@ -1778,8 +2048,20 @@
     },
     {
       "path": "dist/sdk/client.d.ts",
-      "sha256": "09f044c8db02a2bab132bfabbcb311b33c1433c07bcf243d03e3ae65e842d4d8",
-      "sizeBytes": 6721,
+      "sha256": "320221ad7eb35ebfa4ebd666986f48ee7571bd5fdf805817f0deee4563704775",
+      "sizeBytes": 6923,
+      "executable": false
+    },
+    {
+      "path": "dist/sdk/index.d.ts",
+      "sha256": "7aebe81aff521bd05f3b43528cac6f2c20fd016deda4b1dcc4b477190d3458b7",
+      "sizeBytes": 477,
+      "executable": false
+    },
+    {
+      "path": "dist/sdk/repair.d.ts",
+      "sha256": "dcef1fffa7ef85facdbac39b7ffffe9b7d14695319b5310001b6bb1c359160bc",
+      "sizeBytes": 538,
       "executable": false
     },
     {
@@ -1790,8 +2072,8 @@
     },
     {
       "path": "dist/sdk/surface-clients/evidence-client.d.ts",
-      "sha256": "0de2a74b6c69e6ce7252aa57f64038cbc13555a0706a43d42c6b9dfe48d44415",
-      "sizeBytes": 1675,
+      "sha256": "205fe1a538a796396fe6aded48d5e044e2afb9391d889aaf1e1dcdd548e028a8",
+      "sizeBytes": 2073,
       "executable": false
     },
     {
@@ -1808,8 +2090,8 @@
     },
     {
       "path": "dist/sdk/surface-clients/index.mjs",
-      "sha256": "5093cd09918671ffc3982343eb1218a51dc2dcd785c4cf1d38027f25758b77e8",
-      "sizeBytes": 627518,
+      "sha256": "00830e8c65f9cd34c8acfd25025d39b066bc8856a777237becee174d312c7ee4",
+      "sizeBytes": 685569,
       "executable": false
     },
     {
@@ -1834,6 +2116,12 @@
       "path": "dist/sdk/surface-clients/transport.d.ts",
       "sha256": "beec8b91891e40f80241abec33fed9c0e8bcd41959514bf2ee1dac7703c35d07",
       "sizeBytes": 978,
+      "executable": false
+    },
+    {
+      "path": "dist/sdk/transport-url.d.ts",
+      "sha256": "9f10a7bfc100e148e50198b75d711417832cc44dd7b7e6d1293ad86876ee9762",
+      "sizeBytes": 223,
       "executable": false
     },
     {
@@ -1867,6 +2155,84 @@
       "executable": false
     },
     {
+      "path": "dist/surfaces/a2a-negotiation-readback/index.d.ts",
+      "sha256": "460cea813413f0c35b017d52760fb19015091304aef78cedbbd245579bf3aa67",
+      "sizeBytes": 8209,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-readback/index.mjs",
+      "sha256": "10368ac9559b59c07870cbdbf520cb8724b08fb83e5246fff5af799bbbbf1600",
+      "sizeBytes": 502315,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/adapter-apply.d.ts",
+      "sha256": "92e9ed533951a91102e32fd39193af107bc282bbadc9e55738e1812af7ff3da9",
+      "sizeBytes": 28844,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/adapter-contract.d.ts",
+      "sha256": "2cc8516eafb80bfd6f4bb0e361fda841fb846cf706694fcd56c09649781823ee",
+      "sizeBytes": 44550,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/adapter-transcript/index.d.ts",
+      "sha256": "91c039a1436d338389ba13d845f098e668c5fa3008b3d539f6a2ab9617076459",
+      "sizeBytes": 58316,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/agreement-linker/index.d.ts",
+      "sha256": "4206201155cda0c50528abb3bb91ab94a1d4dcdde5f8fd25001d011417aab223",
+      "sizeBytes": 19823,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/external-protocol-evidence.d.ts",
+      "sha256": "1ef9e92bed1cf21f9f610a91fcf3678e9a5d8a041f2f2982ab676e0b13f62e5d",
+      "sizeBytes": 21859,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/index.d.ts",
+      "sha256": "39ecc6b4a7681dfbdba954e3e65bae13a554da0021d1346cc0f8ab2e05d9a2b6",
+      "sizeBytes": 2716,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/ingress-admission.d.ts",
+      "sha256": "3ba6bfd5ff9c068df5922edb90eaa4e03e9ff412c925d49f524dd65e1b5feb68",
+      "sizeBytes": 56272,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/ingress-normalizer.d.ts",
+      "sha256": "047cb41bf5453fa3604004abc8870a0a2500350e560a9a9f622c79ddde6b0d45",
+      "sizeBytes": 36018,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/ingress-pressure.d.ts",
+      "sha256": "cd77a0864b16261e1df74bbe3ff15efa5ab990c4f949d907e357d83bd285ad72",
+      "sizeBytes": 6146,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/move-compiler.d.ts",
+      "sha256": "a2565ee178b5efa9d03bc62eaf321e334e69d7483aa4515fb6d3c5846a5f032e",
+      "sizeBytes": 28099,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/a2a-negotiation-support/obligation-binder/index.d.ts",
+      "sha256": "90e36589ad8152f5454e64046938790f27749a20e4b3049227587153e15b8b1a",
+      "sizeBytes": 7737,
+      "executable": false
+    },
+    {
       "path": "dist/surfaces/activation-gate.d.ts",
       "sha256": "7cbd801539262350e7e8b20a59afb33a9192b146bdbca2095543911f6021b5c1",
       "sizeBytes": 13215,
@@ -1880,25 +2246,25 @@
     },
     {
       "path": "dist/surfaces/boundary-manifest.d.ts",
-      "sha256": "61895163e734d5986312ea9683d56be3811384ea7e31c507ee5fc6b4fe4ccbac",
-      "sizeBytes": 38599,
+      "sha256": "6264d43f1feaf9b4402cbbd7dd9ebe5f9ee59a484cc86e3a35e74d562bd44527",
+      "sizeBytes": 52672,
       "executable": false
     },
     {
       "path": "dist/surfaces/index.d.ts",
-      "sha256": "071c3e8c4e94e9ba6d205b40db1a81be692743d6b9a7afd7f9092cb5bde6207f",
-      "sizeBytes": 265,
+      "sha256": "242eb374fe49bc026882d11c560ddf18a235e47874d42bb905389243e1c7c38c",
+      "sizeBytes": 369,
       "executable": false
     },
     {
       "path": "dist/surfaces/index.mjs",
-      "sha256": "890c85d4638336005998ef8fede587e8d7164469106ba61c0d3e1549a1cdd59d",
-      "sizeBytes": 822810,
+      "sha256": "23ad2a6acf48d5ebd007ffe8673b488e696acd953d1fbf7d47b2442cf57282bd",
+      "sizeBytes": 908372,
       "executable": false
     },
     {
       "path": "dist/surfaces/outcome.d.ts",
-      "sha256": "51dff9748b965cebe1e2d5bf81ed3b6243903be7f16cc117d7660d6d418ef56f",
+      "sha256": "c6c12f428eaa93cfe15ab20f4192aa5dbbee50280a75b33ea4e85a0cbc71716a",
       "sizeBytes": 13828,
       "executable": false
     },
@@ -1915,9 +2281,135 @@
       "executable": false
     },
     {
+      "path": "dist/surfaces/proof-packets/clean-installed-activation.d.ts",
+      "sha256": "a4e5ff261b892c737a44ccd1abea3570d389d92dcb429bb83d21b98b20e1b605",
+      "sizeBytes": 3745,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/codex-host-activation.d.ts",
+      "sha256": "05ef449c92003616963dec127a1ab3b081d8b1c18e320b3a541e6d9fddd99de5",
+      "sizeBytes": 2915,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/codex-toml.d.ts",
+      "sha256": "8a87564079e55ed319af4c29ad9a55a226daf8464937db255ec0c525869b1927",
+      "sizeBytes": 836,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/distribution-provenance.d.ts",
+      "sha256": "76fea4736756c62b43da45155559d3387b00a2b8e2bbd57967f077b0ea06379e",
+      "sizeBytes": 3549,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/host-generated-code-containment.d.ts",
+      "sha256": "254aaceb2fb6e592f21df3a92293bf351c5a5b05100cc60ab90a2079e1d294c8",
+      "sizeBytes": 11093,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/index.d.ts",
+      "sha256": "c71b13a233f2a707aaca58ed8ecd1b9665e5ea403e1813760e876add86af4d2b",
+      "sizeBytes": 366,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402-paid-retry.d.ts",
+      "sha256": "2b14cc2b3eafa6c0415bb48d3113db7feb52f8b743a534ac9495178fbe2fe3f1",
+      "sizeBytes": 5241,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402-requirement.d.ts",
+      "sha256": "3bfc59ae6b3945723058276bc7d83212d229fef05cbfee268d529c126f3a928c",
+      "sizeBytes": 2854,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402/index.d.ts",
+      "sha256": "63cfa8833268d2f01b6964df2dfce212d7d302e6c7608ab1ba10b6bf0763c982",
+      "sizeBytes": 61,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402/paid-retry.d.ts",
+      "sha256": "3b5cd65331fa02d735e5bd90e3cd6dc6aee313609b81e74ea96be27e5bcf8c46",
+      "sizeBytes": 6951,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402/requirement.d.ts",
+      "sha256": "7e6f49368735e9afd92784f2d8bbd000393acaa7133478d95b187c530736de8c",
+      "sizeBytes": 2855,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/live-x402/url.d.ts",
+      "sha256": "b52d1ed3249e0e7adb0c0240de5ed9d076eddb85b2d579ad8f81389b05575db5",
+      "sizeBytes": 64,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/per-customer-bypass-scaffold.d.ts",
+      "sha256": "bf510fa89bb565e5dcad9b1227bda70835d3d8f130db63cd2aedb35d8ff60deb",
+      "sizeBytes": 1501,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/per-customer-bypass-scaffold/index.d.ts",
+      "sha256": "cce38e73c1210d6d1786313b55bd43e82c445bd2d6faf101f19475f632a00f15",
+      "sizeBytes": 1495,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/product-completion-contract.d.ts",
+      "sha256": "066638408554f334e3f530aaa8cfbf5e8d47214d2afb832fe7f131b283a8a233",
+      "sizeBytes": 1282,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/product-completion-contract/index.d.ts",
+      "sha256": "350ee069e23aa8657cca2bc7a1cbd387658e539250fdc56bb83e55e328cce20b",
+      "sizeBytes": 1347,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/product-completion.d.ts",
+      "sha256": "810323c98950a32e22a39dd3c2d0b4b727758f3ad6d03284259b32745ba443d5",
+      "sizeBytes": 4627,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/proof-packets/shared.d.ts",
+      "sha256": "3486bbf7948625ae1b40cb0e7d7789a8a7804ce43d5ef1af9c657447c8d58863",
+      "sizeBytes": 771,
+      "executable": false
+    },
+    {
       "path": "dist/surfaces/release-proof.d.ts",
       "sha256": "2f197bd92869c2a7044bde327c83b06bae7b15dc487260523fb86a14ee2e1cf0",
       "sizeBytes": 12632,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/service-workflow-admission/index.d.ts",
+      "sha256": "57393d7569ce5e5ad51b8bc5789111ac955e1ec5218aca74934840f8ce319bff",
+      "sizeBytes": 11780,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/service-workflow-admission/index.mjs",
+      "sha256": "5ba505abd8f11c63581e78a852fdb4b7194da683c5a3eb77ff8cd43b9f4d03f2",
+      "sizeBytes": 504479,
+      "executable": false
+    },
+    {
+      "path": "dist/surfaces/service-workflow-lifecycle-projections/index.d.ts",
+      "sha256": "0f6291f69b06ab92afa6478857be2d77f05c6a8b7321e6f0875be9496d75b0c1",
+      "sizeBytes": 7726,
       "executable": false
     },
     {
@@ -1940,8 +2432,8 @@
     },
     {
       "path": "dist/x402-protected-tool/index.mjs",
-      "sha256": "8263fb984f4b90af597accb020abb5259fca67bb6b87e3be5d3d5ecd26306641",
-      "sizeBytes": 744789,
+      "sha256": "a946d214c2ee2b44680d4271efac5375ef7b7011b3a54b815fdb6b532a749681",
+      "sizeBytes": 764756,
       "executable": false
     },
     {
@@ -1958,19 +2450,19 @@
     },
     {
       "path": "package.json",
-      "sha256": "80a89da5d17a8f7bd862efd892d42e3508d12a78e3d3b920e6c5b0eb628446d9",
-      "sizeBytes": 3253,
+      "sha256": "e8eeda2e39636144dd48610eed321de8f7619a9c82e8dc7772de793600a9034d",
+      "sizeBytes": 3515,
       "executable": false
     },
     {
       "path": "README.md",
-      "sha256": "bc808af660d8036850b4cf7c57e4f26d359542b62814543fd3c7121ca7607dd0",
-      "sizeBytes": 7103,
+      "sha256": "4f1d4e52b982c490dde05ba8ddc6914ecf4e1b4e19051185799b44aa80b49cfb",
+      "sizeBytes": 9394,
       "executable": false
     },
     {
       "path": "server.json",
-      "sha256": "54c03666c783610c6184d5c7c534b057dc558744f6864b658b779f7f2419ee20",
+      "sha256": "42444cf04976b0184eae68d13b515741fb136d2077c07ad700f7c88b0d1bf222",
       "sizeBytes": 826,
       "executable": false
     }

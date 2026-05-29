@@ -92,6 +92,13 @@ export declare const McpX402PaymentProposalInputSchema: z.ZodObject<{
     retryDetected: z.ZodDefault<z.ZodBoolean>;
     branchDetected: z.ZodDefault<z.ZodBoolean>;
     correlationRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    serviceWorkflowContextRefs: z.ZodOptional<z.ZodObject<{
+        passportPackageDigest: z.ZodString;
+        passportPresentationId: z.ZodString;
+        admissionId: z.ZodString;
+        serviceWorkflowHandleId: z.ZodString;
+        serviceWorkflowHandleDigest: z.ZodString;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
 export type McpX402PaymentProposalInput = z.input<typeof McpX402PaymentProposalInputSchema>;
 export type McpRuntimeProposalClient = Pick<RuntimeClient, "createRuntimeExecution" | "createToolCallDraft" | "transitionToolCallDraft" | "compileIntent" | "proposeActionContract">;

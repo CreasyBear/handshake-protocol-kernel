@@ -18,6 +18,7 @@ export type CliCommandManifestEntry = {
     readonly redactionPosture: "redacted_projection_only" | "local_certificate_verification" | "manifest_only";
     readonly nonGoals: readonly string[];
 };
+export declare const cliServiceWorkflowPosture: "CLI surface only: local setup, readiness, and evidence readback; does not create ServiceWorkflowAdmission, ServiceWorkflowHandle, clearance, policy decision, greenlight, gateway check, mutation, receipt export, or certificate.";
 export declare const cliCommandManifest: readonly [{
     readonly id: "schema";
     readonly aliases: readonly ["schema"];
@@ -31,7 +32,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "manifest_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "init";
     readonly aliases: readonly ["init"];
@@ -45,7 +46,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: false;
     readonly redactionPosture: "manifest_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "doctor";
     readonly aliases: readonly ["doctor"];
@@ -59,7 +60,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "manifest_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "evidence.aps-report";
     readonly aliases: readonly ["evidence aps-report"];
@@ -73,7 +74,21 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
+}, {
+    readonly id: "evidence.fetch";
+    readonly aliases: readonly ["evidence fetch"];
+    readonly status: "active";
+    readonly plane: "evidence";
+    readonly custodyRole: "review_custody";
+    readonly routeFamilies: readonly ["evidence_projection_read"];
+    readonly filesystemReads: readonly ["optional local .handshake/evidence/operations readback json when --cwd is set", "HANDSHAKE_BASE_URL or --base-url HTTP evidence readback"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: true;
+    readonly redactionPosture: "redacted_projection_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "evidence.contract-view";
     readonly aliases: readonly ["evidence contract-view"];
@@ -87,7 +102,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "evidence.receipt-timeline";
     readonly aliases: readonly ["evidence receipt-timeline"];
@@ -101,7 +116,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "cert.verify";
     readonly aliases: readonly ["cert verify"];
@@ -115,7 +130,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "local_certificate_verification";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
 }, {
     readonly id: "support.bundle";
     readonly aliases: readonly ["support bundle"];
@@ -129,7 +144,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "receipt export", "raw record dump", "trusted install readiness"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "receipt export", "raw record dump", "trusted install readiness"];
 }, {
     readonly id: "install.x402-payment";
     readonly aliases: readonly ["install x402-payment"];
@@ -143,7 +158,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: false;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "signer use", "live control-plane registration", "broad x402 compatibility"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "signer use", "live control-plane registration", "broad x402 compatibility"];
 }, {
     readonly id: "probes.x402-payment";
     readonly aliases: readonly ["probes x402-payment"];
@@ -157,7 +172,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: false;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "gateway check", "provider certification"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "gateway check", "provider certification"];
 }, {
     readonly id: "register.x402-gateway-readiness";
     readonly aliases: readonly ["register x402-gateway-readiness"];
@@ -171,7 +186,7 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: false;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "policy evaluation", "greenlight creation", "gateway check", "signer use", "payment payload creation"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "policy evaluation", "greenlight creation", "gateway check", "signer use", "payment payload creation"];
 }, {
     readonly id: "install.health";
     readonly aliases: readonly ["install health"];
@@ -185,7 +200,63 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"];
+}, {
+    readonly id: "host.doctor";
+    readonly aliases: readonly ["host doctor"];
+    readonly status: "active";
+    readonly plane: "operator";
+    readonly custodyRole: "none";
+    readonly routeFamilies: readonly [];
+    readonly filesystemReads: readonly [".handshake/project.json", "external role credential profile"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: true;
+    readonly redactionPosture: "manifest_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "parallel identity system", "gateway readiness certification"];
+}, {
+    readonly id: "quickstart.x402";
+    readonly aliases: readonly ["quickstart x402"];
+    readonly status: "active";
+    readonly plane: "operator";
+    readonly custodyRole: "none";
+    readonly routeFamilies: readonly [];
+    readonly filesystemReads: readonly [".handshake/project.json", "optional x402 install input json path"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: false;
+    readonly redactionPosture: "redacted_projection_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live control-plane registration", "signer use"];
+}, {
+    readonly id: "quickstart.agent-spine";
+    readonly aliases: readonly ["quickstart agent-spine"];
+    readonly status: "active";
+    readonly plane: "operator";
+    readonly custodyRole: "none";
+    readonly routeFamilies: readonly [];
+    readonly filesystemReads: readonly [".handshake/project.json"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: false;
+    readonly redactionPosture: "redacted_projection_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "bundled execute API", "greenlight reuse", "authority creation", "live x402 operation beyond quickstart scope"];
+}, {
+    readonly id: "simulate.x402-payment";
+    readonly aliases: readonly ["simulate x402-payment"];
+    readonly status: "active";
+    readonly plane: "operator";
+    readonly custodyRole: "none";
+    readonly routeFamilies: readonly [];
+    readonly filesystemReads: readonly [".handshake/project.json"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: true;
+    readonly redactionPosture: "redacted_projection_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live wallet operation", "bundled execute API", "greenlight reuse"];
 }, {
     readonly id: "conformance.x402-payment";
     readonly aliases: readonly ["conformance x402-payment"];
@@ -199,15 +270,31 @@ export declare const cliCommandManifest: readonly [{
     readonly outputSchema: "handshake.cli.v1";
     readonly agentSafe: true;
     readonly redactionPosture: "redacted_projection_only";
-    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "broad x402 compatibility"];
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "broad x402 compatibility"];
+}, {
+    readonly id: "service.bootstrap";
+    readonly aliases: readonly ["service bootstrap"];
+    readonly status: "active";
+    readonly plane: "operator";
+    readonly custodyRole: "none";
+    readonly routeFamilies: readonly ["install_health_read"];
+    readonly filesystemReads: readonly [".handshake/project.json", "optional x402 install input json path"];
+    readonly filesystemWrites: readonly [];
+    readonly childProcessEnvInheritance: "none";
+    readonly outputSchema: "handshake.cli.v1";
+    readonly agentSafe: false;
+    readonly redactionPosture: "redacted_projection_only";
+    readonly nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live wallet mutation", "second action-family install", "orphan catalog without compiled-records transition", "signer use"];
 }];
 export declare function cliSchemaOutput(): {
-    id: "schema" | "init" | "doctor" | "evidence.aps-report" | "evidence.contract-view" | "evidence.receipt-timeline" | "cert.verify" | "support.bundle" | "install.x402-payment" | "probes.x402-payment" | "register.x402-gateway-readiness" | "install.health" | "conformance.x402-payment";
-    aliases: readonly ["schema"] | readonly ["init"] | readonly ["doctor"] | readonly ["evidence aps-report"] | readonly ["evidence contract-view"] | readonly ["evidence receipt-timeline"] | readonly ["cert verify"] | readonly ["support bundle"] | readonly ["install x402-payment"] | readonly ["probes x402-payment"] | readonly ["register x402-gateway-readiness"] | readonly ["install health"] | readonly ["conformance x402-payment"];
+    id: "schema" | "init" | "doctor" | "evidence.aps-report" | "evidence.fetch" | "evidence.contract-view" | "evidence.receipt-timeline" | "cert.verify" | "support.bundle" | "install.x402-payment" | "probes.x402-payment" | "register.x402-gateway-readiness" | "install.health" | "host.doctor" | "quickstart.x402" | "quickstart.agent-spine" | "simulate.x402-payment" | "conformance.x402-payment" | "service.bootstrap";
+    aliases: readonly ["schema"] | readonly ["init"] | readonly ["doctor"] | readonly ["evidence aps-report"] | readonly ["evidence fetch"] | readonly ["evidence contract-view"] | readonly ["evidence receipt-timeline"] | readonly ["cert verify"] | readonly ["support bundle"] | readonly ["install x402-payment"] | readonly ["probes x402-payment"] | readonly ["register x402-gateway-readiness"] | readonly ["install health"] | readonly ["host doctor"] | readonly ["quickstart x402"] | readonly ["quickstart agent-spine"] | readonly ["simulate x402-payment"] | readonly ["conformance x402-payment"] | readonly ["service bootstrap"];
     status: "active";
     plane: "operator" | "evidence";
     custodyRole: "review_custody" | "none";
     outputSchema: "handshake.cli.v1";
     agentSafe: boolean;
     redactionPosture: "redacted_projection_only" | "local_certificate_verification" | "manifest_only";
+    nonGoals: readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "receipt export", "raw record dump", "trusted install readiness"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "signer use", "live control-plane registration", "broad x402 compatibility"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "gateway check", "provider certification"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "policy evaluation", "greenlight creation", "gateway check", "signer use", "payment payload creation"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "parallel identity system", "gateway readiness certification"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live control-plane registration", "signer use"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "bundled execute API", "greenlight reuse", "authority creation", "live x402 operation beyond quickstart scope"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live wallet operation", "bundled execute API", "greenlight reuse"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "broad x402 compatibility"] | readonly ["policy evaluation", "gateway check", "protected mutation", "credential custody", "raw record access", "process startup", "workflow handle authority", "live wallet mutation", "second action-family install", "orphan catalog without compiled-records transition", "signer use"];
+    workflowPosture: "CLI surface only: local setup, readiness, and evidence readback; does not create ServiceWorkflowAdmission, ServiceWorkflowHandle, clearance, policy decision, greenlight, gateway check, mutation, receipt export, or certificate.";
 }[];

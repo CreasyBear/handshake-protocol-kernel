@@ -1,0 +1,12 @@
+import type { ProtocolRecorder } from "../../events/records";
+import type { ProtocolStore } from "../../store/port";
+import { type AgreementObligationBinding, type AgreementStatusTransition, type LinkedAgreement, type NegotiationDecision, type NegotiationOffer, type NegotiationSession } from "./types";
+type AgreementStatus = AgreementStatusTransition["fromStatus"] | AgreementStatusTransition["toStatus"];
+export declare function recordNegotiationSession(recorder: ProtocolRecorder, inputValue: NegotiationSession): Promise<NegotiationSession>;
+export declare function recordNegotiationOffer(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: NegotiationOffer): Promise<NegotiationOffer>;
+export declare function recordNegotiationDecision(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: NegotiationDecision): Promise<NegotiationDecision>;
+export declare function recordLinkedAgreement(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: LinkedAgreement): Promise<LinkedAgreement>;
+export declare function recordAgreementObligationBinding(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: AgreementObligationBinding): Promise<AgreementObligationBinding>;
+export declare function transitionAgreementStatus(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: AgreementStatusTransition): Promise<AgreementStatusTransition>;
+export declare function currentAgreementStatus(store: ProtocolStore, agreement: LinkedAgreement): Promise<AgreementStatus>;
+export {};

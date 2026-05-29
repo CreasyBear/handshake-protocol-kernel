@@ -18,6 +18,8 @@ export type McpResourceRead = z.infer<typeof McpResourceReadSchema>;
 export type McpEvidenceResourceClient = {
     getContractEvidenceProjection(actionContractId: string): Promise<unknown>;
     getAgentTransactionEnvelopeProjection(actionContractId: string): Promise<unknown>;
+    getOperationReadbackProjection(actionContractId: string): Promise<unknown>;
+    getOperationCorrelationIndex(actionContractId: string): Promise<unknown>;
     getReceiptTimelineProjection(receiptId: string): Promise<unknown>;
     getIdempotencyRecoveryProjection(actionContractId: string): Promise<unknown>;
     getProtectedPathInstallHealthProjection(actionContractId: string): Promise<unknown>;
@@ -31,6 +33,12 @@ type ParsedMcpResourceUri = {
     challengeId: string;
 } | {
     kind: "contract";
+    actionContractId: string;
+} | {
+    kind: "operationReadback";
+    actionContractId: string;
+} | {
+    kind: "operationCorrelation";
     actionContractId: string;
 } | {
     kind: "envelope";

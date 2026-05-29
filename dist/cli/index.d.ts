@@ -6,6 +6,11 @@ export { doctorLocalProject, initializeLocalProject, localProjectConfigRef } fro
 export type { DoctorResult, InitLocalProjectResult, LocalProjectConfig } from "./local-project";
 export { evidenceContractViewCommand, evidenceReceiptTimelineCommand, installHealthProjectionCommand, } from "./projection-evidence";
 export { runCliCommand } from "./main";
+export { defaultX402BootstrapInstallInput, runServiceBootstrap, serviceBootstrapCommand, } from "./service-operator/bootstrap";
+export { hostDoctorCommand } from "./host/doctor";
+export { runAgentSpineQuickstart } from "./quickstart/agent-spine";
+export { runX402Quickstart } from "./quickstart/x402";
+export { simulateX402PaymentCommand } from "./simulate/x402-payment";
 export { CLI_SCHEMA_VERSION, cliOutput, cliNonClaims } from "./output";
 export type { CliOutputEnvelope } from "./output";
 export { supportBundleCommand } from "./support-bundle";

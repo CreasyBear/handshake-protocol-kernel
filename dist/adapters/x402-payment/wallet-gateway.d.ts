@@ -101,6 +101,18 @@ export type X402PaymentSignatureEvidence = {
 export interface X402WalletSigningSurface {
     signPayment(command: X402PaymentSignatureCommand): Promise<X402PaymentSignatureEvidence>;
 }
+/**
+ * D-64 Mechanism A — gateway-held credential custody (structural, not label-only).
+ *
+ * The x402 signer must never mint a payment signature unless the command carries a
+ * genuine {@link VerifiedGatewayCheck} AND gateway-resolved, redacted credential
+ * resolution evidence bound to that same gate attempt. This makes
+ * `credentialMaterialPosture: "gateway_held_redacted"` an enforced invariant rather
+ * than a label: a caller-only path holding a raw `gatewayCredentialRefId` cannot
+ * reach `signPayment` because it cannot produce gate-bound `used_by_gateway`
+ * resolution evidence. Throws on any custody violation.
+ */
+export declare function assertGatewayHeldSigningCommand(command: X402PaymentSignatureCommand): void;
 export type CreateOfficialExactX402SigningSurfaceInput = {
     signer: ClientEvmSigner;
     paymentRequired: unknown;
