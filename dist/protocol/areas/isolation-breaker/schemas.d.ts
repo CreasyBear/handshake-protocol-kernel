@@ -9,10 +9,10 @@ export declare const StreamWatermarkSchema: z.ZodObject<{
 export type StreamWatermark = z.infer<typeof StreamWatermarkSchema>;
 export declare const BreakerIsolationDecisionSchema: z.ZodEnum<{
     revoked: "revoked";
-    halted: "halted";
-    quarantined: "quarantined";
     review_only: "review_only";
     rate_limited: "rate_limited";
+    quarantined: "quarantined";
+    halted: "halted";
     state_suspect: "state_suspect";
 }>;
 export type BreakerIsolationDecision = z.infer<typeof BreakerIsolationDecisionSchema>;
@@ -36,10 +36,10 @@ export declare const BreakerDecisionSchema: z.ZodObject<{
     observedWindowDigest: z.ZodString;
     decision: z.ZodEnum<{
         revoked: "revoked";
-        halted: "halted";
-        quarantined: "quarantined";
         review_only: "review_only";
         rate_limited: "rate_limited";
+        quarantined: "quarantined";
+        halted: "halted";
         state_suspect: "state_suspect";
     }>;
     decisionReasonCode: z.ZodString;
@@ -95,10 +95,10 @@ export declare const IsolationStateSchema: z.ZodObject<{
     state: z.ZodEnum<{
         active: "active";
         revoked: "revoked";
-        halted: "halted";
-        quarantined: "quarantined";
         review_only: "review_only";
         rate_limited: "rate_limited";
+        quarantined: "quarantined";
+        halted: "halted";
         state_suspect: "state_suspect";
     }>;
     reasonCode: z.ZodString;

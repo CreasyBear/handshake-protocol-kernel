@@ -14411,6 +14411,7 @@ var protocolReasonCodes = [
   code2("protected_x402_readiness_binding_mismatch", "protected_path_posture", "protected_path_posture"),
   code2("protected_x402_trusted_readiness_missing", "protected_path_posture", "protected_path_posture"),
   code2("mcp_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("runtime_ingress_wire_invalid", "refusal", "intent_compilation"),
   code2("mcp_candidate_not_contractable", "refusal", "intent_compilation"),
   code2("candidate_params_digest_mismatch", "transition_error", "action_contract"),
   code2("candidate_action_mismatch", "transition_error", "action_contract"),
@@ -15913,6 +15914,55 @@ function errorStringField(error51, field) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+// src/integrations/a1-evidence/wire-types.ts
+var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
+var Hex64Schema = exports_external.string().regex(/^[0-9a-f]{128}$/);
+var Hex16Schema = exports_external.string().regex(/^[0-9a-f]{32}$/);
+var SubScopeProofNodeSchema = exports_external.object({
+  hash: Hex32Schema,
+  is_left: exports_external.boolean()
+}).strict();
+var SubScopeProofSchema = exports_external.object({
+  subset_intents: exports_external.array(Hex32Schema),
+  proofs: exports_external.array(exports_external.array(SubScopeProofNodeSchema))
+}).strict();
+var DelegationCertSchema = exports_external.object({
+  version: exports_external.literal(1),
+  delegator_pk: Hex32Schema,
+  delegate_pk: Hex32Schema,
+  scope_root: Hex32Schema,
+  scope_proof: SubScopeProofSchema,
+  nonce: Hex16Schema,
+  issued_at: exports_external.number().int().nonnegative(),
+  expiration_unix: exports_external.number().int().nonnegative(),
+  max_depth: exports_external.number().int().min(0).max(255),
+  extensions: exports_external.record(exports_external.string(), exports_external.unknown()).optional(),
+  signature: Hex64Schema
+}).strict();
+var SignedChainSchema = exports_external.object({
+  version: exports_external.literal(1),
+  principal_pk: Hex32Schema,
+  principal_scope: Hex32Schema,
+  certs: exports_external.array(DelegationCertSchema)
+}).strict();
+
+// src/mcp/tools/delegation-verify.ts
+var MCP_DELEGATION_VERIFY_TOOL = "handshake.evidence.delegation.verify";
+var MerkleSiblingSchema = exports_external.strictObject({
+  hash: exports_external.string().min(1).max(128),
+  isLeft: exports_external.boolean()
+});
+var McpDelegationVerifyInputSchema = exports_external.strictObject({
+  signedChain: exports_external.unknown(),
+  executorPk: exports_external.string().min(1).max(128),
+  intentHash: exports_external.string().min(1).max(128),
+  merkleProof: exports_external.strictObject({
+    siblings: exports_external.array(MerkleSiblingSchema).max(64)
+  }),
+  nowUnix: exports_external.number().int().nonnegative().optional(),
+  driftToleranceSecs: exports_external.number().int().nonnegative().max(3600).optional()
+});
+
 // src/mcp/catalog.ts
 var MCP_X402_PAYMENT_PROPOSE_TOOL = "handshake.actions.x402_payment.propose";
 var mcpServiceWorkflowBoundary = {
@@ -15990,6 +16040,26 @@ var mcpResourceTemplates = [
     projectionStatus: "reference_only"
   }
 ];
+var mcpReadOnlyTools = [
+  {
+    name: MCP_DELEGATION_VERIFY_TOOL,
+    description: "Cryptographically verify an A1 delegation signed chain offline. Evidence-only: does not authorize, greenlight, or execute any protected action.",
+    inputSchema: exports_external.toJSONSchema(McpDelegationVerifyInputSchema, {
+      target: "draft-2020-12",
+      unrepresentable: "any"
+    }),
+    outputSchema: exports_external.toJSONSchema(McpStructuredContentSchema, {
+      target: "draft-2020-12",
+      unrepresentable: "any"
+    }),
+    annotations: {
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+      readOnlyHint: true
+    }
+  }
+];
 var mcpProposalTools = [
   {
     name: MCP_X402_PAYMENT_PROPOSE_TOOL,
@@ -16014,7 +16084,7 @@ function mcpCatalogSnapshot() {
   return {
     schemaVersion: MCP_SCHEMA_VERSION,
     resources: mcpResourceTemplates,
-    tools: mcpProposalTools,
+    tools: [...mcpReadOnlyTools, ...mcpProposalTools],
     serviceWorkflowBoundary: mcpServiceWorkflowBoundary,
     supportsParallelToolCalls: false,
     authorityCreated: false,
@@ -16872,6 +16942,7 @@ export {
   mcpServiceWorkflowBoundary,
   mcpResourceTemplates,
   mcpReferenceNonAuthorityPosture,
+  mcpReadOnlyTools,
   mcpProposalTools,
   mcpCatalogSnapshot,
   buildMcpX402ReferenceTranscriptMarkdown,
@@ -16884,5 +16955,6 @@ export {
   McpGatewayPostureSchema,
   MCP_X402_REFERENCE_TRANSCRIPT_VERSION,
   MCP_X402_PAYMENT_PROPOSE_TOOL,
-  MCP_SCHEMA_VERSION
+  MCP_SCHEMA_VERSION,
+  MCP_DELEGATION_VERIFY_TOOL
 };

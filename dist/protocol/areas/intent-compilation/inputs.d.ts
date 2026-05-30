@@ -18,6 +18,17 @@ export declare const CompileIntentInputSchema: z.ZodObject<{
     generatedCodeOrSpecRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     declaredAssumptions: z.ZodDefault<z.ZodArray<z.ZodString>>;
     requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        delegationEvidenceRefId: z.ZodString;
+        evidenceBindingDigest: z.ZodString;
+        a1ChainFingerprint: z.ZodString;
+        storeRef: z.ZodString;
+        verifyOutcome: z.ZodEnum<{
+            valid: "valid";
+            invalid: "invalid";
+        }>;
+        a1VerifierVersion: z.ZodString;
+    }, z.core.$strict>>>;
     candidate: z.ZodObject<{
         toolCapabilityId: z.ZodString;
         actionTypeId: z.ZodString;

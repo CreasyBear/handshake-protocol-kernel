@@ -1,4 +1,5 @@
 import { z } from "zod";
+export { MCP_DELEGATION_VERIFY_TOOL } from "./tools/delegation-verify.js";
 export declare const MCP_X402_PAYMENT_PROPOSE_TOOL: "handshake.actions.x402_payment.propose";
 export declare const mcpServiceWorkflowBoundary: {
     readonly acceptsWorkflowHandleContext: true;
@@ -64,6 +65,144 @@ export declare const mcpResourceTemplates: readonly [{
     readonly readOnly: true;
     readonly authorityCreated: false;
     readonly projectionStatus: "reference_only";
+}];
+export declare const mcpReadOnlyTools: readonly [{
+    readonly name: "handshake.evidence.delegation.verify";
+    readonly description: "Cryptographically verify an A1 delegation signed chain offline. Evidence-only: does not authorize, greenlight, or execute any protected action.";
+    readonly inputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodObject<{
+        signedChain: z.ZodUnknown;
+        executorPk: z.ZodString;
+        intentHash: z.ZodString;
+        merkleProof: z.ZodObject<{
+            siblings: z.ZodArray<z.ZodObject<{
+                hash: z.ZodString;
+                isLeft: z.ZodBoolean;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+        nowUnix: z.ZodOptional<z.ZodNumber>;
+        driftToleranceSecs: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    readonly outputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodDiscriminatedUnion<[z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
+        authorityCreated: z.ZodLiteral<false>;
+        authorityCertificateMinted: z.ZodLiteral<false>;
+        credentialMaterialIncluded: z.ZodLiteral<false>;
+        gatewayCheckPerformed: z.ZodLiteral<false>;
+        greenlightCreated: z.ZodLiteral<false>;
+        mutationAttempted: z.ZodLiteral<false>;
+        mutationCommandIncluded: z.ZodLiteral<false>;
+        rawInternalRecordIncluded: z.ZodLiteral<false>;
+        receiptExportCreated: z.ZodLiteral<false>;
+        greenlightRef: z.ZodNull;
+        gatewayCheckRef: z.ZodNull;
+        mutationAttemptRef: z.ZodNull;
+        proofRef: z.ZodNullable<z.ZodString>;
+        refusalRef: z.ZodNullable<z.ZodString>;
+        reasonCodes: z.ZodArray<z.ZodString>;
+        nextAction: z.ZodEnum<{
+            read_evidence: "read_evidence";
+            request_review: "request_review";
+            recraft_request: "recraft_request";
+            stop: "stop";
+            reload_metadata: "reload_metadata";
+            fix_install: "fix_install";
+            wait_for_gateway: "wait_for_gateway";
+        }>;
+        retryability: z.ZodEnum<{
+            not_retryable: "not_retryable";
+            retryable_after_recraft: "retryable_after_recraft";
+            retryable_after_reload: "retryable_after_reload";
+        }>;
+        commitState: z.ZodEnum<{
+            ambiguous: "ambiguous";
+            not_started: "not_started";
+            protocol_recorded: "protocol_recorded";
+        }>;
+        metadataRef: z.ZodNullable<z.ZodString>;
+        evidenceRefs: z.ZodArray<z.ZodString>;
+        challengeRef: z.ZodNullable<z.ZodString>;
+        correlationRef: z.ZodNullable<z.ZodString>;
+        idempotencyKey: z.ZodNullable<z.ZodString>;
+        outcome: z.ZodLiteral<"action_contract_proposed">;
+        phase: z.ZodLiteral<"proposal">;
+        actionContractId: z.ZodString;
+        contractDigest: z.ZodString;
+        paramsDigest: z.ZodNullable<z.ZodString>;
+        runtimeExecutionId: z.ZodString;
+        toolCallDraftId: z.ZodString;
+        intentCompilationId: z.ZodString;
+        generatedExecutionGraphId: z.ZodNull;
+        generatedExecutionGraphPosture: z.ZodLiteral<"not_exposed_by_role_scoped_runtime_surface">;
+    }, z.core.$strict>, z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
+        phase: z.ZodEnum<{
+            metadata: "metadata";
+            freshness: "freshness";
+            bypass: "bypass";
+            replay: "replay";
+            readiness: "readiness";
+            evidence: "evidence";
+            proposal: "proposal";
+            tool_execution: "tool_execution";
+        }>;
+        authorityCreated: z.ZodLiteral<false>;
+        authorityCertificateMinted: z.ZodLiteral<false>;
+        credentialMaterialIncluded: z.ZodLiteral<false>;
+        gatewayCheckPerformed: z.ZodLiteral<false>;
+        greenlightCreated: z.ZodLiteral<false>;
+        mutationAttempted: z.ZodLiteral<false>;
+        mutationCommandIncluded: z.ZodLiteral<false>;
+        rawInternalRecordIncluded: z.ZodLiteral<false>;
+        receiptExportCreated: z.ZodLiteral<false>;
+        greenlightRef: z.ZodNull;
+        gatewayCheckRef: z.ZodNull;
+        mutationAttemptRef: z.ZodNull;
+        proofRef: z.ZodNullable<z.ZodString>;
+        refusalRef: z.ZodNullable<z.ZodString>;
+        reasonCodes: z.ZodArray<z.ZodString>;
+        nextAction: z.ZodEnum<{
+            read_evidence: "read_evidence";
+            request_review: "request_review";
+            recraft_request: "recraft_request";
+            stop: "stop";
+            reload_metadata: "reload_metadata";
+            fix_install: "fix_install";
+            wait_for_gateway: "wait_for_gateway";
+        }>;
+        retryability: z.ZodEnum<{
+            not_retryable: "not_retryable";
+            retryable_after_recraft: "retryable_after_recraft";
+            retryable_after_reload: "retryable_after_reload";
+        }>;
+        commitState: z.ZodEnum<{
+            ambiguous: "ambiguous";
+            not_started: "not_started";
+            protocol_recorded: "protocol_recorded";
+        }>;
+        metadataRef: z.ZodNullable<z.ZodString>;
+        evidenceRefs: z.ZodArray<z.ZodString>;
+        challengeRef: z.ZodNullable<z.ZodString>;
+        correlationRef: z.ZodNullable<z.ZodString>;
+        idempotencyKey: z.ZodNullable<z.ZodString>;
+        outcome: z.ZodEnum<{
+            review_required: "review_required";
+            proof_gap: "proof_gap";
+            replay_refused: "replay_refused";
+            refused: "refused";
+            install_not_ready: "install_not_ready";
+            gateway_offline: "gateway_offline";
+            metadata_stale: "metadata_stale";
+            tool_execution_error: "tool_execution_error";
+            tools_list_changed: "tools_list_changed";
+            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+        }>;
+    }, z.core.$strict>], "outcome">>;
+    readonly annotations: {
+        readonly destructiveHint: false;
+        readonly idempotentHint: true;
+        readonly openWorldHint: false;
+        readonly readOnlyHint: true;
+    };
 }];
 export declare const mcpProposalTools: readonly [{
     readonly name: "handshake.actions.x402_payment.propose";
@@ -332,7 +471,144 @@ export declare function mcpCatalogSnapshot(): {
         readonly authorityCreated: false;
         readonly projectionStatus: "reference_only";
     }];
-    tools: readonly [{
+    tools: ({
+        readonly name: "handshake.evidence.delegation.verify";
+        readonly description: "Cryptographically verify an A1 delegation signed chain offline. Evidence-only: does not authorize, greenlight, or execute any protected action.";
+        readonly inputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodObject<{
+            signedChain: z.ZodUnknown;
+            executorPk: z.ZodString;
+            intentHash: z.ZodString;
+            merkleProof: z.ZodObject<{
+                siblings: z.ZodArray<z.ZodObject<{
+                    hash: z.ZodString;
+                    isLeft: z.ZodBoolean;
+                }, z.core.$strict>>;
+            }, z.core.$strict>;
+            nowUnix: z.ZodOptional<z.ZodNumber>;
+            driftToleranceSecs: z.ZodOptional<z.ZodNumber>;
+        }, z.core.$strict>>;
+        readonly outputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodDiscriminatedUnion<[z.ZodObject<{
+            schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
+            authorityCreated: z.ZodLiteral<false>;
+            authorityCertificateMinted: z.ZodLiteral<false>;
+            credentialMaterialIncluded: z.ZodLiteral<false>;
+            gatewayCheckPerformed: z.ZodLiteral<false>;
+            greenlightCreated: z.ZodLiteral<false>;
+            mutationAttempted: z.ZodLiteral<false>;
+            mutationCommandIncluded: z.ZodLiteral<false>;
+            rawInternalRecordIncluded: z.ZodLiteral<false>;
+            receiptExportCreated: z.ZodLiteral<false>;
+            greenlightRef: z.ZodNull;
+            gatewayCheckRef: z.ZodNull;
+            mutationAttemptRef: z.ZodNull;
+            proofRef: z.ZodNullable<z.ZodString>;
+            refusalRef: z.ZodNullable<z.ZodString>;
+            reasonCodes: z.ZodArray<z.ZodString>;
+            nextAction: z.ZodEnum<{
+                read_evidence: "read_evidence";
+                request_review: "request_review";
+                recraft_request: "recraft_request";
+                stop: "stop";
+                reload_metadata: "reload_metadata";
+                fix_install: "fix_install";
+                wait_for_gateway: "wait_for_gateway";
+            }>;
+            retryability: z.ZodEnum<{
+                not_retryable: "not_retryable";
+                retryable_after_recraft: "retryable_after_recraft";
+                retryable_after_reload: "retryable_after_reload";
+            }>;
+            commitState: z.ZodEnum<{
+                ambiguous: "ambiguous";
+                not_started: "not_started";
+                protocol_recorded: "protocol_recorded";
+            }>;
+            metadataRef: z.ZodNullable<z.ZodString>;
+            evidenceRefs: z.ZodArray<z.ZodString>;
+            challengeRef: z.ZodNullable<z.ZodString>;
+            correlationRef: z.ZodNullable<z.ZodString>;
+            idempotencyKey: z.ZodNullable<z.ZodString>;
+            outcome: z.ZodLiteral<"action_contract_proposed">;
+            phase: z.ZodLiteral<"proposal">;
+            actionContractId: z.ZodString;
+            contractDigest: z.ZodString;
+            paramsDigest: z.ZodNullable<z.ZodString>;
+            runtimeExecutionId: z.ZodString;
+            toolCallDraftId: z.ZodString;
+            intentCompilationId: z.ZodString;
+            generatedExecutionGraphId: z.ZodNull;
+            generatedExecutionGraphPosture: z.ZodLiteral<"not_exposed_by_role_scoped_runtime_surface">;
+        }, z.core.$strict>, z.ZodObject<{
+            schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
+            phase: z.ZodEnum<{
+                metadata: "metadata";
+                freshness: "freshness";
+                bypass: "bypass";
+                replay: "replay";
+                readiness: "readiness";
+                evidence: "evidence";
+                proposal: "proposal";
+                tool_execution: "tool_execution";
+            }>;
+            authorityCreated: z.ZodLiteral<false>;
+            authorityCertificateMinted: z.ZodLiteral<false>;
+            credentialMaterialIncluded: z.ZodLiteral<false>;
+            gatewayCheckPerformed: z.ZodLiteral<false>;
+            greenlightCreated: z.ZodLiteral<false>;
+            mutationAttempted: z.ZodLiteral<false>;
+            mutationCommandIncluded: z.ZodLiteral<false>;
+            rawInternalRecordIncluded: z.ZodLiteral<false>;
+            receiptExportCreated: z.ZodLiteral<false>;
+            greenlightRef: z.ZodNull;
+            gatewayCheckRef: z.ZodNull;
+            mutationAttemptRef: z.ZodNull;
+            proofRef: z.ZodNullable<z.ZodString>;
+            refusalRef: z.ZodNullable<z.ZodString>;
+            reasonCodes: z.ZodArray<z.ZodString>;
+            nextAction: z.ZodEnum<{
+                read_evidence: "read_evidence";
+                request_review: "request_review";
+                recraft_request: "recraft_request";
+                stop: "stop";
+                reload_metadata: "reload_metadata";
+                fix_install: "fix_install";
+                wait_for_gateway: "wait_for_gateway";
+            }>;
+            retryability: z.ZodEnum<{
+                not_retryable: "not_retryable";
+                retryable_after_recraft: "retryable_after_recraft";
+                retryable_after_reload: "retryable_after_reload";
+            }>;
+            commitState: z.ZodEnum<{
+                ambiguous: "ambiguous";
+                not_started: "not_started";
+                protocol_recorded: "protocol_recorded";
+            }>;
+            metadataRef: z.ZodNullable<z.ZodString>;
+            evidenceRefs: z.ZodArray<z.ZodString>;
+            challengeRef: z.ZodNullable<z.ZodString>;
+            correlationRef: z.ZodNullable<z.ZodString>;
+            idempotencyKey: z.ZodNullable<z.ZodString>;
+            outcome: z.ZodEnum<{
+                review_required: "review_required";
+                proof_gap: "proof_gap";
+                replay_refused: "replay_refused";
+                refused: "refused";
+                install_not_ready: "install_not_ready";
+                gateway_offline: "gateway_offline";
+                metadata_stale: "metadata_stale";
+                tool_execution_error: "tool_execution_error";
+                tools_list_changed: "tools_list_changed";
+                raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+            }>;
+        }, z.core.$strict>], "outcome">>;
+        readonly annotations: {
+            readonly destructiveHint: false;
+            readonly idempotentHint: true;
+            readonly openWorldHint: false;
+            readonly readOnlyHint: true;
+        };
+    } | {
         readonly name: "handshake.actions.x402_payment.propose";
         readonly description: "Propose one exact x402 protected action. This does not authorize or execute the action.";
         readonly inputSchema: z.core.ZodStandardJSONSchemaPayload<z.ZodObject<{
@@ -541,7 +817,7 @@ export declare function mcpCatalogSnapshot(): {
             readonly openWorldHint: false;
             readonly readOnlyHint: false;
         };
-    }];
+    })[];
     serviceWorkflowBoundary: {
         readonly acceptsWorkflowHandleContext: true;
         readonly workflowHandleCreatesAuthority: false;

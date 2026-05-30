@@ -289,8 +289,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             replayed: "replayed";
         }>;
         greenlightConsumptionStatus: import("zod").ZodNullable<import("zod").ZodEnum<{
-            replayed: "replayed";
             not_applicable: "not_applicable";
+            replayed: "replayed";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>>;
@@ -382,8 +382,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             isolated: "isolated";
             downstream_refused: "downstream_refused";
             gateway_refused: "gateway_refused";
-            halted: "halted";
             quarantined: "quarantined";
+            halted: "halted";
             greenlight_available: "greenlight_available";
             downstream_pending: "downstream_pending";
             downstream_succeeded: "downstream_succeeded";
@@ -397,11 +397,11 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             receipt: "receipt";
             greenlight: "greenlight";
             intent_compilation: "intent_compilation";
-            candidate_action: "candidate_action";
             action_contract: "action_contract";
             policy_decision: "policy_decision";
-            gateway_check: "gateway_check";
             mutation_attempt: "mutation_attempt";
+            candidate_action: "candidate_action";
+            gateway_check: "gateway_check";
         }>;
         policyDecisionRef: import("zod").ZodString;
         policyDecisionStatus: import("zod").ZodEnum<{
@@ -468,8 +468,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         }>;
         reasonCodes: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         nextMechanism: import("zod").ZodEnum<{
-            read_evidence: "read_evidence";
             use_greenlight_at_gateway: "use_greenlight_at_gateway";
+            read_evidence: "read_evidence";
             request_review: "request_review";
             recraft_request: "recraft_request";
             create_new_contract: "create_new_contract";
@@ -517,8 +517,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 isolated: "isolated";
                 downstream_refused: "downstream_refused";
                 gateway_refused: "gateway_refused";
-                halted: "halted";
                 quarantined: "quarantined";
+                halted: "halted";
                 greenlight_available: "greenlight_available";
                 downstream_pending: "downstream_pending";
                 downstream_succeeded: "downstream_succeeded";
@@ -528,8 +528,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             }>;
             reasonCodes: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
             nextMechanism: import("zod").ZodEnum<{
-                read_evidence: "read_evidence";
                 use_greenlight_at_gateway: "use_greenlight_at_gateway";
+                read_evidence: "read_evidence";
                 request_review: "request_review";
                 recraft_request: "recraft_request";
                 create_new_contract: "create_new_contract";
@@ -675,8 +675,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             replayed: "replayed";
         }>;
         greenlightConsumptionStatus: import("zod").ZodEnum<{
-            replayed: "replayed";
             not_applicable: "not_applicable";
+            replayed: "replayed";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -803,6 +803,21 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 digest_only: "digest_only";
             }>;
         }, import("zod/v4/core").$strict>>;
+        delegationProvenance: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodObject<{
+            a1ChainFingerprint: import("zod").ZodString;
+            chainDepth: import("zod").ZodNumber;
+            principalPkFingerprint: import("zod").ZodString;
+            terminalDelegatePkFingerprint: import("zod").ZodString;
+            verifyOutcome: import("zod").ZodEnum<{
+                valid: "valid";
+                invalid: "invalid";
+            }>;
+            reasonCodes: import("zod").ZodArray<import("zod").ZodString>;
+            evidenceBindingDigest: import("zod").ZodString;
+            a1VerifierVersion: import("zod").ZodString;
+            mutationAuthorityCreated: import("zod").ZodLiteral<false>;
+            greenlightCreated: import("zod").ZodLiteral<false>;
+        }, import("zod/v4/core").$strict>>>;
         redactionProfileRef: import("zod").ZodLiteral<"receipt-timeline:v0.2-redacted">;
         omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
     }, import("zod/v4/core").$strict>;

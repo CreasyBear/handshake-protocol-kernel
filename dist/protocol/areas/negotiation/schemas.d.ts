@@ -274,10 +274,10 @@ export declare const AgreementObligationBindingSchema: z.ZodObject<{
     bindingPosture: z.ZodLiteral<"local_evidence_only">;
     localProtectedActionEvidenceRefs: z.ZodArray<z.ZodObject<{
         refKind: z.ZodEnum<{
-            intent_compilation: "intent_compilation";
-            candidate_action: "candidate_action";
-            action_contract: "action_contract";
             generated_execution_graph: "generated_execution_graph";
+            intent_compilation: "intent_compilation";
+            action_contract: "action_contract";
+            candidate_action: "candidate_action";
         }>;
         ref: z.ZodString;
         digest: z.ZodDefault<z.ZodNullable<z.ZodString>>;

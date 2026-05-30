@@ -1,9 +1,9 @@
 import { z } from "zod";
 export declare const ToolCallDraftStateSchema: z.ZodEnum<{
+    invalid: "invalid";
     opened: "opened";
     streaming: "streaming";
     finalized: "finalized";
-    invalid: "invalid";
     abandoned: "abandoned";
 }>;
 export type ToolCallDraftState = z.infer<typeof ToolCallDraftStateSchema>;
@@ -23,10 +23,10 @@ export declare const ToolCallDraftSchema: z.ZodObject<{
     gatewayId: z.ZodString;
     resourceRef: z.ZodString;
     draftState: z.ZodEnum<{
+        invalid: "invalid";
         opened: "opened";
         streaming: "streaming";
         finalized: "finalized";
-        invalid: "invalid";
         abandoned: "abandoned";
     }>;
     parameters: z.ZodRecord<z.ZodString, z.ZodType<import("./types").JsonValue, unknown, z.core.$ZodTypeInternals<import("./types").JsonValue, unknown>>>;

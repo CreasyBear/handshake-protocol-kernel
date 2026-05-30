@@ -75,7 +75,7 @@ export declare function evidenceReceiptTimelineCommand(value: unknown): import("
     policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
     gatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
     gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
-    greenlightConsumptionStatus: "replayed" | "not_applicable" | "not_consumed" | "consumed";
+    greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
     mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
     downstreamExecutionStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
     downstreamOutcomeStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
@@ -110,6 +110,18 @@ export declare function evidenceReceiptTimelineCommand(value: unknown): import("
         traceRef: string | null;
         spanRef: string | null;
         diagnosticsRedactionPosture: "unknown" | "none" | "redacted" | "digest_only";
+    } | null;
+    delegationProvenance: {
+        a1ChainFingerprint: string;
+        chainDepth: number;
+        principalPkFingerprint: string;
+        terminalDelegatePkFingerprint: string;
+        verifyOutcome: "valid" | "invalid";
+        reasonCodes: string[];
+        evidenceBindingDigest: string;
+        a1VerifierVersion: string;
+        mutationAuthorityCreated: false;
+        greenlightCreated: false;
     } | null;
     redactionProfileRef: "receipt-timeline:v0.2-redacted";
     omittedFields: string[];

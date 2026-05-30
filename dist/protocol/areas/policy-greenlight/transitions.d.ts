@@ -2,6 +2,7 @@ import { type EvaluatePolicyInput } from "./types";
 import type { ProtocolRecorder } from "../../events/records";
 import { type Greenlight, type PolicyDecision } from "./types";
 import type { ProtocolStore } from "../../store/port";
+export declare const DELEGATION_EVIDENCE_REQUIRED_REF: "delegation_evidence:required";
 export type PolicyEvaluationResponse = {
     decision: PolicyDecision;
     greenlight: Greenlight | null;

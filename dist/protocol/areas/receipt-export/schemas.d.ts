@@ -63,8 +63,8 @@ export declare const ReceiptSchema: z.ZodObject<{
         replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        replayed: "replayed";
         not_applicable: "not_applicable";
+        replayed: "replayed";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;
@@ -158,8 +158,8 @@ export declare const ReceiptExportSchema: z.ZodObject<{
     }>;
     gatewayCheckedAt: z.ZodNullable<z.ZodString>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        replayed: "replayed";
         not_applicable: "not_applicable";
+        replayed: "replayed";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;
@@ -233,5 +233,20 @@ export declare const ReceiptExportSchema: z.ZodObject<{
     evidenceRetentionUntil: z.ZodNullable<z.ZodString>;
     exportedAt: z.ZodString;
     exportDigest: z.ZodString;
+    delegationProvenance: z.ZodOptional<z.ZodObject<{
+        a1ChainFingerprint: z.ZodString;
+        chainDepth: z.ZodNumber;
+        principalPkFingerprint: z.ZodString;
+        terminalDelegatePkFingerprint: z.ZodString;
+        verifyOutcome: z.ZodEnum<{
+            valid: "valid";
+            invalid: "invalid";
+        }>;
+        reasonCodes: z.ZodArray<z.ZodString>;
+        evidenceBindingDigest: z.ZodString;
+        a1VerifierVersion: z.ZodString;
+        mutationAuthorityCreated: z.ZodLiteral<false>;
+        greenlightCreated: z.ZodLiteral<false>;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
 export type ReceiptExport = z.infer<typeof ReceiptExportSchema>;

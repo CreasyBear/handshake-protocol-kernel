@@ -4,19 +4,6 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     receipt: "receipt";
     greenlight: "greenlight";
-    intent_compilation: "intent_compilation";
-    action_contract: "action_contract";
-    policy_decision: "policy_decision";
-    mutation_attempt: "mutation_attempt";
-    gateway_check_attempt: "gateway_check_attempt";
-    receipt_export: "receipt_export";
-    surface_operation_reconciliation: "surface_operation_reconciliation";
-    credential_resolution_evidence: "credential_resolution_evidence";
-    idempotency_ledger_entry: "idempotency_ledger_entry";
-    recovery_recommendation: "recovery_recommendation";
-    recovery_recommendation_status_transition: "recovery_recommendation_status_transition";
-    isolation_state: "isolation_state";
-    generated_execution_graph: "generated_execution_graph";
     tool_capability: "tool_capability";
     action_type: "action_type";
     gateway_registry_entry: "gateway_registry_entry";
@@ -25,22 +12,36 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     delegated_authority_ref: "delegated_authority_ref";
     delegated_authority_status_transition: "delegated_authority_status_transition";
     gateway_custody_proof_packet: "gateway_custody_proof_packet";
+    credential_resolution_evidence: "credential_resolution_evidence";
     transition_request_context: "transition_request_context";
     runtime_execution: "runtime_execution";
+    generated_execution_graph: "generated_execution_graph";
+    idempotency_ledger_entry: "idempotency_ledger_entry";
     bypass_probe: "bypass_probe";
     tool_call_draft: "tool_call_draft";
     protected_path_posture: "protected_path_posture";
+    intent_compilation: "intent_compilation";
+    delegation_evidence_record: "delegation_evidence_record";
     negotiation_session: "negotiation_session";
     negotiation_offer: "negotiation_offer";
     negotiation_decision: "negotiation_decision";
     linked_agreement: "linked_agreement";
     agreement_obligation_binding: "agreement_obligation_binding";
     agreement_status_transition: "agreement_status_transition";
+    action_contract: "action_contract";
     authority_certificate: "authority_certificate";
+    policy_decision: "policy_decision";
     review_artifact: "review_artifact";
     review_decision: "review_decision";
     breaker_decision: "breaker_decision";
+    isolation_state: "isolation_state";
+    gateway_check_attempt: "gateway_check_attempt";
+    mutation_attempt: "mutation_attempt";
     protected_surface_operation_claim: "protected_surface_operation_claim";
+    surface_operation_reconciliation: "surface_operation_reconciliation";
+    receipt_export: "receipt_export";
+    recovery_recommendation: "recovery_recommendation";
+    recovery_recommendation_status_transition: "recovery_recommendation_status_transition";
     contract_stream_event: "contract_stream_event";
 }>;
 export type ProtocolObjectType = z.infer<typeof ProtocolObjectTypeSchema>;
@@ -779,10 +780,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         gatewayId: z.ZodString;
         resourceRef: z.ZodString;
         draftState: z.ZodEnum<{
+            invalid: "invalid";
             opened: "opened";
             streaming: "streaming";
             finalized: "finalized";
-            invalid: "invalid";
             abandoned: "abandoned";
         }>;
         parameters: z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>;
@@ -1029,18 +1030,62 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+                invalid: "invalid";
                 opened: "opened";
                 streaming: "streaming";
                 finalized: "finalized";
-                invalid: "invalid";
                 abandoned: "abandoned";
             }>>>;
+            delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                delegationEvidenceRefId: z.ZodString;
+                evidenceBindingDigest: z.ZodString;
+                a1ChainFingerprint: z.ZodString;
+                storeRef: z.ZodString;
+                verifyOutcome: z.ZodEnum<{
+                    valid: "valid";
+                    invalid: "invalid";
+                }>;
+                a1VerifierVersion: z.ZodString;
+            }, z.core.$strict>>>;
         }, z.core.$strict>;
         candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         compilerVersion: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"delegation_evidence_record">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"0.2.4">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        delegationEvidenceRecordId: z.ZodString;
+        evidenceRecord: z.ZodObject<{
+            schemaId: z.ZodLiteral<"delegation-evidence-record">;
+            schemaVersion: z.ZodLiteral<1>;
+            a1ChainFingerprint: z.ZodString;
+            certFingerprints: z.ZodArray<z.ZodString>;
+            chainDepth: z.ZodNumber;
+            principalPkFingerprint: z.ZodString;
+            terminalDelegatePkFingerprint: z.ZodString;
+            a1VerifierVersion: z.ZodString;
+            verifyPath: z.ZodEnum<{
+                ts: "ts";
+                sidecar: "sidecar";
+            }>;
+            verifyOutcome: z.ZodEnum<{
+                valid: "valid";
+                invalid: "invalid";
+            }>;
+            reasonCodes: z.ZodArray<z.ZodString>;
+            evidenceBindingDigest: z.ZodNullable<z.ZodString>;
+            presentedAtUnix: z.ZodNumber;
+            mutationAuthorityCreated: z.ZodLiteral<false>;
+            greenlightCreated: z.ZodLiteral<false>;
+        }, z.core.$strict>;
     }, z.core.$strict>;
 }, z.core.$strict>, z.ZodObject<{
     objectType: z.ZodLiteral<"negotiation_session">;
@@ -1269,10 +1314,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         bindingPosture: z.ZodLiteral<"local_evidence_only">;
         localProtectedActionEvidenceRefs: z.ZodArray<z.ZodObject<{
             refKind: z.ZodEnum<{
-                intent_compilation: "intent_compilation";
-                candidate_action: "candidate_action";
-                action_contract: "action_contract";
                 generated_execution_graph: "generated_execution_graph";
+                intent_compilation: "intent_compilation";
+                action_contract: "action_contract";
+                candidate_action: "candidate_action";
             }>;
             ref: z.ZodString;
             digest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -1586,8 +1631,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 replayed: "replayed";
             }>;
             greenlightConsumptionStatus: z.ZodNullable<z.ZodEnum<{
-                replayed: "replayed";
                 not_applicable: "not_applicable";
+                replayed: "replayed";
                 not_consumed: "not_consumed";
                 consumed: "consumed";
             }>>;
@@ -1651,17 +1696,17 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 proof_gap: "proof_gap";
                 receipt: "receipt";
                 greenlight: "greenlight";
-                action_contract: "action_contract";
-                policy_decision: "policy_decision";
-                mutation_attempt: "mutation_attempt";
-                gateway_check_attempt: "gateway_check_attempt";
-                receipt_export: "receipt_export";
-                surface_operation_reconciliation: "surface_operation_reconciliation";
                 credential_resolution_evidence: "credential_resolution_evidence";
                 idempotency_ledger_entry: "idempotency_ledger_entry";
+                action_contract: "action_contract";
+                policy_decision: "policy_decision";
+                isolation_state: "isolation_state";
+                gateway_check_attempt: "gateway_check_attempt";
+                mutation_attempt: "mutation_attempt";
+                surface_operation_reconciliation: "surface_operation_reconciliation";
+                receipt_export: "receipt_export";
                 recovery_recommendation: "recovery_recommendation";
                 recovery_recommendation_status_transition: "recovery_recommendation_status_transition";
-                isolation_state: "isolation_state";
             }>;
             objectRef: z.ZodString;
             digest: z.ZodString;
@@ -1685,17 +1730,17 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 proof_gap: "proof_gap";
                 receipt: "receipt";
                 greenlight: "greenlight";
-                action_contract: "action_contract";
-                policy_decision: "policy_decision";
-                mutation_attempt: "mutation_attempt";
-                gateway_check_attempt: "gateway_check_attempt";
-                receipt_export: "receipt_export";
-                surface_operation_reconciliation: "surface_operation_reconciliation";
                 credential_resolution_evidence: "credential_resolution_evidence";
                 idempotency_ledger_entry: "idempotency_ledger_entry";
+                action_contract: "action_contract";
+                policy_decision: "policy_decision";
+                isolation_state: "isolation_state";
+                gateway_check_attempt: "gateway_check_attempt";
+                mutation_attempt: "mutation_attempt";
+                surface_operation_reconciliation: "surface_operation_reconciliation";
+                receipt_export: "receipt_export";
                 recovery_recommendation: "recovery_recommendation";
                 recovery_recommendation_status_transition: "recovery_recommendation_status_transition";
-                isolation_state: "isolation_state";
             }>>>;
         }, z.core.$strict>;
         signatures: z.ZodArray<z.ZodObject<{
@@ -1906,10 +1951,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
-            halted: "halted";
-            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
+            quarantined: "quarantined";
+            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         decisionReasonCode: z.ZodString;
@@ -1966,10 +2011,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
-            halted: "halted";
-            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
+            quarantined: "quarantined";
+            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         reasonCode: z.ZodString;
@@ -2250,8 +2295,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             replayed: "replayed";
         }>;
         greenlightConsumptionStatus: z.ZodEnum<{
-            replayed: "replayed";
             not_applicable: "not_applicable";
+            replayed: "replayed";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -2346,8 +2391,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         gatewayCheckedAt: z.ZodNullable<z.ZodString>;
         greenlightConsumptionStatus: z.ZodEnum<{
-            replayed: "replayed";
             not_applicable: "not_applicable";
+            replayed: "replayed";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -2421,6 +2466,21 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         evidenceRetentionUntil: z.ZodNullable<z.ZodString>;
         exportedAt: z.ZodString;
         exportDigest: z.ZodString;
+        delegationProvenance: z.ZodOptional<z.ZodObject<{
+            a1ChainFingerprint: z.ZodString;
+            chainDepth: z.ZodNumber;
+            principalPkFingerprint: z.ZodString;
+            terminalDelegatePkFingerprint: z.ZodString;
+            verifyOutcome: z.ZodEnum<{
+                valid: "valid";
+                invalid: "invalid";
+            }>;
+            reasonCodes: z.ZodArray<z.ZodString>;
+            evidenceBindingDigest: z.ZodString;
+            a1VerifierVersion: z.ZodString;
+            mutationAuthorityCreated: z.ZodLiteral<false>;
+            greenlightCreated: z.ZodLiteral<false>;
+        }, z.core.$strict>>;
     }, z.core.$strict>;
 }, z.core.$strict>, z.ZodObject<{
     objectType: z.ZodLiteral<"recovery_recommendation">;

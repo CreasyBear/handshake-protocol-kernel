@@ -106,8 +106,8 @@ export declare const PolicyEvaluationResponseSchema: z.ZodObject<{
     refusalReasonCode: z.ZodNullable<z.ZodString>;
     reviewRequired: z.ZodBoolean;
     nextAction: z.ZodEnum<{
-        read_evidence: "read_evidence";
         use_greenlight_at_gateway: "use_greenlight_at_gateway";
+        read_evidence: "read_evidence";
         request_review: "request_review";
     }>;
     retryability: z.ZodLiteral<"not_retryable">;
@@ -215,8 +215,8 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
             replayed: "replayed";
         }>;
         greenlightConsumptionStatus: z.ZodEnum<{
-            replayed: "replayed";
             not_applicable: "not_applicable";
+            replayed: "replayed";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -450,10 +450,10 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
-            halted: "halted";
-            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
+            quarantined: "quarantined";
+            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         decisionReasonCode: z.ZodString;
@@ -508,10 +508,10 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
-            halted: "halted";
-            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
+            quarantined: "quarantined";
+            halted: "halted";
             state_suspect: "state_suspect";
         }>;
         reasonCode: z.ZodString;
@@ -880,10 +880,10 @@ export declare const RuntimeIngressActionProposalResponseSchema: z.ZodDiscrimina
         gatewayId: z.ZodString;
         resourceRef: z.ZodString;
         draftState: z.ZodEnum<{
+            invalid: "invalid";
             opened: "opened";
             streaming: "streaming";
             finalized: "finalized";
-            invalid: "invalid";
             abandoned: "abandoned";
         }>;
         parameters: z.ZodRecord<z.ZodString, z.ZodType<import("../..").JsonValue, unknown, z.core.$ZodTypeInternals<import("../..").JsonValue, unknown>>>;
@@ -1048,17 +1048,29 @@ export declare const RuntimeIngressActionProposalResponseSchema: z.ZodDiscrimina
             toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+                invalid: "invalid";
                 opened: "opened";
                 streaming: "streaming";
                 finalized: "finalized";
-                invalid: "invalid";
                 abandoned: "abandoned";
             }>>>;
+            delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                delegationEvidenceRefId: z.ZodString;
+                evidenceBindingDigest: z.ZodString;
+                a1ChainFingerprint: z.ZodString;
+                storeRef: z.ZodString;
+                verifyOutcome: z.ZodEnum<{
+                    valid: "valid";
+                    invalid: "invalid";
+                }>;
+                a1VerifierVersion: z.ZodString;
+            }, z.core.$strict>>>;
         }, z.core.$strict>;
         candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         compilerVersion: z.ZodString;
     }, z.core.$strict>;
     actionContract: z.ZodObject<{
@@ -1238,10 +1250,10 @@ export declare const RuntimeIngressActionProposalResponseSchema: z.ZodDiscrimina
         gatewayId: z.ZodString;
         resourceRef: z.ZodString;
         draftState: z.ZodEnum<{
+            invalid: "invalid";
             opened: "opened";
             streaming: "streaming";
             finalized: "finalized";
-            invalid: "invalid";
             abandoned: "abandoned";
         }>;
         parameters: z.ZodRecord<z.ZodString, z.ZodType<import("../..").JsonValue, unknown, z.core.$ZodTypeInternals<import("../..").JsonValue, unknown>>>;
@@ -1406,17 +1418,29 @@ export declare const RuntimeIngressActionProposalResponseSchema: z.ZodDiscrimina
             toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+                invalid: "invalid";
                 opened: "opened";
                 streaming: "streaming";
                 finalized: "finalized";
-                invalid: "invalid";
                 abandoned: "abandoned";
             }>>>;
+            delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                delegationEvidenceRefId: z.ZodString;
+                evidenceBindingDigest: z.ZodString;
+                a1ChainFingerprint: z.ZodString;
+                storeRef: z.ZodString;
+                verifyOutcome: z.ZodEnum<{
+                    valid: "valid";
+                    invalid: "invalid";
+                }>;
+                a1VerifierVersion: z.ZodString;
+            }, z.core.$strict>>>;
         }, z.core.$strict>;
         candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
         overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         compilerVersion: z.ZodString;
     }, z.core.$strict>;
     actionContract: z.ZodNull;
@@ -1670,10 +1694,10 @@ export declare const RuntimeIngressProposalResponseSchema: z.ZodObject<{
             gatewayId: z.ZodString;
             resourceRef: z.ZodString;
             draftState: z.ZodEnum<{
+                invalid: "invalid";
                 opened: "opened";
                 streaming: "streaming";
                 finalized: "finalized";
-                invalid: "invalid";
                 abandoned: "abandoned";
             }>;
             parameters: z.ZodRecord<z.ZodString, z.ZodType<import("../..").JsonValue, unknown, z.core.$ZodTypeInternals<import("../..").JsonValue, unknown>>>;
@@ -1838,17 +1862,29 @@ export declare const RuntimeIngressProposalResponseSchema: z.ZodObject<{
                 toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
                 toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
                 toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+                    invalid: "invalid";
                     opened: "opened";
                     streaming: "streaming";
                     finalized: "finalized";
-                    invalid: "invalid";
                     abandoned: "abandoned";
                 }>>>;
+                delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                    delegationEvidenceRefId: z.ZodString;
+                    evidenceBindingDigest: z.ZodString;
+                    a1ChainFingerprint: z.ZodString;
+                    storeRef: z.ZodString;
+                    verifyOutcome: z.ZodEnum<{
+                        valid: "valid";
+                        invalid: "invalid";
+                    }>;
+                    a1VerifierVersion: z.ZodString;
+                }, z.core.$strict>>>;
             }, z.core.$strict>;
             candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
             rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
             overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
             requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             compilerVersion: z.ZodString;
         }, z.core.$strict>;
         actionContract: z.ZodObject<{
@@ -2028,10 +2064,10 @@ export declare const RuntimeIngressProposalResponseSchema: z.ZodObject<{
             gatewayId: z.ZodString;
             resourceRef: z.ZodString;
             draftState: z.ZodEnum<{
+                invalid: "invalid";
                 opened: "opened";
                 streaming: "streaming";
                 finalized: "finalized";
-                invalid: "invalid";
                 abandoned: "abandoned";
             }>;
             parameters: z.ZodRecord<z.ZodString, z.ZodType<import("../..").JsonValue, unknown, z.core.$ZodTypeInternals<import("../..").JsonValue, unknown>>>;
@@ -2196,17 +2232,29 @@ export declare const RuntimeIngressProposalResponseSchema: z.ZodObject<{
                 toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
                 toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
                 toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+                    invalid: "invalid";
                     opened: "opened";
                     streaming: "streaming";
                     finalized: "finalized";
-                    invalid: "invalid";
                     abandoned: "abandoned";
                 }>>>;
+                delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+                    delegationEvidenceRefId: z.ZodString;
+                    evidenceBindingDigest: z.ZodString;
+                    a1ChainFingerprint: z.ZodString;
+                    storeRef: z.ZodString;
+                    verifyOutcome: z.ZodEnum<{
+                        valid: "valid";
+                        invalid: "invalid";
+                    }>;
+                    a1VerifierVersion: z.ZodString;
+                }, z.core.$strict>>>;
             }, z.core.$strict>;
             candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
             rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
             overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
             requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             compilerVersion: z.ZodString;
         }, z.core.$strict>;
         actionContract: z.ZodNull;

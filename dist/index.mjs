@@ -17981,6 +17981,1216 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   consumedByGateAttemptId: IdSchema.nullable()
 });
 
+// node_modules/@noble/hashes/esm/utils.js
+/*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) */
+function isBytes(a) {
+  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
+}
+function anumber(n) {
+  if (!Number.isSafeInteger(n) || n < 0)
+    throw new Error("positive integer expected, got " + n);
+}
+function abytes(b, ...lengths) {
+  if (!isBytes(b))
+    throw new Error("Uint8Array expected");
+  if (lengths.length > 0 && !lengths.includes(b.length))
+    throw new Error("Uint8Array expected of length " + lengths + ", got length=" + b.length);
+}
+function aexists(instance, checkFinished = true) {
+  if (instance.destroyed)
+    throw new Error("Hash instance has been destroyed");
+  if (checkFinished && instance.finished)
+    throw new Error("Hash#digest() has already been called");
+}
+function aoutput(out, instance) {
+  abytes(out);
+  const min = instance.outputLen;
+  if (out.length < min) {
+    throw new Error("digestInto() expects output buffer of length at least " + min);
+  }
+}
+function u8(arr) {
+  return new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+function u32(arr) {
+  return new Uint32Array(arr.buffer, arr.byteOffset, Math.floor(arr.byteLength / 4));
+}
+function clean(...arrays) {
+  for (let i = 0;i < arrays.length; i++) {
+    arrays[i].fill(0);
+  }
+}
+function rotr(word, shift) {
+  return word << 32 - shift | word >>> shift;
+}
+var isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+function byteSwap(word) {
+  return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
+}
+var swap8IfBE = isLE ? (n) => n : (n) => byteSwap(n);
+function byteSwap32(arr) {
+  for (let i = 0;i < arr.length; i++) {
+    arr[i] = byteSwap(arr[i]);
+  }
+  return arr;
+}
+var swap32IfBE = isLE ? (u) => u : byteSwap32;
+function utf8ToBytes(str) {
+  if (typeof str !== "string")
+    throw new Error("string expected");
+  return new Uint8Array(new TextEncoder().encode(str));
+}
+function toBytes(data) {
+  if (typeof data === "string")
+    data = utf8ToBytes(data);
+  abytes(data);
+  return data;
+}
+class Hash {
+}
+function createXOFer(hashCons) {
+  const hashC = (msg, opts) => hashCons(opts).update(toBytes(msg)).digest();
+  const tmp = hashCons({});
+  hashC.outputLen = tmp.outputLen;
+  hashC.blockLen = tmp.blockLen;
+  hashC.create = (opts) => hashCons(opts);
+  return hashC;
+}
+
+// node_modules/@noble/hashes/esm/_md.js
+var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
+  1779033703,
+  3144134277,
+  1013904242,
+  2773480762,
+  1359893119,
+  2600822924,
+  528734635,
+  1541459225
+]);
+
+// node_modules/@noble/hashes/esm/_u64.js
+var U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
+var _32n = /* @__PURE__ */ BigInt(32);
+function fromBig(n, le = false) {
+  if (le)
+    return { h: Number(n & U32_MASK64), l: Number(n >> _32n & U32_MASK64) };
+  return { h: Number(n >> _32n & U32_MASK64) | 0, l: Number(n & U32_MASK64) | 0 };
+}
+
+// node_modules/@noble/hashes/esm/_blake.js
+function G1s(a, b, c, d, x) {
+  a = a + b + x | 0;
+  d = rotr(d ^ a, 16);
+  c = c + d | 0;
+  b = rotr(b ^ c, 12);
+  return { a, b, c, d };
+}
+function G2s(a, b, c, d, x) {
+  a = a + b + x | 0;
+  d = rotr(d ^ a, 8);
+  c = c + d | 0;
+  b = rotr(b ^ c, 7);
+  return { a, b, c, d };
+}
+
+// node_modules/@noble/hashes/esm/blake2.js
+class BLAKE2 extends Hash {
+  constructor(blockLen, outputLen) {
+    super();
+    this.finished = false;
+    this.destroyed = false;
+    this.length = 0;
+    this.pos = 0;
+    anumber(blockLen);
+    anumber(outputLen);
+    this.blockLen = blockLen;
+    this.outputLen = outputLen;
+    this.buffer = new Uint8Array(blockLen);
+    this.buffer32 = u32(this.buffer);
+  }
+  update(data) {
+    aexists(this);
+    data = toBytes(data);
+    abytes(data);
+    const { blockLen, buffer, buffer32 } = this;
+    const len = data.length;
+    const offset = data.byteOffset;
+    const buf = data.buffer;
+    for (let pos = 0;pos < len; ) {
+      if (this.pos === blockLen) {
+        swap32IfBE(buffer32);
+        this.compress(buffer32, 0, false);
+        swap32IfBE(buffer32);
+        this.pos = 0;
+      }
+      const take = Math.min(blockLen - this.pos, len - pos);
+      const dataOffset = offset + pos;
+      if (take === blockLen && !(dataOffset % 4) && pos + take < len) {
+        const data32 = new Uint32Array(buf, dataOffset, Math.floor((len - pos) / 4));
+        swap32IfBE(data32);
+        for (let pos32 = 0;pos + blockLen < len; pos32 += buffer32.length, pos += blockLen) {
+          this.length += blockLen;
+          this.compress(data32, pos32, false);
+        }
+        swap32IfBE(data32);
+        continue;
+      }
+      buffer.set(data.subarray(pos, pos + take), this.pos);
+      this.pos += take;
+      this.length += take;
+      pos += take;
+    }
+    return this;
+  }
+  digestInto(out) {
+    aexists(this);
+    aoutput(out, this);
+    const { pos, buffer32 } = this;
+    this.finished = true;
+    clean(this.buffer.subarray(pos));
+    swap32IfBE(buffer32);
+    this.compress(buffer32, 0, true);
+    swap32IfBE(buffer32);
+    const out32 = u32(out);
+    this.get().forEach((v, i) => out32[i] = swap8IfBE(v));
+  }
+  digest() {
+    const { buffer, outputLen } = this;
+    this.digestInto(buffer);
+    const res = buffer.slice(0, outputLen);
+    this.destroy();
+    return res;
+  }
+  _cloneInto(to) {
+    const { buffer, length, finished, destroyed, outputLen, pos } = this;
+    to || (to = new this.constructor({ dkLen: outputLen }));
+    to.set(...this.get());
+    to.buffer.set(buffer);
+    to.destroyed = destroyed;
+    to.finished = finished;
+    to.length = length;
+    to.pos = pos;
+    to.outputLen = outputLen;
+    return to;
+  }
+  clone() {
+    return this._cloneInto();
+  }
+}
+function compress(s, offset, msg, rounds, v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) {
+  let j = 0;
+  for (let i = 0;i < rounds; i++) {
+    ({ a: v0, b: v4, c: v8, d: v12 } = G1s(v0, v4, v8, v12, msg[offset + s[j++]]));
+    ({ a: v0, b: v4, c: v8, d: v12 } = G2s(v0, v4, v8, v12, msg[offset + s[j++]]));
+    ({ a: v1, b: v5, c: v9, d: v13 } = G1s(v1, v5, v9, v13, msg[offset + s[j++]]));
+    ({ a: v1, b: v5, c: v9, d: v13 } = G2s(v1, v5, v9, v13, msg[offset + s[j++]]));
+    ({ a: v2, b: v6, c: v10, d: v14 } = G1s(v2, v6, v10, v14, msg[offset + s[j++]]));
+    ({ a: v2, b: v6, c: v10, d: v14 } = G2s(v2, v6, v10, v14, msg[offset + s[j++]]));
+    ({ a: v3, b: v7, c: v11, d: v15 } = G1s(v3, v7, v11, v15, msg[offset + s[j++]]));
+    ({ a: v3, b: v7, c: v11, d: v15 } = G2s(v3, v7, v11, v15, msg[offset + s[j++]]));
+    ({ a: v0, b: v5, c: v10, d: v15 } = G1s(v0, v5, v10, v15, msg[offset + s[j++]]));
+    ({ a: v0, b: v5, c: v10, d: v15 } = G2s(v0, v5, v10, v15, msg[offset + s[j++]]));
+    ({ a: v1, b: v6, c: v11, d: v12 } = G1s(v1, v6, v11, v12, msg[offset + s[j++]]));
+    ({ a: v1, b: v6, c: v11, d: v12 } = G2s(v1, v6, v11, v12, msg[offset + s[j++]]));
+    ({ a: v2, b: v7, c: v8, d: v13 } = G1s(v2, v7, v8, v13, msg[offset + s[j++]]));
+    ({ a: v2, b: v7, c: v8, d: v13 } = G2s(v2, v7, v8, v13, msg[offset + s[j++]]));
+    ({ a: v3, b: v4, c: v9, d: v14 } = G1s(v3, v4, v9, v14, msg[offset + s[j++]]));
+    ({ a: v3, b: v4, c: v9, d: v14 } = G2s(v3, v4, v9, v14, msg[offset + s[j++]]));
+  }
+  return { v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15 };
+}
+
+// node_modules/@noble/hashes/esm/blake3.js
+var B3_Flags = {
+  CHUNK_START: 1,
+  CHUNK_END: 2,
+  PARENT: 4,
+  ROOT: 8,
+  KEYED_HASH: 16,
+  DERIVE_KEY_CONTEXT: 32,
+  DERIVE_KEY_MATERIAL: 64
+};
+var B3_IV = SHA256_IV.slice();
+var B3_SIGMA = /* @__PURE__ */ (() => {
+  const Id = Array.from({ length: 16 }, (_, i) => i);
+  const permute = (arr) => [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8].map((i) => arr[i]);
+  const res = [];
+  for (let i = 0, v = Id;i < 7; i++, v = permute(v))
+    res.push(...v);
+  return Uint8Array.from(res);
+})();
+
+class BLAKE3 extends BLAKE2 {
+  constructor(opts = {}, flags = 0) {
+    super(64, opts.dkLen === undefined ? 32 : opts.dkLen);
+    this.chunkPos = 0;
+    this.chunksDone = 0;
+    this.flags = 0 | 0;
+    this.stack = [];
+    this.posOut = 0;
+    this.bufferOut32 = new Uint32Array(16);
+    this.chunkOut = 0;
+    this.enableXOF = true;
+    const { key, context } = opts;
+    const hasContext = context !== undefined;
+    if (key !== undefined) {
+      if (hasContext)
+        throw new Error('Only "key" or "context" can be specified at same time');
+      const k = toBytes(key).slice();
+      abytes(k, 32);
+      this.IV = u32(k);
+      swap32IfBE(this.IV);
+      this.flags = flags | B3_Flags.KEYED_HASH;
+    } else if (hasContext) {
+      const ctx = toBytes(context);
+      const contextKey = new BLAKE3({ dkLen: 32 }, B3_Flags.DERIVE_KEY_CONTEXT).update(ctx).digest();
+      this.IV = u32(contextKey);
+      swap32IfBE(this.IV);
+      this.flags = flags | B3_Flags.DERIVE_KEY_MATERIAL;
+    } else {
+      this.IV = B3_IV.slice();
+      this.flags = flags;
+    }
+    this.state = this.IV.slice();
+    this.bufferOut = u8(this.bufferOut32);
+  }
+  get() {
+    return [];
+  }
+  set() {}
+  b2Compress(counter, flags, buf, bufPos = 0) {
+    const { state: s, pos } = this;
+    const { h, l } = fromBig(BigInt(counter), true);
+    const { v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15 } = compress(B3_SIGMA, bufPos, buf, 7, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], B3_IV[0], B3_IV[1], B3_IV[2], B3_IV[3], h, l, pos, flags);
+    s[0] = v0 ^ v8;
+    s[1] = v1 ^ v9;
+    s[2] = v2 ^ v10;
+    s[3] = v3 ^ v11;
+    s[4] = v4 ^ v12;
+    s[5] = v5 ^ v13;
+    s[6] = v6 ^ v14;
+    s[7] = v7 ^ v15;
+  }
+  compress(buf, bufPos = 0, isLast = false) {
+    let flags = this.flags;
+    if (!this.chunkPos)
+      flags |= B3_Flags.CHUNK_START;
+    if (this.chunkPos === 15 || isLast)
+      flags |= B3_Flags.CHUNK_END;
+    if (!isLast)
+      this.pos = this.blockLen;
+    this.b2Compress(this.chunksDone, flags, buf, bufPos);
+    this.chunkPos += 1;
+    if (this.chunkPos === 16 || isLast) {
+      let chunk = this.state;
+      this.state = this.IV.slice();
+      for (let last, chunks = this.chunksDone + 1;isLast || !(chunks & 1); chunks >>= 1) {
+        if (!(last = this.stack.pop()))
+          break;
+        this.buffer32.set(last, 0);
+        this.buffer32.set(chunk, 8);
+        this.pos = this.blockLen;
+        this.b2Compress(0, this.flags | B3_Flags.PARENT, this.buffer32, 0);
+        chunk = this.state;
+        this.state = this.IV.slice();
+      }
+      this.chunksDone++;
+      this.chunkPos = 0;
+      this.stack.push(chunk);
+    }
+    this.pos = 0;
+  }
+  _cloneInto(to) {
+    to = super._cloneInto(to);
+    const { IV, flags, state, chunkPos, posOut, chunkOut, stack, chunksDone } = this;
+    to.state.set(state.slice());
+    to.stack = stack.map((i) => Uint32Array.from(i));
+    to.IV.set(IV);
+    to.flags = flags;
+    to.chunkPos = chunkPos;
+    to.chunksDone = chunksDone;
+    to.posOut = posOut;
+    to.chunkOut = chunkOut;
+    to.enableXOF = this.enableXOF;
+    to.bufferOut32.set(this.bufferOut32);
+    return to;
+  }
+  destroy() {
+    this.destroyed = true;
+    clean(this.state, this.buffer32, this.IV, this.bufferOut32);
+    clean(...this.stack);
+  }
+  b2CompressOut() {
+    const { state: s, pos, flags, buffer32, bufferOut32: out32 } = this;
+    const { h, l } = fromBig(BigInt(this.chunkOut++));
+    swap32IfBE(buffer32);
+    const { v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15 } = compress(B3_SIGMA, 0, buffer32, 7, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], B3_IV[0], B3_IV[1], B3_IV[2], B3_IV[3], l, h, pos, flags);
+    out32[0] = v0 ^ v8;
+    out32[1] = v1 ^ v9;
+    out32[2] = v2 ^ v10;
+    out32[3] = v3 ^ v11;
+    out32[4] = v4 ^ v12;
+    out32[5] = v5 ^ v13;
+    out32[6] = v6 ^ v14;
+    out32[7] = v7 ^ v15;
+    out32[8] = s[0] ^ v8;
+    out32[9] = s[1] ^ v9;
+    out32[10] = s[2] ^ v10;
+    out32[11] = s[3] ^ v11;
+    out32[12] = s[4] ^ v12;
+    out32[13] = s[5] ^ v13;
+    out32[14] = s[6] ^ v14;
+    out32[15] = s[7] ^ v15;
+    swap32IfBE(buffer32);
+    swap32IfBE(out32);
+    this.posOut = 0;
+  }
+  finish() {
+    if (this.finished)
+      return;
+    this.finished = true;
+    clean(this.buffer.subarray(this.pos));
+    let flags = this.flags | B3_Flags.ROOT;
+    if (this.stack.length) {
+      flags |= B3_Flags.PARENT;
+      swap32IfBE(this.buffer32);
+      this.compress(this.buffer32, 0, true);
+      swap32IfBE(this.buffer32);
+      this.chunksDone = 0;
+      this.pos = this.blockLen;
+    } else {
+      flags |= (!this.chunkPos ? B3_Flags.CHUNK_START : 0) | B3_Flags.CHUNK_END;
+    }
+    this.flags = flags;
+    this.b2CompressOut();
+  }
+  writeInto(out) {
+    aexists(this, false);
+    abytes(out);
+    this.finish();
+    const { blockLen, bufferOut } = this;
+    for (let pos = 0, len = out.length;pos < len; ) {
+      if (this.posOut >= blockLen)
+        this.b2CompressOut();
+      const take = Math.min(blockLen - this.posOut, len - pos);
+      out.set(bufferOut.subarray(this.posOut, this.posOut + take), pos);
+      this.posOut += take;
+      pos += take;
+    }
+    return out;
+  }
+  xofInto(out) {
+    if (!this.enableXOF)
+      throw new Error("XOF is not possible after digest call");
+    return this.writeInto(out);
+  }
+  xof(bytes) {
+    anumber(bytes);
+    return this.xofInto(new Uint8Array(bytes));
+  }
+  digestInto(out) {
+    aoutput(out, this);
+    if (this.finished)
+      throw new Error("digest() was already called");
+    this.enableXOF = false;
+    this.writeInto(out);
+    this.destroy();
+    return out;
+  }
+  digest() {
+    return this.digestInto(new Uint8Array(this.outputLen));
+  }
+}
+var blake3 = /* @__PURE__ */ createXOFer((opts) => new BLAKE3(opts));
+
+// src/integrations/a1-evidence/primitives/domains.ts
+var DOMAIN_VERIFY_OUTCOME = "handshake::delegation::verify_outcome::v1";
+
+// src/integrations/a1-evidence/hex.ts
+var HEX32 = /^[0-9a-f]{64}$/;
+function parseHex32(value, field) {
+  const normalized = value.trim().toLowerCase();
+  if (!HEX32.test(normalized)) {
+    throw new Error(`${field} must be 64 lowercase hex characters`);
+  }
+  return hexToBytes(normalized);
+}
+function toHexLower(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function hexToBytes(hex3) {
+  const out = new Uint8Array(hex3.length / 2);
+  for (let i = 0;i < out.length; i++) {
+    out[i] = Number.parseInt(hex3.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+// src/integrations/a1-evidence/primitives/verify-outcome-digest.ts
+function computeA1VerifyOutcomeDigest(input) {
+  const h = blake3.create({ context: DOMAIN_VERIFY_OUTCOME });
+  h.update(Uint8Array.of(input.valid ? 1 : 0));
+  h.update(u64Be(input.reasonCodes.length));
+  for (const code of input.reasonCodes) {
+    const bytes = new TextEncoder().encode(code);
+    h.update(u16Be(bytes.length));
+    h.update(bytes);
+  }
+  h.update(Uint8Array.of(input.chainDepth));
+  h.update(input.principalPkFingerprint);
+  h.update(input.terminalPkFingerprint);
+  h.update(input.verifiedScopeRoot);
+  h.update(u64Be(input.verifiedAtUnix));
+  return h.digest();
+}
+function u16Be(value) {
+  const buf = new ArrayBuffer(2);
+  new DataView(buf).setUint16(0, value, false);
+  return new Uint8Array(buf);
+}
+function u64Be(value) {
+  const buf = new ArrayBuffer(8);
+  new DataView(buf).setBigUint64(0, BigInt(value), false);
+  return new Uint8Array(buf);
+}
+
+// src/integrations/a1-evidence/primitives/binding-digest.ts
+var BINDING_DOMAIN = "handshake::delegation_evidence::binding::v1";
+var BINDING_SCHEMA_ID = "delegation-evidence-binding";
+var BINDING_SCHEMA_VERSION = 1;
+function computeEvidenceBindingDigest(input) {
+  const h = blake3.create({ context: BINDING_DOMAIN });
+  const schemaId = new TextEncoder().encode(BINDING_SCHEMA_ID);
+  h.update(schemaId);
+  h.update(Uint8Array.of(0));
+  h.update(Uint8Array.of(BINDING_SCHEMA_VERSION));
+  h.update(input.a1ChainFingerprint);
+  const versionBytes = new TextEncoder().encode(input.a1VerifierVersion);
+  h.update(u16Be2(versionBytes.length));
+  h.update(versionBytes);
+  h.update(input.a1VerifyOutcomeDigest);
+  h.update(input.candidateDigest);
+  h.update(input.actionContractDigest);
+  const actionTypeBytes = new TextEncoder().encode(input.actionTypeId);
+  h.update(u16Be2(actionTypeBytes.length));
+  h.update(actionTypeBytes);
+  h.update(input.paramsDigest);
+  const principalBytes = new TextEncoder().encode(input.principalId);
+  h.update(u16Be2(principalBytes.length));
+  h.update(principalBytes);
+  const agentBytes = new TextEncoder().encode(input.agentId);
+  h.update(u16Be2(agentBytes.length));
+  h.update(agentBytes);
+  h.update(u64Be2(input.presentedAtUnix));
+  return h.digest();
+}
+function u16Be2(value) {
+  const buf = new ArrayBuffer(2);
+  new DataView(buf).setUint16(0, value, false);
+  return new Uint8Array(buf);
+}
+function u64Be2(value) {
+  const buf = new ArrayBuffer(8);
+  new DataView(buf).setBigUint64(0, BigInt(value), false);
+  return new Uint8Array(buf);
+}
+
+// src/protocol/areas/intent-compilation/delegation-evidence-ref.ts
+var DelegationEvidenceRefSchema = exports_external.object({
+  delegationEvidenceRefId: IdSchema,
+  evidenceBindingDigest: DigestSchema,
+  a1ChainFingerprint: DigestSchema,
+  storeRef: exports_external.string().min(1).refine((value) => !/signedChain|certs|signature|delegator_pk|delegate_pk/i.test(value), {
+    message: "storeRef must not embed raw A1 wire payloads"
+  }),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  a1VerifierVersion: exports_external.string().min(1)
+}).strict();
+function delegationEvidenceEvidenceRefUri(evidenceBindingDigest) {
+  const hex3 = evidenceBindingDigest.replace(/^0x/i, "").toLowerCase();
+  return `evidence:delegation-binding:${hex3}`;
+}
+
+// src/protocol/areas/intent-compilation/schemas.ts
+var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
+var CandidateActionSchema = exports_external.strictObject({
+  candidateActionId: IdSchema,
+  candidateStatus: CandidateActionStatusSchema,
+  candidateDigest: DigestSchema.nullable(),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  toolCapabilityId: IdSchema,
+  toolCapabilityDigest: DigestSchema.nullable(),
+  toolCatalogVersion: exports_external.string().min(1).nullable(),
+  actionTypeId: IdSchema,
+  actionTypeDigest: DigestSchema.nullable(),
+  actionCatalogVersion: exports_external.string().min(1).nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema.nullable(),
+  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
+  operatingEnvelopeId: IdSchema,
+  operatingEnvelopeDigest: DigestSchema.nullable(),
+  actionClass: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  sequenceNumber: exports_external.number().int().nonnegative(),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
+  recoveryRecommendationId: IdSchema.nullable(),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  purposeCode: exports_external.string().min(1),
+  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  rollbackHint: exports_external.string().max(500).nullable(),
+  expiresAt: IsoDateSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
+  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  toolCallDraftId: IdSchema.nullable().default(null),
+  toolCallDraftDigest: DigestSchema.nullable().default(null),
+  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null)
+});
+var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
+  intentCompilationId: IdSchema,
+  principalIntentRef: exports_external.string().min(1),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  operatingEnvelopeId: IdSchema,
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
+  candidateAction: CandidateActionSchema,
+  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
+  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
+  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  compilationRefusalId: IdSchema.nullable().default(null),
+  compilerVersion: exports_external.string().min(1)
+});
+// src/protocol/areas/intent-compilation/inputs.ts
+var CompileIntentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null),
+  candidate: exports_external.strictObject({
+    toolCapabilityId: exports_external.string().min(1),
+    actionTypeId: exports_external.string().min(1),
+    gatewayRegistryEntryId: exports_external.string().min(1),
+    actionClass: exports_external.string().min(1),
+    gatewayId: exports_external.string().min(1),
+    resourceRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().nonnegative(),
+    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
+    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+    purposeCode: exports_external.string().min(1),
+    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+    evidenceRefs: exports_external.array(exports_external.string()).default([]),
+    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+    idempotencyKey: exports_external.string().min(1),
+    rollbackHint: exports_external.string().max(500).nullable().default(null),
+    expiresAt: exports_external.string().datetime({ offset: true })
+  }),
+  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
+});
+// src/protocol/areas/refusal/records.ts
+async function buildRefusal(input) {
+  const normalized = {
+    schemaVersion: input.schemaVersion ?? PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: input.createdAt,
+    phase: input.phase,
+    actionContractId: input.actionContractId ?? null,
+    policyDecisionId: input.policyDecisionId ?? null,
+    greenlightId: input.greenlightId ?? null,
+    gateAttemptId: input.gateAttemptId ?? null,
+    refusedObjectRef: input.refusedObjectRef ?? null,
+    reasonCode: input.reasonCode,
+    reason: input.reason,
+    evidenceRefs: input.evidenceRefs ?? [],
+    refusedAt: input.refusedAt
+  };
+  const refusalDigest = await digestCanonical(normalized);
+  return RefusalSchema.parse({
+    ...normalized,
+    refusalId: `ref_${refusalDigest.slice("sha256:".length, "sha256:".length + 48)}`,
+    mutationAttempted: false,
+    authorityCreated: false
+  });
+}
+async function commitRefusal(recorder, input) {
+  const refusal = await buildRefusal(input);
+  await recorder.commitRecordsWithEvents([{ objectType: "refusal", payload: refusal }], [
+    {
+      source: refusal,
+      eventType: "action_refused",
+      objectRefs: [refusal.refusalId, ...refusal.refusedObjectRef ? [refusal.refusedObjectRef] : []],
+      payload: { reasonCode: refusal.reasonCode }
+    }
+  ]);
+  return refusal;
+}
+function protocolObjectRef(objectType, objectId) {
+  return `${objectType}:${objectId}`;
+}
+// src/protocol/areas/intent-compilation/candidate-decision.ts
+function deriveCandidateDecision(context) {
+  const uncertaintyMarkers = deriveUncertaintyMarkers(context);
+  const overreachReasonCodes = [
+    ...deriveRuntimeExecutionReasonCodes(context),
+    ...deriveToolCallDraftReasonCodes(context),
+    ...deriveCatalogAndEnvelopeReasonCodes(context)
+  ];
+  if (requiresMissingGeneratedExecutionGraphRefusal(context)) {
+    overreachReasonCodes.push("generated_execution_graph_missing");
+  }
+  const generatedExecutionCoverage = context.generatedExecutionGraph ? deriveGeneratedExecutionCoverage({
+    input: context.input,
+    runtimeExecution: context.runtimeExecution,
+    generatedExecutionGraph: context.generatedExecutionGraph,
+    paramsDigest: context.paramsDigest
+  }) : { node: null, reasonCodes: [] };
+  overreachReasonCodes.push(...generatedExecutionCoverage.reasonCodes);
+  const refusalReasonCodes = [...uncertaintyMarkers, ...overreachReasonCodes];
+  return {
+    uncertaintyMarkers,
+    overreachReasonCodes,
+    refusalReasonCodes,
+    candidateStatus: refusalReasonCodes.length === 0 ? "contractable" : "rejected",
+    generatedExecutionNode: generatedExecutionCoverage.node
+  };
+}
+function deriveUncertaintyMarkers(context) {
+  const { input, tool, actionType, gateway, envelope, runtimeExecution, generatedExecutionGraph, toolCallDraft } = context;
+  const markers = [];
+  if (!tool)
+    markers.push("unknown_tool_capability");
+  if (!actionType)
+    markers.push("unknown_action_type");
+  if (!gateway)
+    markers.push("unknown_gateway_registry_entry");
+  if (!envelope)
+    markers.push("unknown_operating_envelope");
+  if (input.runtimeExecutionId && !runtimeExecution)
+    markers.push("unknown_runtime_execution");
+  if (input.generatedExecutionGraphId && !generatedExecutionGraph)
+    markers.push("unknown_generated_execution_graph");
+  if (input.toolCallDraftId && !toolCallDraft)
+    markers.push("unknown_tool_call_draft");
+  return markers;
+}
+function deriveRuntimeExecutionReasonCodes(context) {
+  const { input, runtimeExecution } = context;
+  if (!runtimeExecution)
+    return [];
+  const runtimeOverreachCodes = [];
+  if (runtimeExecution.tenantId !== input.tenantId || runtimeExecution.organizationId !== input.organizationId || runtimeExecution.principalIntentRef !== input.principalIntentRef || runtimeExecution.principalId !== input.principalId || runtimeExecution.agentId !== input.agentId || runtimeExecution.runId !== input.runId || runtimeExecution.runtimeAdapterId !== input.runtimeAdapterId) {
+    runtimeOverreachCodes.push("runtime_execution_scope_mismatch");
+  }
+  if (runtimeExecution.dynamicToolConstructionDetected) {
+    runtimeOverreachCodes.push("runtime_dynamic_tool_construction_detected");
+  }
+  if (runtimeExecution.unobservedRegionRefs.length > 0) {
+    runtimeOverreachCodes.push("runtime_unobserved_regions_present");
+  }
+  runtimeOverreachCodes.push(...runtimeExecution.refusalReasonCodes.map((code) => `runtime_${code}`));
+  return runtimeOverreachCodes;
+}
+function deriveToolCallDraftReasonCodes(context) {
+  const { input, createdAt, paramsDigest, toolCallDraft } = context;
+  const draftReasonCodes = [];
+  if ((input.generatedExecutionGraphId || input.generatedExecutionNodeId) && !input.toolCallDraftId) {
+    draftReasonCodes.push("tool_call_draft_missing");
+  }
+  if (!toolCallDraft)
+    return draftReasonCodes;
+  if (toolCallDraft.draftState !== "finalized")
+    draftReasonCodes.push("tool_call_draft_not_finalized");
+  if (Date.parse(toolCallDraft.expiresAt) <= Date.parse(createdAt))
+    draftReasonCodes.push("tool_call_draft_stale");
+  if (toolCallDraft.tenantId !== input.tenantId || toolCallDraft.organizationId !== input.organizationId || toolCallDraft.runtimeExecutionId !== input.runtimeExecutionId || toolCallDraft.generatedExecutionGraphId !== input.generatedExecutionGraphId || toolCallDraft.generatedExecutionNodeId !== input.generatedExecutionNodeId || toolCallDraft.toolCapabilityId !== input.candidate.toolCapabilityId || toolCallDraft.actionTypeId !== input.candidate.actionTypeId || toolCallDraft.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || toolCallDraft.actionClass !== input.candidate.actionClass || toolCallDraft.gatewayId !== input.candidate.gatewayId || toolCallDraft.resourceRef !== input.candidate.resourceRef) {
+    draftReasonCodes.push("tool_call_draft_binding_mismatch");
+  }
+  if (toolCallDraft.paramsDigest !== paramsDigest)
+    draftReasonCodes.push("tool_call_draft_params_digest_mismatch");
+  return draftReasonCodes;
+}
+function deriveCatalogAndEnvelopeReasonCodes(context) {
+  const { input, createdAt, tool, actionType, gateway, envelope } = context;
+  const catalogOverreachCodes = [];
+  if (tool?.readWriteClassification === "consequential" && tool.wrapperStatus !== "wrapped") {
+    catalogOverreachCodes.push("unwrapped_consequential_tool");
+  }
+  if (tool) {
+    assertSecretSafeCandidateInput(tool, input.candidate.parameters, input.candidate.nonSecretParamsSummary, input.candidate.secretRefs);
+  }
+  if (tool && tool.runtimeAdapterId !== input.runtimeAdapterId) {
+    catalogOverreachCodes.push("tool_runtime_adapter_mismatch");
+  }
+  if (actionType && actionType.actionClass !== input.candidate.actionClass) {
+    catalogOverreachCodes.push("action_class_mismatch");
+  }
+  if (gateway && gateway.gatewayId !== input.candidate.gatewayId) {
+    catalogOverreachCodes.push("gateway_mismatch");
+  }
+  if (gateway && actionType && gateway.protectedSurfaceKind !== actionType.protectedSurfaceKind) {
+    catalogOverreachCodes.push("protected_surface_kind_mismatch");
+  }
+  if (gateway && actionType && !gateway.acceptedActionCatalogVersions.includes(actionType.actionCatalogVersion)) {
+    catalogOverreachCodes.push("action_catalog_version_not_accepted");
+  }
+  if (envelope) {
+    catalogOverreachCodes.push(...deriveEnvelopeReasonCodes(input, envelope, createdAt));
+  }
+  if (durableRecordScopeMismatch(context)) {
+    catalogOverreachCodes.push("durable_record_scope_mismatch");
+  }
+  return catalogOverreachCodes;
+}
+function deriveEnvelopeReasonCodes(input, envelope, createdAt) {
+  const envelopeOverreachCodes = [];
+  if (envelope.principalId !== input.principalId || envelope.agentId !== input.agentId) {
+    envelopeOverreachCodes.push("envelope_actor_mismatch");
+  }
+  if (!envelope.allowedActionClasses.includes(input.candidate.actionClass)) {
+    envelopeOverreachCodes.push("envelope_action_class_not_allowed");
+  }
+  if (!envelope.allowedGateways.includes(input.candidate.gatewayId)) {
+    envelopeOverreachCodes.push("envelope_gateway_not_allowed");
+  }
+  if (!envelope.allowedResources.includes(input.candidate.resourceRef)) {
+    envelopeOverreachCodes.push("envelope_resource_not_allowed");
+  }
+  if (envelope.revokedAt !== null)
+    envelopeOverreachCodes.push("envelope_revoked");
+  if (Date.parse(envelope.expiresAt) <= Date.parse(createdAt))
+    envelopeOverreachCodes.push("envelope_expired");
+  return envelopeOverreachCodes;
+}
+function durableRecordScopeMismatch(context) {
+  const { input, tool, actionType, gateway, envelope } = context;
+  return [tool, actionType, gateway, envelope].some((record2) => record2 && (record2.tenantId !== input.tenantId || record2.organizationId !== input.organizationId));
+}
+function requiresMissingGeneratedExecutionGraphRefusal(context) {
+  if (context.generatedExecutionGraph) {
+    return false;
+  }
+  if (context.runtimeExecution && requiresGeneratedExecutionGraph(context.runtimeExecution.executionShape)) {
+    return true;
+  }
+  return isAgentOriginCompilation(context);
+}
+function isAgentOriginCompilation(context) {
+  return context.runtimeExecution === null && (context.input.generatedExecutionGraphId !== null || context.input.generatedExecutionNodeId !== null);
+}
+function assertSecretSafeCandidateInput(tool, parameters, nonSecretParamsSummary, secretRefs) {
+  const secretBearingFields = new Set(tool.secretBearingFields);
+  for (const field of secretBearingFields) {
+    if (Object.hasOwn(parameters, field) || Object.hasOwn(nonSecretParamsSummary, field)) {
+      throw new HandshakeProtocolError("secret_bearing_param_in_non_secret_params", `Secret-bearing parameter ${field} must be represented as a secretRef, not stored parameter material.`, 422);
+    }
+  }
+  for (const field of Object.keys(secretRefs)) {
+    if (!secretBearingFields.has(field)) {
+      throw new HandshakeProtocolError("undeclared_secret_ref", `Secret ref ${field} is not declared by the tool capability secretBearingFields.`, 422);
+    }
+  }
+}
+function requiresGeneratedExecutionGraph(executionShape) {
+  return executionShape === "shell_exec_block" || executionShape === "codemode_block" || executionShape === "tool_dispatch_chain" || executionShape === "generated_mcp_tool_chain";
+}
+function deriveGeneratedExecutionCoverage(args) {
+  const { input, runtimeExecution, generatedExecutionGraph, paramsDigest } = args;
+  const graphOverreachCodes = [];
+  if (!runtimeExecution) {
+    graphOverreachCodes.push("generated_execution_graph_without_runtime_execution");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  if (generatedExecutionGraph.tenantId !== input.tenantId || generatedExecutionGraph.organizationId !== input.organizationId) {
+    graphOverreachCodes.push("generated_execution_graph_scope_mismatch");
+  }
+  if (generatedExecutionGraph.runtimeExecutionId !== runtimeExecution.runtimeExecutionId || generatedExecutionGraph.runtimeExecutionDigest !== runtimeExecution.runtimeExecutionDigest || generatedExecutionGraph.executionBlockDigest !== runtimeExecution.executionBlockDigest) {
+    graphOverreachCodes.push("generated_execution_graph_runtime_mismatch");
+  }
+  if (generatedExecutionGraph.coverageStatus !== "fully_covered_no_unsupported_nodes") {
+    graphOverreachCodes.push("generated_execution_graph_not_contractable");
+  }
+  const requestedNodeId = input.generatedExecutionNodeId;
+  if (!requestedNodeId) {
+    graphOverreachCodes.push("generated_execution_node_missing");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  const node = generatedExecutionGraph.nodes.find((candidate) => candidate.nodeId === requestedNodeId) ?? null;
+  if (!node) {
+    graphOverreachCodes.push("generated_execution_node_missing");
+    return { node: null, reasonCodes: graphOverreachCodes };
+  }
+  if (node.classification !== "candidate_action_eligible") {
+    graphOverreachCodes.push("generated_execution_node_not_contractable");
+  }
+  if (!node.nodeGatewayBindingDigest) {
+    graphOverreachCodes.push("generated_execution_node_gateway_binding_missing");
+  }
+  if (node.actionClass !== input.candidate.actionClass || node.toolCapabilityId !== input.candidate.toolCapabilityId || node.actionTypeId !== input.candidate.actionTypeId || node.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || node.resourceRef !== input.candidate.resourceRef || node.paramsDigest !== paramsDigest) {
+    graphOverreachCodes.push("generated_execution_node_binding_mismatch");
+  }
+  return { node, reasonCodes: graphOverreachCodes };
+}
+
+// src/protocol/areas/intent-compilation/transitions.ts
+async function compileIntent(store, recorder, inputValue) {
+  const input = CompileIntentInputSchema.parse(inputValue);
+  const context = await getIntentCompilationContext(store, input);
+  const decision = deriveCandidateDecision(context);
+  const candidateAction = await buildCandidateAction(context, decision);
+  const record2 = buildIntentCompilationRecord(context, decision, candidateAction);
+  await commitIntentCompilation(recorder, context, record2);
+  return record2;
+}
+async function getIntentCompilationContext(store, input) {
+  const createdAt = nowIso();
+  const [
+    toolRecord,
+    actionTypeRecord,
+    gatewayRecord,
+    envelopeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord,
+    toolCallDraftRecord
+  ] = await Promise.all([
+    store.getRecord("tool_capability", input.candidate.toolCapabilityId),
+    store.getRecord("action_type", input.candidate.actionTypeId),
+    store.getRecord("gateway_registry_entry", input.candidate.gatewayRegistryEntryId),
+    store.getRecord("operating_envelope", input.operatingEnvelopeId),
+    input.runtimeExecutionId ? store.getRecord("runtime_execution", input.runtimeExecutionId) : Promise.resolve(null),
+    input.generatedExecutionGraphId ? store.getRecord("generated_execution_graph", input.generatedExecutionGraphId) : Promise.resolve(null),
+    input.toolCallDraftId ? store.getRecord("tool_call_draft", input.toolCallDraftId) : Promise.resolve(null)
+  ]);
+  const tool = toolRecord?.payload ?? null;
+  const actionType = actionTypeRecord?.payload ?? null;
+  const gateway = gatewayRecord?.payload ?? null;
+  const envelope = envelopeRecord?.payload ?? null;
+  const runtimeExecution = runtimeExecutionRecord?.payload ?? null;
+  const generatedExecutionGraph = generatedExecutionGraphRecord?.payload ?? null;
+  const toolCallDraft = toolCallDraftRecord?.payload ?? null;
+  const paramsDigest = await protectedActionParamsDigest({
+    parameters: input.candidate.parameters,
+    secretRefs: input.candidate.secretRefs,
+    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs
+  });
+  return {
+    input,
+    createdAt,
+    paramsDigest,
+    toolRecord,
+    actionTypeRecord,
+    gatewayRecord,
+    envelopeRecord,
+    runtimeExecutionRecord,
+    generatedExecutionGraphRecord,
+    toolCallDraftRecord,
+    tool,
+    actionType,
+    gateway,
+    envelope,
+    runtimeExecution,
+    generatedExecutionGraph,
+    toolCallDraft
+  };
+}
+async function buildCandidateAction(context, decision) {
+  const { input, paramsDigest, toolRecord, actionTypeRecord, gatewayRecord, envelopeRecord } = context;
+  const { tool, actionType, gateway, runtimeExecution, generatedExecutionGraph } = context;
+  const { toolCallDraft } = context;
+  const { generatedExecutionNode } = decision;
+  const candidateActionId = createId("cand");
+  const candidateBase = {
+    candidateActionId,
+    candidateStatus: decision.candidateStatus,
+    candidateDigest: null,
+    refusalReasonCodes: decision.refusalReasonCodes,
+    toolCapabilityId: input.candidate.toolCapabilityId,
+    toolCapabilityDigest: toolRecord?.canonicalDigest ?? null,
+    toolCatalogVersion: tool?.toolCatalogVersion ?? null,
+    actionTypeId: input.candidate.actionTypeId,
+    actionTypeDigest: actionTypeRecord?.canonicalDigest ?? null,
+    actionCatalogVersion: actionType?.actionCatalogVersion ?? null,
+    gatewayRegistryEntryId: input.candidate.gatewayRegistryEntryId,
+    gatewayRegistryDigest: gatewayRecord?.canonicalDigest ?? null,
+    gatewayRegistryVersion: gateway?.gatewayRegistryVersion ?? null,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    operatingEnvelopeDigest: envelopeRecord?.canonicalDigest ?? null,
+    actionClass: input.candidate.actionClass,
+    gatewayId: input.candidate.gatewayId,
+    resourceRef: input.candidate.resourceRef,
+    sequenceNumber: input.candidate.sequenceNumber,
+    requiredPriorActionContractIds: input.candidate.requiredPriorActionContractIds,
+    recoveryRecommendationId: input.candidate.recoveryRecommendationId,
+    parameters: input.candidate.parameters,
+    paramsDigest,
+    nonSecretParamsSummary: input.candidate.nonSecretParamsSummary,
+    secretRefs: input.candidate.secretRefs,
+    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
+    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs,
+    purposeCode: input.candidate.purposeCode,
+    expectedSideEffectCodes: input.candidate.expectedSideEffectCodes,
+    evidenceRefs: input.candidate.evidenceRefs,
+    clearingEvidenceRefs: input.candidate.clearingEvidenceRefs,
+    bounds: input.candidate.bounds,
+    idempotencyKey: input.candidate.idempotencyKey,
+    rollbackHint: input.candidate.rollbackHint,
+    expiresAt: input.candidate.expiresAt,
+    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
+    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
+    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
+    generatedExecutionGraphId: generatedExecutionGraph?.generatedExecutionGraphId ?? null,
+    generatedExecutionGraphDigest: generatedExecutionGraph?.graphDigest ?? null,
+    generatedExecutionCoverageStatus: generatedExecutionGraph?.coverageStatus ?? null,
+    generatedExecutionNodeId: generatedExecutionNode?.nodeId ?? null,
+    generatedExecutionNodeDigest: generatedExecutionNode?.nodeDigest ?? null,
+    generatedExecutionCatalogSnapshotDigest: generatedExecutionGraph?.catalogSnapshotDigest ?? null,
+    generatedExecutionGatewayRegistrySnapshotDigest: generatedExecutionGraph?.gatewayRegistrySnapshotDigest ?? null,
+    generatedExecutionRegistryBindingSetDigest: generatedExecutionGraph?.registryBindingSetDigest ?? null,
+    generatedExecutionNodeGatewayBindingDigest: generatedExecutionNode?.nodeGatewayBindingDigest ?? null,
+    toolCallDraftId: toolCallDraft?.toolCallDraftId ?? null,
+    toolCallDraftDigest: toolCallDraft?.draftDigest ?? null,
+    toolCallDraftState: toolCallDraft?.draftState ?? null,
+    delegationEvidenceRef: input.delegationEvidenceRef ?? null
+  };
+  const candidateDigest = decision.candidateStatus === "contractable" ? await digestCanonical(candidateDigestMaterial(input, candidateBase)) : null;
+  return CandidateActionSchema.parse({ ...candidateBase, candidateDigest });
+}
+function buildIntentCompilationRecord(context, decision, candidateAction) {
+  const { input, createdAt, runtimeExecution } = context;
+  return IntentCompilationRecordSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt,
+    intentCompilationId: createId("icr"),
+    principalIntentRef: input.principalIntentRef,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runId: input.runId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    operatingEnvelopeId: input.operatingEnvelopeId,
+    toolCatalogRef: input.toolCatalogRef,
+    actionCatalogRef: input.actionCatalogRef,
+    gatewayRegistryRef: input.gatewayRegistryRef,
+    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
+    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
+    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
+    declaredAssumptions: input.declaredAssumptions,
+    uncertaintyMarkers: decision.uncertaintyMarkers,
+    candidateAction,
+    candidateActionContractRefs: [],
+    rejectedCandidateRefs: decision.candidateStatus === "rejected" ? [candidateAction.candidateActionId] : [],
+    overreachReasonCodes: decision.overreachReasonCodes,
+    requiredEvidenceRefs: input.requiredEvidenceRefs,
+    compilerVersion: input.compilerVersion
+  });
+}
+async function commitIntentCompilation(recorder, context, record2) {
+  const refusal = record2.candidateAction.candidateStatus === "rejected" ? await buildRefusal({
+    tenantId: record2.tenantId,
+    organizationId: record2.organizationId,
+    createdAt: record2.createdAt,
+    phase: "compilation",
+    refusedObjectRef: protocolObjectRef("intent_compilation", record2.intentCompilationId),
+    reasonCode: record2.candidateAction.refusalReasonCodes[0] ?? "unwrapped_consequential_tool",
+    reason: "Intent compilation refused to produce an action contract for this candidate action.",
+    evidenceRefs: [
+      protocolObjectRef("intent_compilation", record2.intentCompilationId),
+      ...record2.candidateAction.refusalReasonCodes,
+      ...record2.requiredEvidenceRefs
+    ],
+    refusedAt: record2.createdAt
+  }) : null;
+  const committedRecord = refusal ? IntentCompilationRecordSchema.parse({ ...record2, compilationRefusalId: refusal.refusalId }) : record2;
+  await recorder.commitRecordsWithEvents([
+    { objectType: "intent_compilation", payload: committedRecord },
+    ...refusal ? [{ objectType: "refusal", payload: refusal }] : []
+  ], [
+    {
+      source: record2,
+      eventType: "intent_compiled",
+      objectRefs: context.runtimeExecution ? [
+        record2.intentCompilationId,
+        context.runtimeExecution.runtimeExecutionId,
+        context.runtimeExecution.runtimeExecutionDigest
+      ] : [record2.intentCompilationId],
+      payload: {
+        uncertaintyMarkers: record2.uncertaintyMarkers,
+        overreachReasonCodes: record2.overreachReasonCodes
+      }
+    },
+    ...refusal ? [
+      {
+        source: refusal,
+        eventType: "action_refused",
+        objectRefs: [refusal.refusalId, record2.intentCompilationId, record2.candidateAction.candidateActionId],
+        payload: {
+          reasonCode: refusal.reasonCode,
+          refusalReasonCodes: record2.candidateAction.refusalReasonCodes
+        }
+      }
+    ] : []
+  ]);
+}
+function candidateDigestMaterial(input, candidate) {
+  const { delegationEvidenceRef: _delegationEvidenceRef, ...candidateForDigest } = candidate;
+  return {
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    principalIntentRef: input.principalIntentRef,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    runId: input.runId,
+    runtimeAdapterId: input.runtimeAdapterId,
+    compilerVersion: input.compilerVersion,
+    runtimeExecutionId: input.runtimeExecutionId,
+    runtimeExecutionDigest: candidate.runtimeExecutionDigest,
+    toolCallDraftId: input.toolCallDraftId,
+    toolCallDraftDigest: candidate.toolCallDraftDigest,
+    candidateAction: {
+      ...candidateForDigest,
+      clearingEvidenceRefs: clearingEvidenceRefsJson(candidate.clearingEvidenceRefs),
+      candidateDigest: null
+    }
+  };
+}
+function clearingEvidenceRefsJson(refs) {
+  const json2 = {};
+  if (refs.correlationRef !== undefined)
+    json2.correlationRef = refs.correlationRef;
+  if (refs.obligationRef !== undefined)
+    json2.obligationRef = refs.obligationRef;
+  if (refs.counterpartyRef !== undefined)
+    json2.counterpartyRef = refs.counterpartyRef;
+  return json2;
+}
+// src/protocol/areas/receipt-export/delegation-provenance.ts
+var ReceiptDelegationProvenanceSchema = exports_external.strictObject({
+  a1ChainFingerprint: DigestSchema,
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: DigestSchema,
+  terminalDelegatePkFingerprint: DigestSchema,
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: DigestSchema,
+  a1VerifierVersion: exports_external.string().min(1),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+});
+function fingerprintDigest(hex3) {
+  const normalized = hex3.startsWith("sha256:") ? hex3.slice("sha256:".length) : hex3;
+  return `sha256:${normalized}`;
+}
+function digestToBytes(digest, field) {
+  const hex3 = digest.startsWith("sha256:") ? digest.slice("sha256:".length) : digest;
+  return parseHex32(hex3, field);
+}
+async function resolveReceiptDelegationProvenance(input) {
+  const ref = input.intentCompilation.candidateAction.delegationEvidenceRef;
+  if (!ref)
+    return null;
+  const record2 = input.storedRecord?.evidenceRecord ?? null;
+  if (!record2)
+    return null;
+  const candidateDigestBytes = digestToBytes(input.intentCompilation.candidateAction.candidateDigest ?? input.contract.candidateDigest, "candidateDigest");
+  const actionContractDigestBytes = digestToBytes(input.contract.actionContractDigest, "actionContractDigest");
+  const a1ChainFingerprintBytes = digestToBytes(record2.a1ChainFingerprint, "a1ChainFingerprint");
+  const principalPkBytes = digestToBytes(record2.principalPkFingerprint, "principalPkFingerprint");
+  const terminalPkBytes = digestToBytes(record2.terminalDelegatePkFingerprint, "terminalDelegatePkFingerprint");
+  const paramsDigestBytes = digestToBytes(input.contract.paramsDigest, "paramsDigest");
+  const verifiedScopeRoot = new Uint8Array(32);
+  const verifyOutcomeDigest = computeA1VerifyOutcomeDigest({
+    valid: record2.verifyOutcome === "valid",
+    reasonCodes: record2.reasonCodes,
+    chainDepth: record2.chainDepth,
+    principalPkFingerprint: principalPkBytes,
+    terminalPkFingerprint: terminalPkBytes,
+    verifiedScopeRoot,
+    verifiedAtUnix: record2.presentedAtUnix
+  });
+  const evidenceBindingDigestBytes = computeEvidenceBindingDigest({
+    a1ChainFingerprint: a1ChainFingerprintBytes,
+    a1VerifierVersion: record2.a1VerifierVersion,
+    a1VerifyOutcomeDigest: verifyOutcomeDigest,
+    candidateDigest: candidateDigestBytes,
+    actionContractDigest: actionContractDigestBytes,
+    actionTypeId: input.contract.actionTypeId,
+    paramsDigest: paramsDigestBytes,
+    principalId: input.contract.principalId,
+    agentId: input.contract.agentId,
+    presentedAtUnix: record2.presentedAtUnix
+  });
+  const evidenceBindingDigest = `sha256:${toHexLower(evidenceBindingDigestBytes)}`;
+  const provenance = ReceiptDelegationProvenanceSchema.parse({
+    a1ChainFingerprint: ref.a1ChainFingerprint,
+    chainDepth: record2.chainDepth,
+    principalPkFingerprint: fingerprintDigest(record2.principalPkFingerprint),
+    terminalDelegatePkFingerprint: fingerprintDigest(record2.terminalDelegatePkFingerprint),
+    verifyOutcome: record2.verifyOutcome,
+    reasonCodes: record2.reasonCodes,
+    evidenceBindingDigest,
+    a1VerifierVersion: record2.a1VerifierVersion,
+    mutationAuthorityCreated: false,
+    greenlightCreated: false
+  });
+  return {
+    provenance,
+    evidenceRefs: [delegationEvidenceEvidenceRefUri(evidenceBindingDigest)]
+  };
+}
+
 // src/protocol/areas/receipt-export/schemas.ts
 var GatewayAdmissionStatusSchema = exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]);
 var DownstreamOutcomeStatusSchema = exports_external.enum([
@@ -18064,7 +19274,8 @@ var ReceiptExportSchema = ProtocolBaseSchema.extend({
   requestedByRef: exports_external.string().min(1),
   evidenceRetentionUntil: IsoDateSchema.nullable(),
   exportedAt: IsoDateSchema,
-  exportDigest: DigestSchema
+  exportDigest: DigestSchema,
+  delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
 });
 
 // src/protocol/events/schemas.ts
@@ -18125,7 +19336,323 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
   eventDigest: DigestSchema,
   payload: exports_external.record(exports_external.string(), JsonValueSchema)
 });
-
+// src/protocol/areas/receipt-export/inputs.ts
+var CreateReceiptExportInputSchema = exports_external.strictObject({
+  receiptId: exports_external.string().min(1),
+  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
+  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
+  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+// src/protocol/areas/receipt-export/status.ts
+function deriveGatewayAdmissionStatus(input) {
+  if (input.greenlightConsumptionStatus === "replayed")
+    return "replayed";
+  if (input.gatewayCheckStatus === "passed")
+    return "admitted";
+  if (input.gatewayCheckStatus === "refused")
+    return "refused";
+  if (input.gatewayCheckStatus === "proof_gap")
+    return "proof_gap";
+  return "not_requested";
+}
+function deriveDownstreamOutcomeStatus(input) {
+  return input.downstreamExecutionStatus;
+}
+// src/protocol/events/chains.ts
+async function buildEventChain(store, descriptors) {
+  const tails = new Map;
+  const events = [];
+  for (const descriptor of descriptors) {
+    for (const binding of streamBindings(descriptor)) {
+      const tailKey = `${binding.streamId}:${binding.partitionKey}`;
+      let tail = tails.get(tailKey);
+      if (!tail) {
+        const storedTail = await store.getStreamTail(binding.streamId, binding.partitionKey);
+        tail = storedTail ? { offset: storedTail.offset, digest: storedTail.eventDigest } : { offset: -1, digest: null };
+      }
+      const event = await buildEventAt(descriptor.source, descriptor.eventType, descriptor.objectRefs, descriptor.payload, binding.streamId, binding.streamScope, binding.partitionKey, tail.offset + 1, tail.digest);
+      events.push(event);
+      tails.set(tailKey, { offset: event.offset, digest: event.eventDigest });
+    }
+  }
+  return events;
+}
+function actionLifecycleStreamRefs(contract) {
+  return {
+    actionContractId: contract.actionContractId,
+    runId: contract.runId,
+    gatewayId: contract.gatewayId,
+    resourceRef: contract.resourceRef
+  };
+}
+function receiptStreamReferencesForEvents(events) {
+  const references = new Map;
+  for (const event of events) {
+    const key = `${event.streamId}:${event.partitionKey}`;
+    const existing = references.get(key);
+    if (!existing || event.offset > existing.offsetEnd) {
+      references.set(key, {
+        streamId: event.streamId,
+        streamScope: event.streamScope,
+        partitionKey: event.partitionKey,
+        offsetStart: existing?.offsetStart ?? 0,
+        offsetEnd: event.offset,
+        terminalEventDigest: event.eventDigest
+      });
+    }
+  }
+  return [...references.values()];
+}
+function streamBindings(descriptor) {
+  const streamId = organizationStreamId(descriptor.source);
+  const bindings = [
+    {
+      streamId,
+      streamScope: "organization",
+      partitionKey: streamPartitionKey(descriptor.eventType, descriptor.objectRefs, descriptor.streamRefs)
+    }
+  ];
+  if (descriptor.streamRefs) {
+    bindings.push({
+      streamId,
+      streamScope: "run",
+      partitionKey: `run:${descriptor.streamRefs.runId}`
+    }, {
+      streamId,
+      streamScope: "protected_surface_resource",
+      partitionKey: `protected_surface_resource:${descriptor.streamRefs.gatewayId}:${descriptor.streamRefs.resourceRef}`
+    });
+  }
+  return dedupeBindings(bindings);
+}
+function organizationStreamId(source) {
+  return `stream_${source.tenantId}_${source.organizationId}`;
+}
+function streamPartitionKey(eventType, objectRefs, streamRefs) {
+  if (streamRefs)
+    return `action:${streamRefs.actionContractId}`;
+  const actionRef = objectRefs.find((ref) => ref.startsWith("act_"));
+  if (actionRef)
+    return `action:${actionRef}`;
+  if (eventType === "isolation_changed" && objectRefs[1] && objectRefs[2]) {
+    return `isolation:${objectRefs[1]}:${objectRefs[2]}`;
+  }
+  if (eventType === "isolation_changed")
+    return `isolation:${objectRefs[1] ?? objectRefs[0] ?? "unknown"}`;
+  if (eventType === "intent_compiled")
+    return `intent:${objectRefs[0] ?? "unknown"}`;
+  return `object:${objectRefs[0] ?? "unknown"}`;
+}
+function dedupeBindings(bindings) {
+  const seen = new Set;
+  const deduped = [];
+  for (const binding of bindings) {
+    const key = `${binding.streamId}:${binding.partitionKey}`;
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    deduped.push(binding);
+  }
+  return deduped;
+}
+async function buildEventAt(source, eventType, objectRefs, payload, streamId, streamScope, partitionKey, offset, previousEventDigest) {
+  const eventTime = nowIso();
+  const eventSeed = {
+    streamId,
+    streamScope,
+    partitionKey,
+    offset,
+    eventType,
+    eventTime,
+    objectRefs,
+    previousEventDigest,
+    payload
+  };
+  return ContractStreamEventSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: source.tenantId,
+    organizationId: source.organizationId,
+    createdAt: eventTime,
+    streamEventId: createId("evt"),
+    streamId,
+    streamScope,
+    offset,
+    partitionKey,
+    eventType,
+    eventTime,
+    producerRef: "handshake-kernel",
+    objectRefs,
+    previousEventDigest,
+    eventDigest: await digestCanonical(eventSeed),
+    payload
+  });
+}
+// src/protocol/areas/receipt-export/transitions.ts
+async function createReceiptExport(recorder, inputValue) {
+  const input = CreateReceiptExportInputSchema.parse(inputValue);
+  const context = await getReceiptExportContext(recorder, input);
+  const receiptExport = await buildReceiptExport(context);
+  await commitReceiptExport(recorder, context, receiptExport);
+  return receiptExport;
+}
+async function getReceiptExportContext(recorder, input) {
+  const receiptRecord = await recorder.requiredRecord("receipt", input.receiptId, "receipt_missing");
+  const receipt = receiptRecord.payload;
+  assertReceiptExportable(receipt);
+  await assertReceiptDigests(receipt);
+  const contractRecord = await recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing");
+  const intentCompilationRecord = await recorder.requiredRecord("intent_compilation", contractRecord.payload.intentCompilationId, "intent_compilation_missing");
+  const delegationRef = intentCompilationRecord.payload.candidateAction.delegationEvidenceRef;
+  const delegationEvidenceRecord = delegationRef ? await recorder.optionalRecord("delegation_evidence_record", delegationRef.delegationEvidenceRefId) : null;
+  const gateAttemptRecord = receipt.gateAttemptId ? await recorder.requiredRecord("gateway_check_attempt", receipt.gateAttemptId, "gateway_check_attempt_missing") : null;
+  const proofGaps = await loadProofGaps(recorder, receipt.proofGapIds);
+  return {
+    recorder,
+    input,
+    receipt,
+    contract: contractRecord.payload,
+    intentCompilation: intentCompilationRecord.payload,
+    delegationEvidenceRecord: delegationEvidenceRecord?.payload ?? null,
+    gateAttempt: gateAttemptRecord?.payload ?? null,
+    proofGaps,
+    receiptExportId: createId("rex"),
+    now: nowIso()
+  };
+}
+async function buildReceiptExport(context) {
+  const { input, receipt, contract, gateAttempt, proofGaps, receiptExportId, now } = context;
+  const delegationResolution = await resolveReceiptDelegationProvenance({
+    contract,
+    intentCompilation: context.intentCompilation,
+    storedRecord: context.delegationEvidenceRecord
+  });
+  const evidenceRefs = [...new Set([...receipt.evidenceRefs, ...delegationResolution?.evidenceRefs ?? []])];
+  const delegationProvenance = delegationResolution?.provenance ?? undefined;
+  const exportDigest = await digestCanonical(buildReceiptExportBinding(context, delegationProvenance ?? null));
+  return ReceiptExportSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: receipt.tenantId,
+    organizationId: receipt.organizationId,
+    createdAt: now,
+    receiptExportId,
+    receiptId: receipt.receiptId,
+    actionContractId: receipt.actionContractId,
+    policyDecisionId: receipt.policyDecisionId,
+    greenlightId: receipt.greenlightId,
+    gateAttemptId: receipt.gateAttemptId,
+    mutationAttemptId: receipt.mutationAttemptId,
+    gatewayId: receipt.gatewayId,
+    principalId: contract.principalId,
+    agentId: contract.agentId,
+    runId: contract.runId,
+    gatewayPolicyVersion: contract.gatewayPolicyVersion,
+    policyDecisionStatus: receipt.policyDecisionStatus,
+    gatewayCheckStatus: receipt.gatewayCheckStatus,
+    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receipt),
+    gatewayCheckedAt: gateAttempt?.createdAt ?? null,
+    greenlightConsumptionStatus: receipt.greenlightConsumptionStatus,
+    mutationAttemptStatus: receipt.mutationAttemptStatus,
+    downstreamExecutionStatus: receipt.downstreamExecutionStatus,
+    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receipt),
+    proofGapStatus: receipt.proofGapIds.length > 0 ? "present" : "none",
+    proofGapIds: receipt.proofGapIds,
+    proofGapReasonCodes: proofGaps.map((proofGap) => proofGap.reasonCode),
+    finalityStatus: receipt.finalityStatus,
+    evidenceRefs,
+    ...delegationProvenance ? { delegationProvenance } : {},
+    streamOffsets: receipt.streamOffsets,
+    receiptDigest: receipt.receiptDigest,
+    auditChainDigest: receipt.auditChainDigest,
+    signaturePosture: contract.signaturePosture,
+    keyIdentityRef: contract.keyIdentityRef,
+    verificationPolicyRef: contract.verificationPolicyRef,
+    exportFormat: input.exportFormat,
+    redactionProfileRef: input.redactionProfileRef,
+    exportPurposeCode: input.exportPurposeCode,
+    requestedByRef: input.requestedByRef,
+    evidenceRetentionUntil: input.evidenceRetentionUntil,
+    exportedAt: now,
+    exportDigest
+  });
+}
+function buildReceiptExportBinding(context, delegationProvenance) {
+  const { input, receipt, receiptExportId, now } = context;
+  const exportBinding = {
+    receiptExportId,
+    receiptId: receipt.receiptId,
+    actionContractId: receipt.actionContractId,
+    receiptDigest: receipt.receiptDigest,
+    auditChainDigest: receipt.auditChainDigest,
+    streamOffsets: receipt.streamOffsets,
+    proofGapIds: receipt.proofGapIds,
+    finalityStatus: receipt.finalityStatus,
+    delegationProvenance,
+    exportFormat: input.exportFormat,
+    redactionProfileRef: input.redactionProfileRef,
+    exportPurposeCode: input.exportPurposeCode,
+    requestedByRef: input.requestedByRef,
+    exportedAt: now
+  };
+  return exportBinding;
+}
+async function commitReceiptExport(recorder, context, receiptExport) {
+  await recorder.commitRecordsWithEvents(receiptExportRecords(receiptExport), receiptExportEvents(context, receiptExport));
+}
+function receiptExportRecords(receiptExport) {
+  return [{ objectType: "receipt_export", payload: receiptExport }];
+}
+function receiptExportEvents(context, receiptExport) {
+  return [
+    {
+      source: receiptExport,
+      eventType: "receipt_exported",
+      objectRefs: [receiptExport.receiptExportId, receiptExport.receiptId, receiptExport.actionContractId],
+      streamRefs: actionLifecycleStreamRefs(context.contract),
+      payload: {
+        receiptId: receiptExport.receiptId,
+        exportDigest: receiptExport.exportDigest,
+        finalityStatus: receiptExport.finalityStatus
+      }
+    }
+  ];
+}
+function assertReceiptExportable(receipt) {
+  if (!receipt.receiptDigest || !receipt.auditChainDigest) {
+    throw new HandshakeProtocolError("receipt_digest_missing", "Receipt export requires receiptDigest and auditChainDigest.", 409);
+  }
+  if (receipt.streamOffsets.length === 0 || receipt.streamEventIds.length === 0) {
+    throw new HandshakeProtocolError("receipt_stream_offsets_missing", "Receipt export requires stream event references and stream offset windows.", 409);
+  }
+}
+async function assertReceiptDigests(receipt) {
+  const expectedReceiptDigest = await digestCanonical({
+    ...receipt,
+    receiptDigest: null,
+    auditChainDigest: null
+  });
+  if (receipt.receiptDigest !== expectedReceiptDigest) {
+    throw new HandshakeProtocolError("receipt_digest_mismatch", "Stored receiptDigest does not match the receipt body.", 409);
+  }
+  const expectedAuditChainDigest = await digestCanonical({
+    receiptDigest: receipt.receiptDigest,
+    streamOffsets: receipt.streamOffsets,
+    proofGapIds: receipt.proofGapIds,
+    finalityStatus: receipt.finalityStatus
+  });
+  if (receipt.auditChainDigest !== expectedAuditChainDigest) {
+    throw new HandshakeProtocolError("audit_chain_digest_mismatch", "Stored auditChainDigest does not match the receipt stream and proof-gap evidence.", 409);
+  }
+}
+async function loadProofGaps(recorder, proofGapIds) {
+  const proofGaps = [];
+  for (const proofGapId of proofGapIds) {
+    const proofGap = await recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing");
+    proofGaps.push(proofGap.payload);
+  }
+  return proofGaps;
+}
 // src/protocol/evidence-projections/schemas.ts
 var ContractEvidenceProjectionSchema = exports_external.strictObject({
   actionContractRef: IdSchema,
@@ -18230,6 +19757,7 @@ var ReceiptTimelineProjectionSchema = exports_external.strictObject({
   events: exports_external.array(ReceiptTimelineEventProjectionSchema).default([]),
   missingEventCount: exports_external.number().int().nonnegative(),
   failureEvidence: ReceiptTimelineFailureEvidenceProjectionSchema.nullable(),
+  delegationProvenance: ReceiptDelegationProvenanceSchema.nullable().default(null),
   redactionProfileRef: exports_external.literal("receipt-timeline:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([])
 });
@@ -18524,83 +20052,6 @@ var ToolCallDraftSchema = ProtocolBaseSchema.extend({
   invalidReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   draftDigest: DigestSchema
-});
-// src/protocol/areas/intent-compilation/schemas.ts
-var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
-var CandidateActionSchema = exports_external.strictObject({
-  candidateActionId: IdSchema,
-  candidateStatus: CandidateActionStatusSchema,
-  candidateDigest: DigestSchema.nullable(),
-  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  toolCapabilityId: IdSchema,
-  toolCapabilityDigest: DigestSchema.nullable(),
-  toolCatalogVersion: exports_external.string().min(1).nullable(),
-  actionTypeId: IdSchema,
-  actionTypeDigest: DigestSchema.nullable(),
-  actionCatalogVersion: exports_external.string().min(1).nullable(),
-  gatewayRegistryEntryId: IdSchema,
-  gatewayRegistryDigest: DigestSchema.nullable(),
-  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
-  operatingEnvelopeId: IdSchema,
-  operatingEnvelopeDigest: DigestSchema.nullable(),
-  actionClass: exports_external.string().min(1),
-  gatewayId: IdSchema,
-  resourceRef: ResourceRefSchema,
-  sequenceNumber: exports_external.number().int().nonnegative(),
-  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
-  recoveryRecommendationId: IdSchema.nullable(),
-  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
-  paramsDigest: DigestSchema,
-  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
-  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
-  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
-  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
-  purposeCode: exports_external.string().min(1),
-  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
-  evidenceRefs: exports_external.array(exports_external.string()).default([]),
-  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
-  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
-  idempotencyKey: IdSchema,
-  rollbackHint: exports_external.string().max(500).nullable(),
-  expiresAt: IsoDateSchema,
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGraphId: IdSchema.nullable().default(null),
-  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
-  generatedExecutionNodeId: IdSchema.nullable().default(null),
-  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
-  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
-  toolCallDraftId: IdSchema.nullable().default(null),
-  toolCallDraftDigest: DigestSchema.nullable().default(null),
-  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null)
-});
-var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
-  intentCompilationId: IdSchema,
-  principalIntentRef: exports_external.string().min(1),
-  principalId: IdSchema,
-  agentId: IdSchema,
-  runId: IdSchema,
-  runtimeAdapterId: IdSchema,
-  operatingEnvelopeId: IdSchema,
-  toolCatalogRef: exports_external.string().min(1),
-  actionCatalogRef: exports_external.string().min(1),
-  gatewayRegistryRef: exports_external.string().min(1),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
-  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
-  candidateAction: CandidateActionSchema,
-  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
-  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
-  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
-  compilerVersion: exports_external.string().min(1)
 });
 // src/protocol/areas/action-contract/schemas.ts
 var ActionContractSchema = ProtocolBaseSchema.extend({
@@ -19215,6 +20666,31 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/integrations/a1-evidence/delegation-evidence-record.ts
+var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
+var DelegationEvidenceRecordSchema = exports_external.object({
+  schemaId: exports_external.literal("delegation-evidence-record"),
+  schemaVersion: exports_external.literal(1),
+  a1ChainFingerprint: Hex32Schema,
+  certFingerprints: exports_external.array(Hex32Schema),
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: Hex32Schema,
+  terminalDelegatePkFingerprint: Hex32Schema,
+  a1VerifierVersion: exports_external.string().min(1),
+  verifyPath: exports_external.enum(["ts", "sidecar"]),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: Hex32Schema.nullable(),
+  presentedAtUnix: exports_external.number().int().nonnegative(),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+}).strict();
+
+// src/protocol/areas/delegation-evidence-record/schemas.ts
+var StoredDelegationEvidenceRecordSchema = ProtocolBaseSchema.extend({
+  delegationEvidenceRecordId: IdSchema,
+  evidenceRecord: DelegationEvidenceRecordSchema
+});
 // src/protocol/areas/negotiation/schemas.ts
 var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
   "self_attested",
@@ -19463,6 +20939,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "delegation_evidence_record",
   "negotiation_session",
   "negotiation_offer",
   "negotiation_decision",
@@ -19516,6 +20993,10 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("delegation_evidence_record"),
+    payload: StoredDelegationEvidenceRecordSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
@@ -19623,7 +21104,7 @@ class InMemoryProtocolStore {
     return record2 ? structuredClone(record2) : null;
   }
   async listRecordsByType(objectType, scope2 = {}) {
-    const records = [];
+    const records2 = [];
     for (const record2 of this.records.values()) {
       if (record2.objectType !== objectType)
         continue;
@@ -19631,12 +21112,12 @@ class InMemoryProtocolStore {
         continue;
       if (scope2.organizationId && record2.organizationId !== scope2.organizationId)
         continue;
-      records.push(structuredClone(record2));
+      records2.push(structuredClone(record2));
     }
-    return records;
+    return records2;
   }
   async listRecordsByActionContract(objectType, actionContractId, scope2 = {}) {
-    const records = [];
+    const records2 = [];
     for (const record2 of this.records.values()) {
       if (record2.objectType !== objectType)
         continue;
@@ -19646,9 +21127,9 @@ class InMemoryProtocolStore {
         continue;
       if (!recordMatchesActionContract(record2, actionContractId))
         continue;
-      records.push(structuredClone(record2));
+      records2.push(structuredClone(record2));
     }
-    return records;
+    return records2;
   }
   async getStreamTail(streamId, partitionKey) {
     const tail = this.events.filter((event) => event.streamId === streamId && event.partitionKey === partitionKey).sort((a, b) => b.offset - a.offset)[0];
@@ -19842,13 +21323,13 @@ class InMemoryProtocolStore {
   hasStreamOffset(event) {
     return this.events.some((existing) => existing.streamId === event.streamId && existing.partitionKey === event.partitionKey && existing.offset === event.offset);
   }
-  stageRecordsAndEvents(records, events, commitRecords, commitEvents) {
+  stageRecordsAndEvents(records2, events, commitRecords, commitEvents) {
     for (const record2 of commitRecords) {
-      records.set(recordKey(record2.objectType, record2.objectId), structuredClone(record2));
+      records2.set(recordKey(record2.objectType, record2.objectId), structuredClone(record2));
     }
     for (const event of commitEvents) {
       events.push(structuredClone(event));
-      records.set(recordKey("contract_stream_event", event.streamEventId), structuredClone({
+      records2.set(recordKey("contract_stream_event", event.streamEventId), structuredClone({
         objectId: event.streamEventId,
         objectType: "contract_stream_event",
         tenantId: event.tenantId,
@@ -20041,6 +21522,7 @@ var protocolReasonCodes = [
   code2("protected_x402_readiness_binding_mismatch", "protected_path_posture", "protected_path_posture"),
   code2("protected_x402_trusted_readiness_missing", "protected_path_posture", "protected_path_posture"),
   code2("mcp_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("runtime_ingress_wire_invalid", "refusal", "intent_compilation"),
   code2("mcp_candidate_not_contractable", "refusal", "intent_compilation"),
   code2("candidate_params_digest_mismatch", "transition_error", "action_contract"),
   code2("candidate_action_mismatch", "transition_error", "action_contract"),
@@ -20401,16 +21883,16 @@ var internalMisconfigurationCodes = new Set([
 function isStaleHostedAdmissionCode(code3) {
   return code3 === "hosted_caller_identity_stale";
 }
-function failureClassFromHttpStatus(status) {
-  if (status === 401)
+function failureClassFromHttpStatus(status2) {
+  if (status2 === 401)
     return "auth";
-  if (status === 403 || status === 409)
+  if (status2 === 403 || status2 === 409)
     return "protected_action_refusal";
-  if (status === 422)
+  if (status2 === 422)
     return "proof_gap";
-  if (status >= 500)
+  if (status2 >= 500)
     return "internal";
-  if (status >= 400 && status < 500)
+  if (status2 >= 400 && status2 < 500)
     return "proof_gap";
   return "internal";
 }
@@ -21700,44 +23182,15 @@ function aggregateRedactionPosture(nodes) {
   if (nodes.some((node) => node.rawSecretMaterialDetected))
     return "raw_material_present";
   const statuses = nodes.flatMap((node) => [node.argvRedactionStatus, node.stdinRedactionStatus]);
-  if (statuses.some((status) => status === "raw_material_present"))
+  if (statuses.some((status2) => status2 === "raw_material_present"))
     return "raw_material_present";
-  if (statuses.some((status) => status === "unknown"))
+  if (statuses.some((status2) => status2 === "unknown"))
     return "unknown";
-  if (statuses.some((status) => status === "secret_refs_only"))
+  if (statuses.some((status2) => status2 === "secret_refs_only"))
     return "secret_refs_only";
-  if (statuses.length > 0 && statuses.every((status) => status === "digest_only"))
+  if (statuses.length > 0 && statuses.every((status2) => status2 === "digest_only"))
     return "digest_only";
   return "redacted";
-}
-// src/protocol/areas/refusal/records.ts
-async function buildRefusal(input) {
-  const normalized = {
-    schemaVersion: input.schemaVersion ?? PROTOCOL_VERSION,
-    tenantId: input.tenantId,
-    organizationId: input.organizationId,
-    createdAt: input.createdAt,
-    phase: input.phase,
-    actionContractId: input.actionContractId ?? null,
-    policyDecisionId: input.policyDecisionId ?? null,
-    greenlightId: input.greenlightId ?? null,
-    gateAttemptId: input.gateAttemptId ?? null,
-    refusedObjectRef: input.refusedObjectRef ?? null,
-    reasonCode: input.reasonCode,
-    reason: input.reason,
-    evidenceRefs: input.evidenceRefs ?? [],
-    refusedAt: input.refusedAt
-  };
-  const refusalDigest = await digestCanonical(normalized);
-  return RefusalSchema.parse({
-    ...normalized,
-    refusalId: `ref_${refusalDigest.slice("sha256:".length, "sha256:".length + 48)}`,
-    mutationAttempted: false,
-    authorityCreated: false
-  });
-}
-function protocolObjectRef(objectType, objectId) {
-  return `${objectType}:${objectId}`;
 }
 // src/protocol/areas/idempotency-ledger/entries.ts
 function idempotencyLedgerKey(contract) {
@@ -21877,22 +23330,6 @@ function ledgerStateForReconciliation(reconciliation) {
     return "terminal_unknown";
   return "mutation_started";
 }
-// src/protocol/areas/receipt-export/status.ts
-function deriveGatewayAdmissionStatus(input) {
-  if (input.greenlightConsumptionStatus === "replayed")
-    return "replayed";
-  if (input.gatewayCheckStatus === "passed")
-    return "admitted";
-  if (input.gatewayCheckStatus === "refused")
-    return "refused";
-  if (input.gatewayCheckStatus === "proof_gap")
-    return "proof_gap";
-  return "not_requested";
-}
-function deriveDownstreamOutcomeStatus(input) {
-  return input.downstreamExecutionStatus;
-}
-
 // src/protocol/evidence-projections/projections.ts
 var AuthMdEvidenceRefsProjectionSchema2 = AgentTransactionEnvelopeProjectionSchema.shape.authMdEvidenceRefs;
 function projectContractEvidence(contract) {
@@ -21989,7 +23426,7 @@ async function projectAgentTransactionEnvelope(input) {
     idempotencyKey: input.contract.idempotencyKey,
     paramsDigest: input.contract.paramsDigest,
     nonSecretParamsSummary: input.contract.nonSecretParamsSummary,
-    clearingEvidenceRefs: clearingEvidenceRefsJson(input.contract.clearingEvidenceRefs),
+    clearingEvidenceRefs: clearingEvidenceRefsJson2(input.contract.clearingEvidenceRefs),
     surfaceOperationRef: latestReconciliation?.surfaceOperationRef ?? input.mutationAttempt?.surfaceOperationRef ?? null,
     surfaceOperationReconciliationRef: latestReconciliation?.reconciliationId ?? null,
     surfaceOperationEvidenceLabels: surfaceOperationEvidenceLabels({
@@ -22151,6 +23588,7 @@ function projectReceiptTimeline(input) {
       spanRef: latestReconciliation.spanRef,
       diagnosticsRedactionPosture: latestReconciliation.diagnosticsRedactionPosture
     } : null,
+    delegationProvenance: input.delegationProvenance ?? null,
     redactionProfileRef: "receipt-timeline:v0.2-redacted",
     omittedFields: ["event.payload", "event.createdAt", "receipt.evidenceRefs"]
   });
@@ -22254,7 +23692,7 @@ function agentTransactionDownstreamOutcomeStatus(input) {
 function unique(value, index, values) {
   return values.indexOf(value) === index;
 }
-function clearingEvidenceRefsJson(refs) {
+function clearingEvidenceRefsJson2(refs) {
   const json2 = {};
   if (refs.correlationRef !== undefined)
     json2.correlationRef = refs.correlationRef;
@@ -22530,7 +23968,10 @@ function projectOperationCorrelationIndex(input) {
     gateAttemptRef: input.gateAttempt?.gateAttemptId ?? input.receipt?.gateAttemptId ?? null,
     mutationAttemptRef: input.mutationAttempt?.mutationAttemptId ?? input.receipt?.mutationAttemptId ?? null,
     receiptRef: input.receipt?.receiptId ?? null,
-    proofGapRefs: [...input.receipt?.proofGapIds ?? [], ...(input.proofGaps ?? []).map((gap) => gap.proofGapId)].filter(unique),
+    proofGapRefs: [
+      ...input.receipt?.proofGapIds ?? [],
+      ...(input.proofGaps ?? []).map((gap) => gap.proofGapId)
+    ].filter(unique),
     refusalRefs: (input.refusals ?? []).filter((refusal) => refusal.actionContractId === contract.actionContractId).map((refusal) => refusal.refusalId).filter(unique),
     recoveryRefs: input.recoveryRefs ?? [],
     isolationRefs: input.isolationRefs ?? [],
@@ -22594,10 +24035,10 @@ function operationReadbackStatus(envelope) {
     return "greenlight_available";
   return "policy_refused";
 }
-function operationReadbackStage(envelope, contract, status) {
-  if (status === "isolated")
+function operationReadbackStage(envelope, contract, status2) {
+  if (status2 === "isolated")
     return "isolation";
-  if (status === "recovery_required")
+  if (status2 === "recovery_required")
     return "recovery";
   if (envelope.receiptRef)
     return "receipt";
@@ -22615,20 +24056,20 @@ function operationReadbackStage(envelope, contract, status) {
     return "intent_compilation";
   return "action_contract";
 }
-function operationReadbackNextMechanism(status) {
-  if (status === "greenlight_available")
+function operationReadbackNextMechanism(status2) {
+  if (status2 === "greenlight_available")
     return "use_greenlight_at_gateway";
-  if (status === "review_required")
+  if (status2 === "review_required")
     return "request_review";
-  if (status === "policy_refused" || status === "gateway_refused")
+  if (status2 === "policy_refused" || status2 === "gateway_refused")
     return "recraft_request";
-  if (status === "replay_refused")
+  if (status2 === "replay_refused")
     return "create_new_contract";
-  if (status === "recovery_required" || status === "downstream_unknown")
+  if (status2 === "recovery_required" || status2 === "downstream_unknown")
     return "recover_terminal_unknown";
-  if (status === "isolated" || status === "halted" || status === "quarantined")
+  if (status2 === "isolated" || status2 === "halted" || status2 === "quarantined")
     return "stop";
-  if (status === "downstream_pending")
+  if (status2 === "downstream_pending")
     return "wait_for_downstream";
   return "read_evidence";
 }
@@ -22646,17 +24087,17 @@ function operationReadbackGreenlightUsePosture(envelope) {
     return "available_for_one_gateway_check";
   return "unknown";
 }
-function operationReadbackRequiresNewContract(status) {
-  return status === "policy_refused" || status === "gateway_refused" || status === "replay_refused" || status === "recovery_required" || status === "halted" || status === "quarantined" || status === "isolated";
+function operationReadbackRequiresNewContract(status2) {
+  return status2 === "policy_refused" || status2 === "gateway_refused" || status2 === "replay_refused" || status2 === "recovery_required" || status2 === "halted" || status2 === "quarantined" || status2 === "isolated";
 }
-function operationReadbackSupportSeverity(status) {
-  if (status === "halted" || status === "quarantined" || status === "isolated" || status === "recovery_required" || status === "downstream_unknown") {
+function operationReadbackSupportSeverity(status2) {
+  if (status2 === "halted" || status2 === "quarantined" || status2 === "isolated" || status2 === "recovery_required" || status2 === "downstream_unknown") {
     return "urgent";
   }
-  if (status === "policy_refused" || status === "gateway_refused" || status === "gateway_proof_gap" || status === "policy_proof_gap" || status === "replay_refused" || status === "downstream_failed" || status === "downstream_refused") {
+  if (status2 === "policy_refused" || status2 === "gateway_refused" || status2 === "gateway_proof_gap" || status2 === "policy_proof_gap" || status2 === "replay_refused" || status2 === "downstream_failed" || status2 === "downstream_refused") {
     return "warning";
   }
-  if (status === "downstream_succeeded")
+  if (status2 === "downstream_succeeded")
     return "none";
   return "info";
 }
@@ -22688,6 +24129,7 @@ var protocolObjectRegistry = {
   tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
   protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
   intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
+  delegation_evidence_record: entry("delegation_evidence_record", StoredDelegationEvidenceRecordSchema, (record2) => record2.payload.delegationEvidenceRecordId, "transition_evidence", "audit_read"),
   negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
   negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
   negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
@@ -22849,6 +24291,24 @@ async function assembleAgentTransactionEnvelope(store, contract) {
     ]
   };
 }
+async function resolveReceiptTimelineDelegationProvenance(store, receipt) {
+  const contractRecord = await store.getRecord("action_contract", receipt.actionContractId);
+  if (!contractRecord)
+    return null;
+  const intentCompilationRecord = await store.getRecord("intent_compilation", contractRecord.payload.intentCompilationId);
+  if (!intentCompilationRecord)
+    return null;
+  const delegationRef = intentCompilationRecord.payload.candidateAction.delegationEvidenceRef;
+  if (!delegationRef)
+    return null;
+  const storedRecord = await store.getRecord("delegation_evidence_record", delegationRef.delegationEvidenceRefId);
+  const resolved = await resolveReceiptDelegationProvenance({
+    contract: contractRecord.payload,
+    intentCompilation: intentCompilationRecord.payload,
+    storedRecord: storedRecord?.payload ?? null
+  });
+  return resolved?.provenance ?? null;
+}
 async function recordPayload(store, objectType, objectId) {
   return (await store.getRecord(objectType, objectId))?.payload ?? null;
 }
@@ -22904,135 +24364,6 @@ function guardActionProposal(input) {
     return fail("invalid_transition_actor_mismatch", "Action contract actor bindings must match compilation and envelope.");
   }
   return ok();
-}
-// src/protocol/events/chains.ts
-async function buildEventChain(store, descriptors) {
-  const tails = new Map;
-  const events = [];
-  for (const descriptor of descriptors) {
-    for (const binding of streamBindings(descriptor)) {
-      const tailKey = `${binding.streamId}:${binding.partitionKey}`;
-      let tail = tails.get(tailKey);
-      if (!tail) {
-        const storedTail = await store.getStreamTail(binding.streamId, binding.partitionKey);
-        tail = storedTail ? { offset: storedTail.offset, digest: storedTail.eventDigest } : { offset: -1, digest: null };
-      }
-      const event = await buildEventAt(descriptor.source, descriptor.eventType, descriptor.objectRefs, descriptor.payload, binding.streamId, binding.streamScope, binding.partitionKey, tail.offset + 1, tail.digest);
-      events.push(event);
-      tails.set(tailKey, { offset: event.offset, digest: event.eventDigest });
-    }
-  }
-  return events;
-}
-function actionLifecycleStreamRefs(contract) {
-  return {
-    actionContractId: contract.actionContractId,
-    runId: contract.runId,
-    gatewayId: contract.gatewayId,
-    resourceRef: contract.resourceRef
-  };
-}
-function receiptStreamReferencesForEvents(events) {
-  const references = new Map;
-  for (const event of events) {
-    const key = `${event.streamId}:${event.partitionKey}`;
-    const existing = references.get(key);
-    if (!existing || event.offset > existing.offsetEnd) {
-      references.set(key, {
-        streamId: event.streamId,
-        streamScope: event.streamScope,
-        partitionKey: event.partitionKey,
-        offsetStart: existing?.offsetStart ?? 0,
-        offsetEnd: event.offset,
-        terminalEventDigest: event.eventDigest
-      });
-    }
-  }
-  return [...references.values()];
-}
-function streamBindings(descriptor) {
-  const streamId = organizationStreamId(descriptor.source);
-  const bindings = [
-    {
-      streamId,
-      streamScope: "organization",
-      partitionKey: streamPartitionKey(descriptor.eventType, descriptor.objectRefs, descriptor.streamRefs)
-    }
-  ];
-  if (descriptor.streamRefs) {
-    bindings.push({
-      streamId,
-      streamScope: "run",
-      partitionKey: `run:${descriptor.streamRefs.runId}`
-    }, {
-      streamId,
-      streamScope: "protected_surface_resource",
-      partitionKey: `protected_surface_resource:${descriptor.streamRefs.gatewayId}:${descriptor.streamRefs.resourceRef}`
-    });
-  }
-  return dedupeBindings(bindings);
-}
-function organizationStreamId(source) {
-  return `stream_${source.tenantId}_${source.organizationId}`;
-}
-function streamPartitionKey(eventType, objectRefs, streamRefs) {
-  if (streamRefs)
-    return `action:${streamRefs.actionContractId}`;
-  const actionRef = objectRefs.find((ref) => ref.startsWith("act_"));
-  if (actionRef)
-    return `action:${actionRef}`;
-  if (eventType === "isolation_changed" && objectRefs[1] && objectRefs[2]) {
-    return `isolation:${objectRefs[1]}:${objectRefs[2]}`;
-  }
-  if (eventType === "isolation_changed")
-    return `isolation:${objectRefs[1] ?? objectRefs[0] ?? "unknown"}`;
-  if (eventType === "intent_compiled")
-    return `intent:${objectRefs[0] ?? "unknown"}`;
-  return `object:${objectRefs[0] ?? "unknown"}`;
-}
-function dedupeBindings(bindings) {
-  const seen = new Set;
-  const deduped = [];
-  for (const binding of bindings) {
-    const key = `${binding.streamId}:${binding.partitionKey}`;
-    if (seen.has(key))
-      continue;
-    seen.add(key);
-    deduped.push(binding);
-  }
-  return deduped;
-}
-async function buildEventAt(source, eventType, objectRefs, payload, streamId, streamScope, partitionKey, offset, previousEventDigest) {
-  const eventTime = nowIso();
-  const eventSeed = {
-    streamId,
-    streamScope,
-    partitionKey,
-    offset,
-    eventType,
-    eventTime,
-    objectRefs,
-    previousEventDigest,
-    payload
-  };
-  return ContractStreamEventSchema.parse({
-    schemaVersion: PROTOCOL_VERSION,
-    tenantId: source.tenantId,
-    organizationId: source.organizationId,
-    createdAt: eventTime,
-    streamEventId: createId("evt"),
-    streamId,
-    streamScope,
-    offset,
-    partitionKey,
-    eventType,
-    eventTime,
-    producerRef: "handshake-kernel",
-    objectRefs,
-    previousEventDigest,
-    eventDigest: await digestCanonical(eventSeed),
-    payload
-  });
 }
 // src/protocol/areas/delegated-authority/inputs.ts
 var RegisterDelegatedAuthorityRefInputSchema = exports_external.strictObject({
@@ -23707,8 +25038,8 @@ async function getRecoveryRecommendationContext(recorder, input) {
   const receiptRecord = await recorder.requiredRecord("receipt", input.sourceReceiptId, "receipt_missing");
   const receipt = receiptRecord.payload;
   assertReceiptDigestMaterial(receipt);
-  await assertReceiptDigests(receipt);
-  const proofGaps = await loadProofGaps(recorder, receipt, input.sourceRefusalOrGapRef);
+  await assertReceiptDigests2(receipt);
+  const proofGaps = await loadProofGaps2(recorder, receipt, input.sourceRefusalOrGapRef);
   assertRecoverableReceipt(receipt, proofGaps);
   const contractRecord = await recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing");
   const sourceRefusalOrGapRef = input.sourceRefusalOrGapRef ?? defaultSourceRefusalOrGapRef(receipt, proofGaps);
@@ -23848,7 +25179,7 @@ function assertReceiptDigestMaterial(receipt) {
     throw new HandshakeProtocolError("recovery_receipt_stream_offsets_missing", "Recovery recommendation requires stream event references and stream offset windows.", 409);
   }
 }
-async function assertReceiptDigests(receipt) {
+async function assertReceiptDigests2(receipt) {
   const expectedReceiptDigest = await digestCanonical({
     ...receipt,
     receiptDigest: null,
@@ -23908,7 +25239,7 @@ function policyUpdateCandidate(recommendedPath, reasonCode) {
 function agentInstructionUpdateCandidate(reasonCode) {
   return reasonCode.includes("agent") || reasonCode.includes("compiler") || reasonCode.includes("overreach");
 }
-async function loadProofGaps(recorder, receipt, sourceRefusalOrGapRef) {
+async function loadProofGaps2(recorder, receipt, sourceRefusalOrGapRef) {
   const proofGapIds = new Set(receipt.proofGapIds);
   if (sourceRefusalOrGapRef?.startsWith("gap_"))
     proofGapIds.add(sourceRefusalOrGapRef);
@@ -23928,6 +25259,27 @@ function assertProofGapBelongsToReceipt(receipt, proofGap) {
   throw new HandshakeProtocolError("recovery_source_ref_mismatch", "Proof gap used for recovery must reference the source receipt, gate attempt, or mutation attempt.", 409);
 }
 // src/protocol/areas/proof-gap/transitions.ts
+function buildCompilationProofGap(input) {
+  return ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: nowIso(),
+    proofGapId: createId("gap"),
+    gapPhase: "compilation",
+    expectedEvidenceType: input.expectedEvidenceType,
+    missingOrInvalidEvidenceRef: input.expectedEvidenceType,
+    affectedObjectRefs: [input.intentCompilationId, ...input.runtimeExecutionId ? [input.runtimeExecutionId] : []],
+    gateAttemptId: null,
+    mutationAttemptId: null,
+    receiptId: null,
+    reasonCode: input.reasonCode,
+    finalityImpact: "unknown",
+    recoveryRequirement: "Supply verifiable delegation evidence before treating compilation as contractable.",
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+}
 function buildProofGap(contract, gapPhase, expectedEvidenceType, reasonCode, refs) {
   return ProofGapSchema.parse({
     schemaVersion: PROTOCOL_VERSION,
@@ -24384,13 +25736,13 @@ function buildContractBinding(args) {
     purposeCode: candidate.purposeCode,
     expectedSideEffectCodes: candidate.expectedSideEffectCodes,
     evidenceRefs: candidate.evidenceRefs,
-    clearingEvidenceRefs: clearingEvidenceRefsJson2(candidate.clearingEvidenceRefs),
+    clearingEvidenceRefs: clearingEvidenceRefsJson3(candidate.clearingEvidenceRefs),
     bounds: candidate.bounds,
     idempotencyKey: candidate.idempotencyKey,
     canonicalizerVersion: CANONICALIZER_VERSION
   };
 }
-function clearingEvidenceRefsJson2(refs) {
+function clearingEvidenceRefsJson3(refs) {
   const json2 = {};
   if (refs.correlationRef !== undefined)
     json2.correlationRef = refs.correlationRef;
@@ -24834,30 +26186,30 @@ function trustFailuresForKey(trustMaterial, trustKey, signature, verifiedAt) {
   return failures;
 }
 function certificateStatusFailures(trustMaterial, certificate) {
-  const status2 = trustMaterial.statusRecords.find((record2) => record2.subjectKind === "certificate" && record2.subjectRef === certificate.authorityCertificateId);
-  if (!status2)
+  const status3 = trustMaterial.statusRecords.find((record2) => record2.subjectKind === "certificate" && record2.subjectRef === certificate.authorityCertificateId);
+  if (!status3)
     return [];
-  if (status2.status === "status_unavailable") {
+  if (status3.status === "status_unavailable") {
     return [
       failure("trust_status_unavailable", "Certificate status is unavailable.", certificate.authorityCertificateId)
     ];
   }
-  if (status2.status === "revoked") {
+  if (status3.status === "revoked") {
     return [
       failure("trust_certificate_status_revoked", "Certificate status record marks the certificate revoked.", certificate.authorityCertificateId)
     ];
   }
-  if (status2.status === "stale" || status2.status === "retired") {
+  if (status3.status === "stale" || status3.status === "retired") {
     return [
       failure("trust_certificate_status_stale", "Certificate status record is stale or retired.", certificate.authorityCertificateId)
     ];
   }
   return [];
 }
-function statusFailureFor(subject, status2, ref) {
-  if (status2 === "retired")
+function statusFailureFor(subject, status3, ref) {
+  if (status3 === "retired")
     return failure("trust_key_retired", `Pinned trust ${subject} is retired.`, ref);
-  if (status2 === "revoked")
+  if (status3 === "revoked")
     return failure("trust_key_revoked", `Pinned trust ${subject} is revoked.`, ref);
   return failure("trust_key_stale", `Pinned trust ${subject} is stale.`, ref);
 }
@@ -25432,10 +26784,10 @@ function gatewayCheckSequenceDependencyRefusalReason(states) {
     return null;
   return `prior_action_${failedState.status}`;
 }
-function gatewayCheckSequenceState(requiredPriorActionContractId, status2, policyDecision = null, greenlight = null, receipt = null, reconciliation = null) {
+function gatewayCheckSequenceState(requiredPriorActionContractId, status3, policyDecision = null, greenlight = null, receipt = null, reconciliation = null) {
   return {
     requiredPriorActionContractId,
-    status: status2,
+    status: status3,
     policyDecisionId: policyDecision?.policyDecisionId ?? null,
     policyDecisionValue: policyDecision?.decision ?? null,
     greenlightId: greenlight?.greenlightId ?? null,
@@ -25606,8 +26958,8 @@ async function recordAgreementObligationBinding(store, recorder, inputValue) {
   if (agreement.payload.negotiationSessionId !== binding.negotiationSessionId) {
     throw protocolError("linked_agreement_session_mismatch", "Obligation binding must belong to its agreement session.");
   }
-  const status2 = await currentAgreementStatus(store, agreement.payload);
-  if (status2 !== "active") {
+  const status3 = await currentAgreementStatus(store, agreement.payload);
+  if (status3 !== "active") {
     throw protocolError("agreement_not_active", "Only active linked agreements may be bound to an action contract.");
   }
   const contract = await store.getRecord("action_contract", binding.actionContractId);
@@ -25663,11 +27015,11 @@ async function transitionAgreementStatus(store, recorder, inputValue) {
   return transition;
 }
 async function currentAgreementStatus(store, agreement) {
-  const transitions9 = await store.listRecordsByType("agreement_status_transition", {
+  const transitions11 = await store.listRecordsByType("agreement_status_transition", {
     tenantId: agreement.tenantId,
     organizationId: agreement.organizationId
   });
-  const ordered = transitions9.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
+  const ordered = transitions11.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
   return ordered.at(-1)?.transition.toStatus ?? "active";
 }
 async function commitNegotiationRecord(recorder, record2, descriptor) {
@@ -25815,8 +27167,8 @@ function isAllowedStatusTransition(from, to) {
     return ["resolved", "withdrawn"].includes(to);
   return false;
 }
-function protocolError(code3, message, status2 = 409) {
-  return new HandshakeProtocolError(code3, message, status2);
+function protocolError(code3, message, status3 = 409) {
+  return new HandshakeProtocolError(code3, message, status3);
 }
 // src/protocol/areas/negotiation/policy.ts
 async function evaluateAgreementObligationPolicy(store, contract, now) {
@@ -26033,6 +27385,9 @@ function baseInput(input) {
     paramsDigest: input.paramsDigest ?? null
   };
 }
+// src/integrations/a1-evidence/types.ts
+var VECTOR_GROUNDTRUTH_UNAVAILABLE_PROOF_GAP = "delegation_evidence_verify:vector_groundtruth_unavailable";
+
 // src/protocol/areas/policy-greenlight/policy-record/index.ts
 async function buildPolicyDecision(input, contract, envelope, decisionValue, policyInputDigest, isolationSnapshot, now) {
   const decisionId = createId("pol");
@@ -26225,6 +27580,16 @@ async function commitGreenlightPolicyDecision(recorder, plan, greenlight) {
   return { status: commitResult.status, refusal: null, proofGap: null };
 }
 function buildPolicyProofGap(contract, decision, now) {
+  if (decision.decisionReasonCode === VECTOR_GROUNDTRUTH_UNAVAILABLE_PROOF_GAP) {
+    return buildCompilationProofGap({
+      tenantId: contract.tenantId,
+      organizationId: contract.organizationId,
+      intentCompilationId: contract.intentCompilationId,
+      runtimeExecutionId: contract.runtimeExecutionId,
+      expectedEvidenceType: "delegation_evidence",
+      reasonCode: decision.decisionReasonCode
+    });
+  }
   return ProofGapSchema.parse({
     schemaVersion: PROTOCOL_VERSION,
     tenantId: contract.tenantId,
@@ -26255,6 +27620,7 @@ function digestParameter(contract, key) {
 }
 
 // src/protocol/areas/policy-greenlight/transitions.ts
+var DELEGATION_EVIDENCE_REQUIRED_REF = "delegation_evidence:required";
 async function evaluatePolicy(store, recorder, inputValue) {
   const input = EvaluatePolicyInputSchema.parse(inputValue);
   const context = await getPolicyEvaluationContext(recorder, input);
@@ -26307,6 +27673,9 @@ async function derivePolicyConstraintEvaluation(store, context) {
   const gatewayCredentialBindingEvaluation = await evaluateGatewayCredentialBindings(store, context.contract, context.now);
   const delegatedAuthorityBindingEvaluation = await evaluateDelegatedAuthorityBindings(store, context.contract, context.now);
   const agreementObligationEvaluation = await evaluateAgreementObligationPolicy(store, context.contract, context.now);
+  const intentCompilationRecord = await store.getRecord("intent_compilation", context.contract.intentCompilationId);
+  const intentCompilation = intentCompilationRecord?.payload ?? null;
+  const delegationEvidenceRequired = intentCompilation?.requiredEvidenceRefs.includes(DELEGATION_EVIDENCE_REQUIRED_REF) ?? false;
   const authorityLedger = await effectiveAuthorityLedger(context.contract, agreementObligationEvaluation);
   const idempotencyLedgerEntry = await store.getCurrentIdempotencyLedgerEntry(authorityLedger.ledgerKeyDigest);
   const policyInput = buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, authorityLedger.ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation);
@@ -26324,6 +27693,8 @@ async function derivePolicyConstraintEvaluation(store, context) {
     gatewayCredentialBindingEvaluation,
     delegatedAuthorityBindingEvaluation,
     agreementObligationEvaluation,
+    intentCompilation,
+    delegationEvidenceRequired,
     policyInput,
     policyInputDigest,
     isolationSnapshot: isolationSnapshotRef(isolationStates)
@@ -26362,6 +27733,7 @@ async function resolvePolicyDecisionValue(recorder, constraints) {
   decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
   decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
   decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
+  decisionValue = applyDelegationEvidencePolicy(decisionValue, constraints);
   decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
   if (decisionValue.decision === "review_required" && constraints.input.reviewDecisionId) {
     const reviewDecision = await recorder.requiredRecord("review_decision", constraints.input.reviewDecisionId, "review_decision_missing");
@@ -26381,6 +27753,7 @@ async function resolvePolicyDecisionValue(recorder, constraints) {
     decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
     decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
     decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
+    decisionValue = applyDelegationEvidencePolicy(decisionValue, constraints);
     decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
   }
   return decisionValue;
@@ -26551,6 +27924,30 @@ function applyExactProtectedActionPolicy(decisionValue, constraints) {
     matchedRuleIds: ["exact_protected_action_policy_binding"]
   };
 }
+function applyDelegationEvidencePolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight")
+    return decisionValue;
+  if (!constraints.delegationEvidenceRequired)
+    return decisionValue;
+  const ref = constraints.intentCompilation?.candidateAction.delegationEvidenceRef ?? null;
+  if (!ref) {
+    return {
+      decision: "proof_gap",
+      reasonCode: VECTOR_GROUNDTRUTH_UNAVAILABLE_PROOF_GAP,
+      reason: "Delegation evidence is required but missing from the compiled candidate.",
+      matchedRuleIds: ["delegation_evidence_required_missing"]
+    };
+  }
+  if (ref.verifyOutcome === "invalid") {
+    return {
+      decision: "refuse",
+      reasonCode: "delegation_evidence_invalid:malformed",
+      reason: "Required delegation evidence failed verification.",
+      matchedRuleIds: ["delegation_evidence_required_invalid"]
+    };
+  }
+  return decisionValue;
+}
 function evaluateExactProtectedActionPolicyContract(contract) {
   if (contract.gatewayCredentialRefs.length !== 1) {
     return {
@@ -26708,166 +28105,6 @@ function assertTransition2(result) {
   if (!result.ok) {
     throw new HandshakeProtocolError(result.code, result.message, result.status);
   }
-}
-// src/protocol/areas/receipt-export/inputs.ts
-var CreateReceiptExportInputSchema = exports_external.strictObject({
-  receiptId: exports_external.string().min(1),
-  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
-  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
-  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
-  requestedByRef: exports_external.string().min(1),
-  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
-});
-// src/protocol/areas/receipt-export/transitions.ts
-async function createReceiptExport(recorder, inputValue) {
-  const input = CreateReceiptExportInputSchema.parse(inputValue);
-  const context = await getReceiptExportContext(recorder, input);
-  const receiptExport = await buildReceiptExport(context);
-  await commitReceiptExport(recorder, context, receiptExport);
-  return receiptExport;
-}
-async function getReceiptExportContext(recorder, input) {
-  const receiptRecord = await recorder.requiredRecord("receipt", input.receiptId, "receipt_missing");
-  const receipt = receiptRecord.payload;
-  assertReceiptExportable(receipt);
-  await assertReceiptDigests2(receipt);
-  const [contractRecord, gateAttemptRecord] = await Promise.all([
-    recorder.requiredRecord("action_contract", receipt.actionContractId, "contract_missing"),
-    receipt.gateAttemptId ? recorder.requiredRecord("gateway_check_attempt", receipt.gateAttemptId, "gateway_check_attempt_missing") : Promise.resolve(null)
-  ]);
-  const proofGaps = await loadProofGaps2(recorder, receipt.proofGapIds);
-  return {
-    input,
-    receipt,
-    contract: contractRecord.payload,
-    gateAttempt: gateAttemptRecord?.payload ?? null,
-    proofGaps,
-    receiptExportId: createId("rex"),
-    now: nowIso()
-  };
-}
-async function buildReceiptExport(context) {
-  const { input, receipt, contract, gateAttempt, proofGaps, receiptExportId, now } = context;
-  const exportDigest = await digestCanonical(buildReceiptExportBinding(context));
-  return ReceiptExportSchema.parse({
-    schemaVersion: PROTOCOL_VERSION,
-    tenantId: receipt.tenantId,
-    organizationId: receipt.organizationId,
-    createdAt: now,
-    receiptExportId,
-    receiptId: receipt.receiptId,
-    actionContractId: receipt.actionContractId,
-    policyDecisionId: receipt.policyDecisionId,
-    greenlightId: receipt.greenlightId,
-    gateAttemptId: receipt.gateAttemptId,
-    mutationAttemptId: receipt.mutationAttemptId,
-    gatewayId: receipt.gatewayId,
-    principalId: contract.principalId,
-    agentId: contract.agentId,
-    runId: contract.runId,
-    gatewayPolicyVersion: contract.gatewayPolicyVersion,
-    policyDecisionStatus: receipt.policyDecisionStatus,
-    gatewayCheckStatus: receipt.gatewayCheckStatus,
-    gatewayAdmissionStatus: deriveGatewayAdmissionStatus(receipt),
-    gatewayCheckedAt: gateAttempt?.createdAt ?? null,
-    greenlightConsumptionStatus: receipt.greenlightConsumptionStatus,
-    mutationAttemptStatus: receipt.mutationAttemptStatus,
-    downstreamExecutionStatus: receipt.downstreamExecutionStatus,
-    downstreamOutcomeStatus: deriveDownstreamOutcomeStatus(receipt),
-    proofGapStatus: receipt.proofGapIds.length > 0 ? "present" : "none",
-    proofGapIds: receipt.proofGapIds,
-    proofGapReasonCodes: proofGaps.map((proofGap2) => proofGap2.reasonCode),
-    finalityStatus: receipt.finalityStatus,
-    evidenceRefs: receipt.evidenceRefs,
-    streamOffsets: receipt.streamOffsets,
-    receiptDigest: receipt.receiptDigest,
-    auditChainDigest: receipt.auditChainDigest,
-    signaturePosture: contract.signaturePosture,
-    keyIdentityRef: contract.keyIdentityRef,
-    verificationPolicyRef: contract.verificationPolicyRef,
-    exportFormat: input.exportFormat,
-    redactionProfileRef: input.redactionProfileRef,
-    exportPurposeCode: input.exportPurposeCode,
-    requestedByRef: input.requestedByRef,
-    evidenceRetentionUntil: input.evidenceRetentionUntil,
-    exportedAt: now,
-    exportDigest
-  });
-}
-function buildReceiptExportBinding(context) {
-  const { input, receipt, receiptExportId, now } = context;
-  const exportBinding = {
-    receiptExportId,
-    receiptId: receipt.receiptId,
-    actionContractId: receipt.actionContractId,
-    receiptDigest: receipt.receiptDigest,
-    auditChainDigest: receipt.auditChainDigest,
-    streamOffsets: receipt.streamOffsets,
-    proofGapIds: receipt.proofGapIds,
-    finalityStatus: receipt.finalityStatus,
-    exportFormat: input.exportFormat,
-    redactionProfileRef: input.redactionProfileRef,
-    exportPurposeCode: input.exportPurposeCode,
-    requestedByRef: input.requestedByRef,
-    exportedAt: now
-  };
-  return exportBinding;
-}
-async function commitReceiptExport(recorder, context, receiptExport) {
-  await recorder.commitRecordsWithEvents(receiptExportRecords(receiptExport), receiptExportEvents(context, receiptExport));
-}
-function receiptExportRecords(receiptExport) {
-  return [{ objectType: "receipt_export", payload: receiptExport }];
-}
-function receiptExportEvents(context, receiptExport) {
-  return [
-    {
-      source: receiptExport,
-      eventType: "receipt_exported",
-      objectRefs: [receiptExport.receiptExportId, receiptExport.receiptId, receiptExport.actionContractId],
-      streamRefs: actionLifecycleStreamRefs(context.contract),
-      payload: {
-        receiptId: receiptExport.receiptId,
-        exportDigest: receiptExport.exportDigest,
-        finalityStatus: receiptExport.finalityStatus
-      }
-    }
-  ];
-}
-function assertReceiptExportable(receipt) {
-  if (!receipt.receiptDigest || !receipt.auditChainDigest) {
-    throw new HandshakeProtocolError("receipt_digest_missing", "Receipt export requires receiptDigest and auditChainDigest.", 409);
-  }
-  if (receipt.streamOffsets.length === 0 || receipt.streamEventIds.length === 0) {
-    throw new HandshakeProtocolError("receipt_stream_offsets_missing", "Receipt export requires stream event references and stream offset windows.", 409);
-  }
-}
-async function assertReceiptDigests2(receipt) {
-  const expectedReceiptDigest = await digestCanonical({
-    ...receipt,
-    receiptDigest: null,
-    auditChainDigest: null
-  });
-  if (receipt.receiptDigest !== expectedReceiptDigest) {
-    throw new HandshakeProtocolError("receipt_digest_mismatch", "Stored receiptDigest does not match the receipt body.", 409);
-  }
-  const expectedAuditChainDigest = await digestCanonical({
-    receiptDigest: receipt.receiptDigest,
-    streamOffsets: receipt.streamOffsets,
-    proofGapIds: receipt.proofGapIds,
-    finalityStatus: receipt.finalityStatus
-  });
-  if (receipt.auditChainDigest !== expectedAuditChainDigest) {
-    throw new HandshakeProtocolError("audit_chain_digest_mismatch", "Stored auditChainDigest does not match the receipt stream and proof-gap evidence.", 409);
-  }
-}
-async function loadProofGaps2(recorder, proofGapIds) {
-  const proofGaps = [];
-  for (const proofGapId of proofGapIds) {
-    const proofGap2 = await recorder.requiredRecord("proof_gap", proofGapId, "proof_gap_missing");
-    proofGaps.push(proofGap2.payload);
-  }
-  return proofGaps;
 }
 // src/protocol/areas/operation-lifecycle/inputs.ts
 var ReconcileSurfaceOperationInputSchema = exports_external.strictObject({
@@ -28346,486 +29583,6 @@ function assertAllowedTransition(current, input) {
     throw new HandshakeProtocolError("tool_call_draft_invalid_reason_missing", "Invalid tool-call drafts must record at least one reason code.", 422);
   }
 }
-// src/protocol/areas/intent-compilation/inputs.ts
-var CompileIntentInputSchema = exports_external.strictObject({
-  tenantId: exports_external.string().min(1),
-  organizationId: exports_external.string().min(1),
-  principalIntentRef: exports_external.string().min(1),
-  principalId: exports_external.string().min(1),
-  agentId: exports_external.string().min(1),
-  runId: exports_external.string().min(1),
-  runtimeAdapterId: exports_external.string().min(1),
-  operatingEnvelopeId: exports_external.string().min(1),
-  toolCatalogRef: exports_external.string().min(1),
-  actionCatalogRef: exports_external.string().min(1),
-  gatewayRegistryRef: exports_external.string().min(1),
-  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
-  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
-  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
-  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
-  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
-  candidate: exports_external.strictObject({
-    toolCapabilityId: exports_external.string().min(1),
-    actionTypeId: exports_external.string().min(1),
-    gatewayRegistryEntryId: exports_external.string().min(1),
-    actionClass: exports_external.string().min(1),
-    gatewayId: exports_external.string().min(1),
-    resourceRef: exports_external.string().min(1),
-    sequenceNumber: exports_external.number().int().nonnegative(),
-    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
-    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
-    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
-    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
-    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
-    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
-    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
-    purposeCode: exports_external.string().min(1),
-    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
-    evidenceRefs: exports_external.array(exports_external.string()).default([]),
-    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
-    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
-    idempotencyKey: exports_external.string().min(1),
-    rollbackHint: exports_external.string().max(500).nullable().default(null),
-    expiresAt: exports_external.string().datetime({ offset: true })
-  }),
-  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
-});
-// src/protocol/areas/intent-compilation/candidate-decision.ts
-function deriveCandidateDecision(context) {
-  const uncertaintyMarkers = deriveUncertaintyMarkers(context);
-  const overreachReasonCodes = [
-    ...deriveRuntimeExecutionReasonCodes(context),
-    ...deriveToolCallDraftReasonCodes(context),
-    ...deriveCatalogAndEnvelopeReasonCodes(context)
-  ];
-  if (requiresMissingGeneratedExecutionGraphRefusal(context)) {
-    overreachReasonCodes.push("generated_execution_graph_missing");
-  }
-  const generatedExecutionCoverage = context.generatedExecutionGraph ? deriveGeneratedExecutionCoverage({
-    input: context.input,
-    runtimeExecution: context.runtimeExecution,
-    generatedExecutionGraph: context.generatedExecutionGraph,
-    paramsDigest: context.paramsDigest
-  }) : { node: null, reasonCodes: [] };
-  overreachReasonCodes.push(...generatedExecutionCoverage.reasonCodes);
-  const refusalReasonCodes = [...uncertaintyMarkers, ...overreachReasonCodes];
-  return {
-    uncertaintyMarkers,
-    overreachReasonCodes,
-    refusalReasonCodes,
-    candidateStatus: refusalReasonCodes.length === 0 ? "contractable" : "rejected",
-    generatedExecutionNode: generatedExecutionCoverage.node
-  };
-}
-function deriveUncertaintyMarkers(context) {
-  const { input, tool, actionType, gateway, envelope, runtimeExecution, generatedExecutionGraph, toolCallDraft } = context;
-  const markers = [];
-  if (!tool)
-    markers.push("unknown_tool_capability");
-  if (!actionType)
-    markers.push("unknown_action_type");
-  if (!gateway)
-    markers.push("unknown_gateway_registry_entry");
-  if (!envelope)
-    markers.push("unknown_operating_envelope");
-  if (input.runtimeExecutionId && !runtimeExecution)
-    markers.push("unknown_runtime_execution");
-  if (input.generatedExecutionGraphId && !generatedExecutionGraph)
-    markers.push("unknown_generated_execution_graph");
-  if (input.toolCallDraftId && !toolCallDraft)
-    markers.push("unknown_tool_call_draft");
-  return markers;
-}
-function deriveRuntimeExecutionReasonCodes(context) {
-  const { input, runtimeExecution } = context;
-  if (!runtimeExecution)
-    return [];
-  const runtimeOverreachCodes = [];
-  if (runtimeExecution.tenantId !== input.tenantId || runtimeExecution.organizationId !== input.organizationId || runtimeExecution.principalIntentRef !== input.principalIntentRef || runtimeExecution.principalId !== input.principalId || runtimeExecution.agentId !== input.agentId || runtimeExecution.runId !== input.runId || runtimeExecution.runtimeAdapterId !== input.runtimeAdapterId) {
-    runtimeOverreachCodes.push("runtime_execution_scope_mismatch");
-  }
-  if (runtimeExecution.dynamicToolConstructionDetected) {
-    runtimeOverreachCodes.push("runtime_dynamic_tool_construction_detected");
-  }
-  if (runtimeExecution.unobservedRegionRefs.length > 0) {
-    runtimeOverreachCodes.push("runtime_unobserved_regions_present");
-  }
-  runtimeOverreachCodes.push(...runtimeExecution.refusalReasonCodes.map((code3) => `runtime_${code3}`));
-  return runtimeOverreachCodes;
-}
-function deriveToolCallDraftReasonCodes(context) {
-  const { input, createdAt, paramsDigest, toolCallDraft } = context;
-  const draftReasonCodes = [];
-  if ((input.generatedExecutionGraphId || input.generatedExecutionNodeId) && !input.toolCallDraftId) {
-    draftReasonCodes.push("tool_call_draft_missing");
-  }
-  if (!toolCallDraft)
-    return draftReasonCodes;
-  if (toolCallDraft.draftState !== "finalized")
-    draftReasonCodes.push("tool_call_draft_not_finalized");
-  if (Date.parse(toolCallDraft.expiresAt) <= Date.parse(createdAt))
-    draftReasonCodes.push("tool_call_draft_stale");
-  if (toolCallDraft.tenantId !== input.tenantId || toolCallDraft.organizationId !== input.organizationId || toolCallDraft.runtimeExecutionId !== input.runtimeExecutionId || toolCallDraft.generatedExecutionGraphId !== input.generatedExecutionGraphId || toolCallDraft.generatedExecutionNodeId !== input.generatedExecutionNodeId || toolCallDraft.toolCapabilityId !== input.candidate.toolCapabilityId || toolCallDraft.actionTypeId !== input.candidate.actionTypeId || toolCallDraft.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || toolCallDraft.actionClass !== input.candidate.actionClass || toolCallDraft.gatewayId !== input.candidate.gatewayId || toolCallDraft.resourceRef !== input.candidate.resourceRef) {
-    draftReasonCodes.push("tool_call_draft_binding_mismatch");
-  }
-  if (toolCallDraft.paramsDigest !== paramsDigest)
-    draftReasonCodes.push("tool_call_draft_params_digest_mismatch");
-  return draftReasonCodes;
-}
-function deriveCatalogAndEnvelopeReasonCodes(context) {
-  const { input, createdAt, tool, actionType, gateway, envelope } = context;
-  const catalogOverreachCodes = [];
-  if (tool?.readWriteClassification === "consequential" && tool.wrapperStatus !== "wrapped") {
-    catalogOverreachCodes.push("unwrapped_consequential_tool");
-  }
-  if (tool) {
-    assertSecretSafeCandidateInput(tool, input.candidate.parameters, input.candidate.nonSecretParamsSummary, input.candidate.secretRefs);
-  }
-  if (tool && tool.runtimeAdapterId !== input.runtimeAdapterId) {
-    catalogOverreachCodes.push("tool_runtime_adapter_mismatch");
-  }
-  if (actionType && actionType.actionClass !== input.candidate.actionClass) {
-    catalogOverreachCodes.push("action_class_mismatch");
-  }
-  if (gateway && gateway.gatewayId !== input.candidate.gatewayId) {
-    catalogOverreachCodes.push("gateway_mismatch");
-  }
-  if (gateway && actionType && gateway.protectedSurfaceKind !== actionType.protectedSurfaceKind) {
-    catalogOverreachCodes.push("protected_surface_kind_mismatch");
-  }
-  if (gateway && actionType && !gateway.acceptedActionCatalogVersions.includes(actionType.actionCatalogVersion)) {
-    catalogOverreachCodes.push("action_catalog_version_not_accepted");
-  }
-  if (envelope) {
-    catalogOverreachCodes.push(...deriveEnvelopeReasonCodes(input, envelope, createdAt));
-  }
-  if (durableRecordScopeMismatch(context)) {
-    catalogOverreachCodes.push("durable_record_scope_mismatch");
-  }
-  return catalogOverreachCodes;
-}
-function deriveEnvelopeReasonCodes(input, envelope, createdAt) {
-  const envelopeOverreachCodes = [];
-  if (envelope.principalId !== input.principalId || envelope.agentId !== input.agentId) {
-    envelopeOverreachCodes.push("envelope_actor_mismatch");
-  }
-  if (!envelope.allowedActionClasses.includes(input.candidate.actionClass)) {
-    envelopeOverreachCodes.push("envelope_action_class_not_allowed");
-  }
-  if (!envelope.allowedGateways.includes(input.candidate.gatewayId)) {
-    envelopeOverreachCodes.push("envelope_gateway_not_allowed");
-  }
-  if (!envelope.allowedResources.includes(input.candidate.resourceRef)) {
-    envelopeOverreachCodes.push("envelope_resource_not_allowed");
-  }
-  if (envelope.revokedAt !== null)
-    envelopeOverreachCodes.push("envelope_revoked");
-  if (Date.parse(envelope.expiresAt) <= Date.parse(createdAt))
-    envelopeOverreachCodes.push("envelope_expired");
-  return envelopeOverreachCodes;
-}
-function durableRecordScopeMismatch(context) {
-  const { input, tool, actionType, gateway, envelope } = context;
-  return [tool, actionType, gateway, envelope].some((record2) => record2 && (record2.tenantId !== input.tenantId || record2.organizationId !== input.organizationId));
-}
-function requiresMissingGeneratedExecutionGraphRefusal(context) {
-  if (context.generatedExecutionGraph) {
-    return false;
-  }
-  if (context.runtimeExecution && requiresGeneratedExecutionGraph(context.runtimeExecution.executionShape)) {
-    return true;
-  }
-  return isAgentOriginCompilation(context);
-}
-function isAgentOriginCompilation(context) {
-  return context.runtimeExecution === null && (context.input.generatedExecutionGraphId !== null || context.input.generatedExecutionNodeId !== null);
-}
-function assertSecretSafeCandidateInput(tool, parameters, nonSecretParamsSummary, secretRefs) {
-  const secretBearingFields = new Set(tool.secretBearingFields);
-  for (const field of secretBearingFields) {
-    if (Object.hasOwn(parameters, field) || Object.hasOwn(nonSecretParamsSummary, field)) {
-      throw new HandshakeProtocolError("secret_bearing_param_in_non_secret_params", `Secret-bearing parameter ${field} must be represented as a secretRef, not stored parameter material.`, 422);
-    }
-  }
-  for (const field of Object.keys(secretRefs)) {
-    if (!secretBearingFields.has(field)) {
-      throw new HandshakeProtocolError("undeclared_secret_ref", `Secret ref ${field} is not declared by the tool capability secretBearingFields.`, 422);
-    }
-  }
-}
-function requiresGeneratedExecutionGraph(executionShape) {
-  return executionShape === "shell_exec_block" || executionShape === "codemode_block" || executionShape === "tool_dispatch_chain" || executionShape === "generated_mcp_tool_chain";
-}
-function deriveGeneratedExecutionCoverage(args) {
-  const { input, runtimeExecution, generatedExecutionGraph, paramsDigest } = args;
-  const graphOverreachCodes = [];
-  if (!runtimeExecution) {
-    graphOverreachCodes.push("generated_execution_graph_without_runtime_execution");
-    return { node: null, reasonCodes: graphOverreachCodes };
-  }
-  if (generatedExecutionGraph.tenantId !== input.tenantId || generatedExecutionGraph.organizationId !== input.organizationId) {
-    graphOverreachCodes.push("generated_execution_graph_scope_mismatch");
-  }
-  if (generatedExecutionGraph.runtimeExecutionId !== runtimeExecution.runtimeExecutionId || generatedExecutionGraph.runtimeExecutionDigest !== runtimeExecution.runtimeExecutionDigest || generatedExecutionGraph.executionBlockDigest !== runtimeExecution.executionBlockDigest) {
-    graphOverreachCodes.push("generated_execution_graph_runtime_mismatch");
-  }
-  if (generatedExecutionGraph.coverageStatus !== "fully_covered_no_unsupported_nodes") {
-    graphOverreachCodes.push("generated_execution_graph_not_contractable");
-  }
-  const requestedNodeId = input.generatedExecutionNodeId;
-  if (!requestedNodeId) {
-    graphOverreachCodes.push("generated_execution_node_missing");
-    return { node: null, reasonCodes: graphOverreachCodes };
-  }
-  const node = generatedExecutionGraph.nodes.find((candidate) => candidate.nodeId === requestedNodeId) ?? null;
-  if (!node) {
-    graphOverreachCodes.push("generated_execution_node_missing");
-    return { node: null, reasonCodes: graphOverreachCodes };
-  }
-  if (node.classification !== "candidate_action_eligible") {
-    graphOverreachCodes.push("generated_execution_node_not_contractable");
-  }
-  if (!node.nodeGatewayBindingDigest) {
-    graphOverreachCodes.push("generated_execution_node_gateway_binding_missing");
-  }
-  if (node.actionClass !== input.candidate.actionClass || node.toolCapabilityId !== input.candidate.toolCapabilityId || node.actionTypeId !== input.candidate.actionTypeId || node.gatewayRegistryEntryId !== input.candidate.gatewayRegistryEntryId || node.resourceRef !== input.candidate.resourceRef || node.paramsDigest !== paramsDigest) {
-    graphOverreachCodes.push("generated_execution_node_binding_mismatch");
-  }
-  return { node, reasonCodes: graphOverreachCodes };
-}
-
-// src/protocol/areas/intent-compilation/transitions.ts
-async function compileIntent(store, recorder, inputValue) {
-  const input = CompileIntentInputSchema.parse(inputValue);
-  const context = await getIntentCompilationContext(store, input);
-  const decision = deriveCandidateDecision(context);
-  const candidateAction = await buildCandidateAction(context, decision);
-  const record2 = buildIntentCompilationRecord(context, decision, candidateAction);
-  await commitIntentCompilation(recorder, context, record2);
-  return record2;
-}
-async function getIntentCompilationContext(store, input) {
-  const createdAt = nowIso();
-  const [
-    toolRecord,
-    actionTypeRecord,
-    gatewayRecord,
-    envelopeRecord,
-    runtimeExecutionRecord,
-    generatedExecutionGraphRecord,
-    toolCallDraftRecord
-  ] = await Promise.all([
-    store.getRecord("tool_capability", input.candidate.toolCapabilityId),
-    store.getRecord("action_type", input.candidate.actionTypeId),
-    store.getRecord("gateway_registry_entry", input.candidate.gatewayRegistryEntryId),
-    store.getRecord("operating_envelope", input.operatingEnvelopeId),
-    input.runtimeExecutionId ? store.getRecord("runtime_execution", input.runtimeExecutionId) : Promise.resolve(null),
-    input.generatedExecutionGraphId ? store.getRecord("generated_execution_graph", input.generatedExecutionGraphId) : Promise.resolve(null),
-    input.toolCallDraftId ? store.getRecord("tool_call_draft", input.toolCallDraftId) : Promise.resolve(null)
-  ]);
-  const tool = toolRecord?.payload ?? null;
-  const actionType = actionTypeRecord?.payload ?? null;
-  const gateway = gatewayRecord?.payload ?? null;
-  const envelope = envelopeRecord?.payload ?? null;
-  const runtimeExecution = runtimeExecutionRecord?.payload ?? null;
-  const generatedExecutionGraph = generatedExecutionGraphRecord?.payload ?? null;
-  const toolCallDraft = toolCallDraftRecord?.payload ?? null;
-  const paramsDigest = await protectedActionParamsDigest({
-    parameters: input.candidate.parameters,
-    secretRefs: input.candidate.secretRefs,
-    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
-    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs
-  });
-  return {
-    input,
-    createdAt,
-    paramsDigest,
-    toolRecord,
-    actionTypeRecord,
-    gatewayRecord,
-    envelopeRecord,
-    runtimeExecutionRecord,
-    generatedExecutionGraphRecord,
-    toolCallDraftRecord,
-    tool,
-    actionType,
-    gateway,
-    envelope,
-    runtimeExecution,
-    generatedExecutionGraph,
-    toolCallDraft
-  };
-}
-async function buildCandidateAction(context, decision) {
-  const { input, paramsDigest, toolRecord, actionTypeRecord, gatewayRecord, envelopeRecord } = context;
-  const { tool, actionType, gateway, runtimeExecution, generatedExecutionGraph } = context;
-  const { toolCallDraft } = context;
-  const { generatedExecutionNode } = decision;
-  const candidateActionId = createId("cand");
-  const candidateBase = {
-    candidateActionId,
-    candidateStatus: decision.candidateStatus,
-    candidateDigest: null,
-    refusalReasonCodes: decision.refusalReasonCodes,
-    toolCapabilityId: input.candidate.toolCapabilityId,
-    toolCapabilityDigest: toolRecord?.canonicalDigest ?? null,
-    toolCatalogVersion: tool?.toolCatalogVersion ?? null,
-    actionTypeId: input.candidate.actionTypeId,
-    actionTypeDigest: actionTypeRecord?.canonicalDigest ?? null,
-    actionCatalogVersion: actionType?.actionCatalogVersion ?? null,
-    gatewayRegistryEntryId: input.candidate.gatewayRegistryEntryId,
-    gatewayRegistryDigest: gatewayRecord?.canonicalDigest ?? null,
-    gatewayRegistryVersion: gateway?.gatewayRegistryVersion ?? null,
-    operatingEnvelopeId: input.operatingEnvelopeId,
-    operatingEnvelopeDigest: envelopeRecord?.canonicalDigest ?? null,
-    actionClass: input.candidate.actionClass,
-    gatewayId: input.candidate.gatewayId,
-    resourceRef: input.candidate.resourceRef,
-    sequenceNumber: input.candidate.sequenceNumber,
-    requiredPriorActionContractIds: input.candidate.requiredPriorActionContractIds,
-    recoveryRecommendationId: input.candidate.recoveryRecommendationId,
-    parameters: input.candidate.parameters,
-    paramsDigest,
-    nonSecretParamsSummary: input.candidate.nonSecretParamsSummary,
-    secretRefs: input.candidate.secretRefs,
-    gatewayCredentialRefs: input.candidate.gatewayCredentialRefs,
-    delegatedAuthorityRefs: input.candidate.delegatedAuthorityRefs,
-    purposeCode: input.candidate.purposeCode,
-    expectedSideEffectCodes: input.candidate.expectedSideEffectCodes,
-    evidenceRefs: input.candidate.evidenceRefs,
-    clearingEvidenceRefs: input.candidate.clearingEvidenceRefs,
-    bounds: input.candidate.bounds,
-    idempotencyKey: input.candidate.idempotencyKey,
-    rollbackHint: input.candidate.rollbackHint,
-    expiresAt: input.candidate.expiresAt,
-    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
-    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
-    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
-    generatedExecutionGraphId: generatedExecutionGraph?.generatedExecutionGraphId ?? null,
-    generatedExecutionGraphDigest: generatedExecutionGraph?.graphDigest ?? null,
-    generatedExecutionCoverageStatus: generatedExecutionGraph?.coverageStatus ?? null,
-    generatedExecutionNodeId: generatedExecutionNode?.nodeId ?? null,
-    generatedExecutionNodeDigest: generatedExecutionNode?.nodeDigest ?? null,
-    generatedExecutionCatalogSnapshotDigest: generatedExecutionGraph?.catalogSnapshotDigest ?? null,
-    generatedExecutionGatewayRegistrySnapshotDigest: generatedExecutionGraph?.gatewayRegistrySnapshotDigest ?? null,
-    generatedExecutionRegistryBindingSetDigest: generatedExecutionGraph?.registryBindingSetDigest ?? null,
-    generatedExecutionNodeGatewayBindingDigest: generatedExecutionNode?.nodeGatewayBindingDigest ?? null,
-    toolCallDraftId: toolCallDraft?.toolCallDraftId ?? null,
-    toolCallDraftDigest: toolCallDraft?.draftDigest ?? null,
-    toolCallDraftState: toolCallDraft?.draftState ?? null
-  };
-  const candidateDigest = decision.candidateStatus === "contractable" ? await digestCanonical(candidateDigestMaterial(input, candidateBase)) : null;
-  return CandidateActionSchema.parse({ ...candidateBase, candidateDigest });
-}
-function buildIntentCompilationRecord(context, decision, candidateAction) {
-  const { input, createdAt, runtimeExecution } = context;
-  return IntentCompilationRecordSchema.parse({
-    schemaVersion: PROTOCOL_VERSION,
-    tenantId: input.tenantId,
-    organizationId: input.organizationId,
-    createdAt,
-    intentCompilationId: createId("icr"),
-    principalIntentRef: input.principalIntentRef,
-    principalId: input.principalId,
-    agentId: input.agentId,
-    runId: input.runId,
-    runtimeAdapterId: input.runtimeAdapterId,
-    operatingEnvelopeId: input.operatingEnvelopeId,
-    toolCatalogRef: input.toolCatalogRef,
-    actionCatalogRef: input.actionCatalogRef,
-    gatewayRegistryRef: input.gatewayRegistryRef,
-    runtimeExecutionId: runtimeExecution?.runtimeExecutionId ?? null,
-    runtimeExecutionDigest: runtimeExecution?.runtimeExecutionDigest ?? null,
-    generatedCodeOrSpecRefs: input.generatedCodeOrSpecRefs,
-    declaredAssumptions: input.declaredAssumptions,
-    uncertaintyMarkers: decision.uncertaintyMarkers,
-    candidateAction,
-    candidateActionContractRefs: [],
-    rejectedCandidateRefs: decision.candidateStatus === "rejected" ? [candidateAction.candidateActionId] : [],
-    overreachReasonCodes: decision.overreachReasonCodes,
-    requiredEvidenceRefs: input.requiredEvidenceRefs,
-    compilerVersion: input.compilerVersion
-  });
-}
-async function commitIntentCompilation(recorder, context, record2) {
-  const refusal2 = record2.candidateAction.candidateStatus === "rejected" ? await buildRefusal({
-    tenantId: record2.tenantId,
-    organizationId: record2.organizationId,
-    createdAt: record2.createdAt,
-    phase: "compilation",
-    refusedObjectRef: protocolObjectRef("intent_compilation", record2.intentCompilationId),
-    reasonCode: record2.candidateAction.refusalReasonCodes[0] ?? "unwrapped_consequential_tool",
-    reason: "Intent compilation refused to produce an action contract for this candidate action.",
-    evidenceRefs: [
-      protocolObjectRef("intent_compilation", record2.intentCompilationId),
-      ...record2.candidateAction.refusalReasonCodes,
-      ...record2.requiredEvidenceRefs
-    ],
-    refusedAt: record2.createdAt
-  }) : null;
-  await recorder.commitRecordsWithEvents([
-    { objectType: "intent_compilation", payload: record2 },
-    ...refusal2 ? [{ objectType: "refusal", payload: refusal2 }] : []
-  ], [
-    {
-      source: record2,
-      eventType: "intent_compiled",
-      objectRefs: context.runtimeExecution ? [
-        record2.intentCompilationId,
-        context.runtimeExecution.runtimeExecutionId,
-        context.runtimeExecution.runtimeExecutionDigest
-      ] : [record2.intentCompilationId],
-      payload: {
-        uncertaintyMarkers: record2.uncertaintyMarkers,
-        overreachReasonCodes: record2.overreachReasonCodes
-      }
-    },
-    ...refusal2 ? [
-      {
-        source: refusal2,
-        eventType: "action_refused",
-        objectRefs: [refusal2.refusalId, record2.intentCompilationId, record2.candidateAction.candidateActionId],
-        payload: {
-          reasonCode: refusal2.reasonCode,
-          refusalReasonCodes: record2.candidateAction.refusalReasonCodes
-        }
-      }
-    ] : []
-  ]);
-}
-function candidateDigestMaterial(input, candidate) {
-  return {
-    tenantId: input.tenantId,
-    organizationId: input.organizationId,
-    principalIntentRef: input.principalIntentRef,
-    principalId: input.principalId,
-    agentId: input.agentId,
-    runId: input.runId,
-    runtimeAdapterId: input.runtimeAdapterId,
-    compilerVersion: input.compilerVersion,
-    runtimeExecutionId: input.runtimeExecutionId,
-    runtimeExecutionDigest: candidate.runtimeExecutionDigest,
-    toolCallDraftId: input.toolCallDraftId,
-    toolCallDraftDigest: candidate.toolCallDraftDigest,
-    candidateAction: {
-      ...candidate,
-      clearingEvidenceRefs: clearingEvidenceRefsJson3(candidate.clearingEvidenceRefs),
-      candidateDigest: null
-    }
-  };
-}
-function clearingEvidenceRefsJson3(refs) {
-  const json2 = {};
-  if (refs.correlationRef !== undefined)
-    json2.correlationRef = refs.correlationRef;
-  if (refs.obligationRef !== undefined)
-    json2.obligationRef = refs.obligationRef;
-  if (refs.counterpartyRef !== undefined)
-    json2.counterpartyRef = refs.counterpartyRef;
-  return json2;
-}
 // src/protocol/areas/review-binding/inputs.ts
 var CreateReviewArtifactInputSchema = exports_external.strictObject({
   actionContractId: exports_external.string().min(1),
@@ -29259,6 +30016,9 @@ class ProtocolRecorder {
       throw new HandshakeProtocolError(code3, `${objectType} ${objectId} was not found.`, 404);
     return record2;
   }
+  async optionalRecord(objectType, objectId) {
+    return this.store.getRecord(objectType, objectId);
+  }
   async persistRecord(record2) {
     await this.store.putRecord(await this.buildRecord(record2));
     await this.persistTransitionRequestContextIfNeeded(record2);
@@ -29406,6 +30166,9 @@ class HandshakeKernel {
   }
   compileIntent(input) {
     return compileIntent(this.store, this.recorder, input);
+  }
+  commitIngressRefusal(input) {
+    return commitRefusal(this.recorder, input);
   }
   proposeActionContract(input) {
     return proposeActionContract(this.store, this.recorder, input);
@@ -30012,11 +30775,13 @@ async function handleEvidenceRead(c, options, fallbackStore, route) {
           tenantId: receiptRecord.tenantId,
           organizationId: receiptRecord.organizationId
         });
+        const delegationProvenance = await resolveReceiptTimelineDelegationProvenance(store, receiptRecord.payload);
         return c.json(projectReceiptTimeline({
           receipt: receiptRecord.payload,
           events: events.events,
           missingEventCount: events.missingEventCount,
-          reconciliations: reconciliations.map((record2) => record2.payload)
+          reconciliations: reconciliations.map((record2) => record2.payload),
+          delegationProvenance
         }));
       }
       case "getOperationReadbackProjection": {
@@ -32064,8 +32829,15 @@ var RuntimeIngressProposalInputSchema = exports_external.strictObject({
   }
 });
 async function proposeRuntimeIngressActionContracts(protocol, config2, blockValue) {
-  const block = RuntimeIngressDispatchBlockSchema.parse(blockValue);
-  assertRuntimeIngressSameEnvelope(config2, block);
+  const parsedBlock = RuntimeIngressDispatchBlockSchema.safeParse(blockValue);
+  if (!parsedBlock.success) {
+    return refuseRuntimeIngressWire(protocol, config2, "Runtime ingress dispatch block failed wire validation.");
+  }
+  const block = parsedBlock.data;
+  const envelopeError = runtimeIngressSameEnvelopeError(config2, block);
+  if (envelopeError) {
+    return refuseRuntimeIngressWire(protocol, config2, envelopeError);
+  }
   const runtimeExecution = await protocol.createRuntimeExecution(await buildRuntimeIngressExecutionInput(config2, block));
   const graph = await protocol.createGeneratedExecutionGraph(await buildRuntimeIngressGraphInput(config2, block, runtimeExecution), runtimeIngressGraphIssuerContext(config2, block, runtimeExecution));
   const proposals = [];
@@ -32087,7 +32859,8 @@ async function proposeRuntimeIngressActionContracts(protocol, config2, blockValu
         toolCallDraft,
         intentCompilation,
         actionContract: null,
-        refusalReasonCodes
+        refusalReasonCodes,
+        refusalRef: intentCompilation.compilationRefusalId
       });
       continue;
     }
@@ -32117,15 +32890,16 @@ async function proposeRuntimeIngressActionContracts(protocol, config2, blockValu
     proposals
   };
 }
-function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals) {
+function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals, wireRefusalIds = []) {
   const reasonCodes = unique6([
-    ...graph.terminalReasonCodes,
+    ...graph?.terminalReasonCodes ?? [],
     ...proposals.flatMap((proposal) => proposal.refusalReasonCodes),
-    ...runtimeExecution.loopDetected ? ["runtime_ingress_loop_detected"] : [],
-    ...runtimeExecution.retryDetected ? ["runtime_ingress_retry_detected"] : [],
-    ...runtimeExecution.branchDetected ? ["runtime_ingress_branch_detected"] : []
+    ...runtimeExecution?.loopDetected ? ["runtime_ingress_loop_detected"] : [],
+    ...runtimeExecution?.retryDetected ? ["runtime_ingress_retry_detected"] : [],
+    ...runtimeExecution?.branchDetected ? ["runtime_ingress_branch_detected"] : [],
+    ...wireRefusalIds.length > 0 ? ["runtime_ingress_wire_invalid"] : []
   ]);
-  const nextAction = outcome === "action_contracts_proposed" ? "read_evidence" : graph.coverageStatus === "contains_bypass_risk" ? "stop" : "recraft_request";
+  const nextAction = outcome === "action_contracts_proposed" ? "read_evidence" : graph?.coverageStatus === "contains_bypass_risk" ? "stop" : "recraft_request";
   return {
     schemaVersion: "handshake.runtime-ingress.outcome.v1",
     authorityCreated: false,
@@ -32142,22 +32916,25 @@ function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, 
     retryability: nextAction === "recraft_request" ? "retryable_after_recraft" : "not_retryable",
     redactionProfileRef: "runtime-ingress:v0.1-redacted",
     evidenceRefs: unique6([
-      ...runtimeIngressEvidenceRefs(block),
-      `runtime_execution:${runtimeExecution.runtimeExecutionId}`,
-      `generated_execution_graph:${graph.generatedExecutionGraphId}`,
+      ...block ? runtimeIngressEvidenceRefs(block) : [],
+      ...runtimeExecution ? [`runtime_execution:${runtimeExecution.runtimeExecutionId}`] : [],
+      ...graph ? [`generated_execution_graph:${graph.generatedExecutionGraphId}`] : [],
       ...proposals.flatMap((proposal) => [
         `tool_call_draft:${proposal.toolCallDraft.toolCallDraftId}`,
         `intent_compilation:${proposal.intentCompilation.intentCompilationId}`
       ])
     ]),
-    runtimeExecutionRef: runtimeExecution.runtimeExecutionId,
-    generatedExecutionGraphRef: graph.generatedExecutionGraphId,
-    graphCoverageStatus: graph.coverageStatus,
+    runtimeExecutionRef: runtimeExecution?.runtimeExecutionId ?? null,
+    generatedExecutionGraphRef: graph?.generatedExecutionGraphId ?? null,
+    graphCoverageStatus: graph?.coverageStatus ?? "unknown",
     toolCallDraftRefs: proposals.map((proposal) => proposal.toolCallDraft.toolCallDraftId),
     intentCompilationRefs: proposals.map((proposal) => proposal.intentCompilation.intentCompilationId),
     actionContractRefs: proposals.map((proposal) => proposal.actionContract?.actionContractId ?? null).filter((ref) => ref !== null),
-    refusalRefs: [],
-    dispatchCount: block.dispatches.length
+    refusalRefs: unique6([
+      ...wireRefusalIds,
+      ...proposals.map((proposal) => ("refusalRef" in proposal) ? proposal.refusalRef : null).filter((ref) => ref !== null)
+    ]),
+    dispatchCount: block?.dispatches.length ?? 0
   };
 }
 async function buildRuntimeIngressExecutionInput(config2, block) {
@@ -32357,24 +33134,25 @@ var runtimeIngressSameEnvelopeFields = [
   "operatingEnvelopeId",
   "gatewayRegistryRef"
 ];
-function assertRuntimeIngressSameEnvelope(config2, block) {
+function runtimeIngressSameEnvelopeError(config2, block) {
   const familyConfigs = uniqueRuntimeIngressFamilyConfigs(config2, block);
   if (familyConfigs.length <= 1)
-    return;
+    return null;
   const base = familyConfigs[0];
   if (!base)
-    return;
+    return null;
   for (const candidate of familyConfigs.slice(1)) {
     for (const field of runtimeIngressSameEnvelopeFields) {
       if (candidate.config[field] !== base.config[field]) {
-        throw new Error([
+        return [
           "Runtime ingress mixed-family dispatch block requires one same-envelope projection.",
           `${candidate.familyId} config ${field} does not match ${base.familyId}.`,
           "Split the generated execution block into separate protected-action proposals or align the execution envelope before projection."
-        ].join(" "));
+        ].join(" ");
       }
     }
   }
+  return null;
 }
 function uniqueRuntimeIngressFamilyConfigs(config2, block) {
   const familyConfigs = new Map;
@@ -32435,6 +33213,35 @@ function refusalReasonCodesForCompilation(intentCompilation) {
 }
 function unique6(values) {
   return [...new Set(values)];
+}
+function ingressTenantScope(config2) {
+  const family = config2.packageInstall ?? config2.x402Payment ?? config2.authMdProtectedApiCall;
+  if (!family) {
+    throw new Error("Runtime ingress proposal requires at least one dispatch-family config.");
+  }
+  return { tenantId: family.tenantId, organizationId: family.organizationId };
+}
+async function refuseRuntimeIngressWire(protocol, config2, reason) {
+  const { tenantId, organizationId } = ingressTenantScope(config2);
+  const createdAt = nowIso();
+  const refusal2 = await protocol.commitIngressRefusal({
+    tenantId,
+    organizationId,
+    createdAt,
+    phase: "compilation",
+    refusedObjectRef: "runtime_ingress:wire:invalid",
+    reasonCode: "runtime_ingress_wire_invalid",
+    reason,
+    evidenceRefs: ["runtime_ingress:wire:invalid"],
+    refusedAt: createdAt
+  });
+  return {
+    outcome: "one_or_more_dispatches_refused",
+    responsePosture: runtimeIngressResponsePosture("one_or_more_dispatches_refused", null, null, null, [], [refusal2.refusalId]),
+    runtimeExecution: null,
+    generatedExecutionGraph: null,
+    proposals: []
+  };
 }
 
 // src/http/routes/transition-scope-resolvers.ts
@@ -33168,6 +33975,16 @@ var protocolNavigation = [
     eventsEmitted: ["intent_compiled"],
     authorityBoundary: "candidate evidence only",
     evidenceObligation: "record uncertainty or compiler refusal before any ActionContract exists"
+  },
+  {
+    transitionId: "commitIngressRefusal",
+    kernelMethod: "commitIngressRefusal",
+    phase: "intent_compilation",
+    outcomeClasses: ["refusal"],
+    recordsWritten: ["refusal", "contract_stream_event"],
+    eventsEmitted: ["action_refused"],
+    authorityBoundary: "ingress wire refusal evidence only",
+    evidenceObligation: "record structured runtime ingress wire refusal without policy, greenlight, gate, mutation, receipt, or certificate authority"
   },
   {
     transitionId: "createGeneratedExecutionGraph",

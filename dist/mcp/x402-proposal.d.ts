@@ -5,8 +5,8 @@ export declare const McpInstallPostureSchema: z.ZodEnum<{
     unknown: "unknown";
     stale: "stale";
     missing: "missing";
-    unsafe: "unsafe";
     ready: "ready";
+    unsafe: "unsafe";
 }>;
 export declare const McpGatewayPostureSchema: z.ZodEnum<{
     unknown: "unknown";

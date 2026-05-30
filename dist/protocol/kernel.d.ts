@@ -9,6 +9,8 @@ import { type InstallSetupResult, type RegisterInstallProposalCompiledRecordsInp
 import type { BypassProbe, CreateBypassProbeInput } from "./areas/bypass-probe";
 import type { CreateToolCallDraftInput, ToolCallDraft, TransitionToolCallDraftInput } from "./areas/tool-call-draft";
 import type { CompileIntentInput, IntentCompilationRecord } from "./areas/intent-compilation";
+import { type BuildRefusalInput } from "./areas/refusal";
+import type { Refusal } from "./areas/refusal";
 import { type BreakerDecisionResult } from "./areas/isolation-breaker";
 import type { CreateBreakerDecisionInput, CreateIsolationInput, IsolationState } from "./areas/isolation-breaker";
 import { type ProtocolRecord } from "./areas/object-registry";
@@ -37,6 +39,7 @@ export declare class HandshakeKernel {
     transitionToolCallDraft(input: TransitionToolCallDraftInput): Promise<ToolCallDraft>;
     createProtectedPathPosture(input: CreateProtectedPathPostureInput): Promise<ProtectedPathPosture>;
     compileIntent(input: CompileIntentInput): Promise<IntentCompilationRecord>;
+    commitIngressRefusal(input: BuildRefusalInput): Promise<Refusal>;
     proposeActionContract(input: ProposeActionContractInput): Promise<ActionContract>;
     recordNegotiationSession(input: NegotiationSession): Promise<NegotiationSession>;
     recordNegotiationOffer(input: NegotiationOffer): Promise<NegotiationOffer>;

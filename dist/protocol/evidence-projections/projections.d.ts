@@ -45,6 +45,7 @@ export declare function projectReceiptTimeline(input: {
     events: ContractStreamEvent[];
     missingEventCount: number;
     reconciliations: SurfaceOperationReconciliation[];
+    delegationProvenance?: ReceiptTimelineProjection["delegationProvenance"];
 }): ReceiptTimelineProjection;
 export declare function projectProtectedPathInstallHealth(input: {
     contract: ActionContract;

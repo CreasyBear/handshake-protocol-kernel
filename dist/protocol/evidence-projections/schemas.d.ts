@@ -242,8 +242,8 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
         replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        replayed: "replayed";
         not_applicable: "not_applicable";
+        replayed: "replayed";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;
@@ -370,6 +370,21 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
             digest_only: "digest_only";
         }>;
     }, z.core.$strict>>;
+    delegationProvenance: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        a1ChainFingerprint: z.ZodString;
+        chainDepth: z.ZodNumber;
+        principalPkFingerprint: z.ZodString;
+        terminalDelegatePkFingerprint: z.ZodString;
+        verifyOutcome: z.ZodEnum<{
+            valid: "valid";
+            invalid: "invalid";
+        }>;
+        reasonCodes: z.ZodArray<z.ZodString>;
+        evidenceBindingDigest: z.ZodString;
+        a1VerifierVersion: z.ZodString;
+        mutationAuthorityCreated: z.ZodLiteral<false>;
+        greenlightCreated: z.ZodLiteral<false>;
+    }, z.core.$strict>>>;
     redactionProfileRef: z.ZodLiteral<"receipt-timeline:v0.2-redacted">;
     omittedFields: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>;
@@ -479,8 +494,8 @@ export declare const AgentTransactionEnvelopeProjectionSchema: z.ZodObject<{
         replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodNullable<z.ZodEnum<{
-        replayed: "replayed";
         not_applicable: "not_applicable";
+        replayed: "replayed";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>>;
@@ -548,8 +563,8 @@ export declare const OperationReadbackStatusSchema: z.ZodEnum<{
     isolated: "isolated";
     downstream_refused: "downstream_refused";
     gateway_refused: "gateway_refused";
-    halted: "halted";
     quarantined: "quarantined";
+    halted: "halted";
     greenlight_available: "greenlight_available";
     downstream_pending: "downstream_pending";
     downstream_succeeded: "downstream_succeeded";
@@ -564,11 +579,11 @@ export declare const OperationReadbackStageSchema: z.ZodEnum<{
     receipt: "receipt";
     greenlight: "greenlight";
     intent_compilation: "intent_compilation";
-    candidate_action: "candidate_action";
     action_contract: "action_contract";
     policy_decision: "policy_decision";
-    gateway_check: "gateway_check";
     mutation_attempt: "mutation_attempt";
+    candidate_action: "candidate_action";
+    gateway_check: "gateway_check";
 }>;
 export type OperationReadbackStage = z.infer<typeof OperationReadbackStageSchema>;
 export declare const OperationCorrelationIndexSchema: z.ZodObject<{
@@ -596,8 +611,8 @@ export declare const OperationCorrelationIndexSchema: z.ZodObject<{
 }, z.core.$strict>;
 export type OperationCorrelationIndex = z.infer<typeof OperationCorrelationIndexSchema>;
 export declare const OperationReadbackNextMechanismSchema: z.ZodEnum<{
-    read_evidence: "read_evidence";
     use_greenlight_at_gateway: "use_greenlight_at_gateway";
+    read_evidence: "read_evidence";
     request_review: "request_review";
     recraft_request: "recraft_request";
     create_new_contract: "create_new_contract";
@@ -638,8 +653,8 @@ export declare const OperationSupportContextSchema: z.ZodObject<{
         isolated: "isolated";
         downstream_refused: "downstream_refused";
         gateway_refused: "gateway_refused";
-        halted: "halted";
         quarantined: "quarantined";
+        halted: "halted";
         greenlight_available: "greenlight_available";
         downstream_pending: "downstream_pending";
         downstream_succeeded: "downstream_succeeded";
@@ -649,8 +664,8 @@ export declare const OperationSupportContextSchema: z.ZodObject<{
     }>;
     reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
     nextMechanism: z.ZodEnum<{
-        read_evidence: "read_evidence";
         use_greenlight_at_gateway: "use_greenlight_at_gateway";
+        read_evidence: "read_evidence";
         request_review: "request_review";
         recraft_request: "recraft_request";
         create_new_contract: "create_new_contract";
@@ -701,8 +716,8 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
         isolated: "isolated";
         downstream_refused: "downstream_refused";
         gateway_refused: "gateway_refused";
-        halted: "halted";
         quarantined: "quarantined";
+        halted: "halted";
         greenlight_available: "greenlight_available";
         downstream_pending: "downstream_pending";
         downstream_succeeded: "downstream_succeeded";
@@ -716,11 +731,11 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
         receipt: "receipt";
         greenlight: "greenlight";
         intent_compilation: "intent_compilation";
-        candidate_action: "candidate_action";
         action_contract: "action_contract";
         policy_decision: "policy_decision";
-        gateway_check: "gateway_check";
         mutation_attempt: "mutation_attempt";
+        candidate_action: "candidate_action";
+        gateway_check: "gateway_check";
     }>;
     policyDecisionRef: z.ZodString;
     policyDecisionStatus: z.ZodEnum<{
@@ -787,8 +802,8 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
     }>;
     reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
     nextMechanism: z.ZodEnum<{
-        read_evidence: "read_evidence";
         use_greenlight_at_gateway: "use_greenlight_at_gateway";
+        read_evidence: "read_evidence";
         request_review: "request_review";
         recraft_request: "recraft_request";
         create_new_contract: "create_new_contract";
@@ -836,8 +851,8 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
             isolated: "isolated";
             downstream_refused: "downstream_refused";
             gateway_refused: "gateway_refused";
-            halted: "halted";
             quarantined: "quarantined";
+            halted: "halted";
             greenlight_available: "greenlight_available";
             downstream_pending: "downstream_pending";
             downstream_succeeded: "downstream_succeeded";
@@ -847,8 +862,8 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
         }>;
         reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         nextMechanism: z.ZodEnum<{
-            read_evidence: "read_evidence";
             use_greenlight_at_gateway: "use_greenlight_at_gateway";
+            read_evidence: "read_evidence";
             request_review: "request_review";
             recraft_request: "recraft_request";
             create_new_contract: "create_new_contract";

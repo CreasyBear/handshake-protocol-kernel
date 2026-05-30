@@ -4,6 +4,7 @@ import type { CreateGeneratedExecutionGraphInput, GeneratedExecutionGraph, Graph
 import type { CompileIntentInput, IntentCompilationRecord } from "../../protocol/areas/intent-compilation";
 import type { CreateRuntimeExecutionInput, RuntimeExecutionRecord } from "../../protocol/areas/runtime-evidence";
 import type { CreateToolCallDraftInput, ToolCallDraft, TransitionToolCallDraftInput } from "../../protocol/areas/tool-call-draft";
+import type { Refusal } from "../../protocol/areas/refusal";
 import { type RuntimeIngressConfig } from "./families";
 import { type RuntimeIngressDispatchBlock } from "./schemas";
 export { RuntimeIngressDispatchBlockSchema, RuntimeIngressObservedDispatchSchema } from "./schemas";
@@ -627,8 +628,8 @@ export type RuntimeIngressResponsePosture = {
     retryability: "not_retryable" | "retryable_after_recraft";
     redactionProfileRef: "runtime-ingress:v0.1-redacted";
     evidenceRefs: string[];
-    runtimeExecutionRef: string;
-    generatedExecutionGraphRef: string;
+    runtimeExecutionRef: string | null;
+    generatedExecutionGraphRef: string | null;
     graphCoverageStatus: GeneratedExecutionGraph["coverageStatus"];
     toolCallDraftRefs: string[];
     intentCompilationRefs: string[];
@@ -643,6 +644,17 @@ export type RuntimeIngressProtocol = {
     createGeneratedExecutionGraph(input: CreateGeneratedExecutionGraphInput, issuerContext: GraphEvidenceIssuerContext): Promise<GeneratedExecutionGraph>;
     createToolCallDraft(input: CreateToolCallDraftInput): Promise<ToolCallDraft>;
     transitionToolCallDraft(input: TransitionToolCallDraftInput): Promise<ToolCallDraft>;
+    commitIngressRefusal(input: {
+        tenantId: string;
+        organizationId: string;
+        createdAt: string;
+        phase: "compilation";
+        refusedObjectRef: string;
+        reasonCode: string;
+        reason: string;
+        evidenceRefs?: string[];
+        refusedAt: string;
+    }): Promise<Refusal>;
 };
 export type RuntimeIngressActionProposal = {
     outcome: "action_contract_proposed";
@@ -660,12 +672,13 @@ export type RuntimeIngressActionProposal = {
     intentCompilation: IntentCompilationRecord;
     actionContract: null;
     refusalReasonCodes: string[];
+    refusalRef: string | null;
 };
 export type RuntimeIngressResult = {
     outcome: "action_contracts_proposed" | "one_or_more_dispatches_refused";
     responsePosture: RuntimeIngressResponsePosture;
-    runtimeExecution: RuntimeExecutionRecord;
-    generatedExecutionGraph: GeneratedExecutionGraph;
+    runtimeExecution: RuntimeExecutionRecord | null;
+    generatedExecutionGraph: GeneratedExecutionGraph | null;
     proposals: RuntimeIngressActionProposal[];
 };
 export declare function proposeRuntimeIngressActionContracts(protocol: RuntimeIngressProtocol, config: RuntimeIngressConfig, blockValue: RuntimeIngressDispatchBlock): Promise<RuntimeIngressResult>;

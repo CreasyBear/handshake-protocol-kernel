@@ -1,3 +1,4 @@
+import type { ProtocolRecorder } from "../../events/records";
 import { PROTOCOL_VERSION } from "../../foundation/schema-core";
 import { type Refusal, type RefusalPhase } from "./types";
 export type BuildRefusalInput = {
@@ -17,4 +18,5 @@ export type BuildRefusalInput = {
     refusedAt: string;
 };
 export declare function buildRefusal(input: BuildRefusalInput): Promise<Refusal>;
+export declare function commitRefusal(recorder: ProtocolRecorder, input: BuildRefusalInput): Promise<Refusal>;
 export declare function protocolObjectRef(objectType: string, objectId: string): string;

@@ -14753,6 +14753,12 @@ function toHex(buffer) {
 // src/protocol/foundation/ids.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 var protocolIdSourceStorage = new AsyncLocalStorage;
+function nowIso() {
+  const now = protocolIdSourceStorage.getStore()?.nowIso?.();
+  if (now)
+    return now;
+  return new Date().toISOString();
+}
 // src/adapters/http-profile/schemas.ts
 var HttpProtectedMutationProfileSchema = exports_external.strictObject({
   targetHttpMethod: exports_external.string().min(1),
@@ -16800,8 +16806,15 @@ var RuntimeIngressProposalInputSchema = exports_external.strictObject({
   }
 });
 async function proposeRuntimeIngressActionContracts(protocol, config2, blockValue) {
-  const block = RuntimeIngressDispatchBlockSchema.parse(blockValue);
-  assertRuntimeIngressSameEnvelope(config2, block);
+  const parsedBlock = RuntimeIngressDispatchBlockSchema.safeParse(blockValue);
+  if (!parsedBlock.success) {
+    return refuseRuntimeIngressWire(protocol, config2, "Runtime ingress dispatch block failed wire validation.");
+  }
+  const block = parsedBlock.data;
+  const envelopeError = runtimeIngressSameEnvelopeError(config2, block);
+  if (envelopeError) {
+    return refuseRuntimeIngressWire(protocol, config2, envelopeError);
+  }
   const runtimeExecution = await protocol.createRuntimeExecution(await buildRuntimeIngressExecutionInput(config2, block));
   const graph = await protocol.createGeneratedExecutionGraph(await buildRuntimeIngressGraphInput(config2, block, runtimeExecution), runtimeIngressGraphIssuerContext(config2, block, runtimeExecution));
   const proposals = [];
@@ -16823,7 +16836,8 @@ async function proposeRuntimeIngressActionContracts(protocol, config2, blockValu
         toolCallDraft,
         intentCompilation,
         actionContract: null,
-        refusalReasonCodes
+        refusalReasonCodes,
+        refusalRef: intentCompilation.compilationRefusalId
       });
       continue;
     }
@@ -16853,15 +16867,16 @@ async function proposeRuntimeIngressActionContracts(protocol, config2, blockValu
     proposals
   };
 }
-function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals) {
+function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, proposals, wireRefusalIds = []) {
   const reasonCodes = unique4([
-    ...graph.terminalReasonCodes,
+    ...graph?.terminalReasonCodes ?? [],
     ...proposals.flatMap((proposal) => proposal.refusalReasonCodes),
-    ...runtimeExecution.loopDetected ? ["runtime_ingress_loop_detected"] : [],
-    ...runtimeExecution.retryDetected ? ["runtime_ingress_retry_detected"] : [],
-    ...runtimeExecution.branchDetected ? ["runtime_ingress_branch_detected"] : []
+    ...runtimeExecution?.loopDetected ? ["runtime_ingress_loop_detected"] : [],
+    ...runtimeExecution?.retryDetected ? ["runtime_ingress_retry_detected"] : [],
+    ...runtimeExecution?.branchDetected ? ["runtime_ingress_branch_detected"] : [],
+    ...wireRefusalIds.length > 0 ? ["runtime_ingress_wire_invalid"] : []
   ]);
-  const nextAction = outcome === "action_contracts_proposed" ? "read_evidence" : graph.coverageStatus === "contains_bypass_risk" ? "stop" : "recraft_request";
+  const nextAction = outcome === "action_contracts_proposed" ? "read_evidence" : graph?.coverageStatus === "contains_bypass_risk" ? "stop" : "recraft_request";
   return {
     schemaVersion: "handshake.runtime-ingress.outcome.v1",
     authorityCreated: false,
@@ -16878,22 +16893,25 @@ function runtimeIngressResponsePosture(outcome, block, runtimeExecution, graph, 
     retryability: nextAction === "recraft_request" ? "retryable_after_recraft" : "not_retryable",
     redactionProfileRef: "runtime-ingress:v0.1-redacted",
     evidenceRefs: unique4([
-      ...runtimeIngressEvidenceRefs(block),
-      `runtime_execution:${runtimeExecution.runtimeExecutionId}`,
-      `generated_execution_graph:${graph.generatedExecutionGraphId}`,
+      ...block ? runtimeIngressEvidenceRefs(block) : [],
+      ...runtimeExecution ? [`runtime_execution:${runtimeExecution.runtimeExecutionId}`] : [],
+      ...graph ? [`generated_execution_graph:${graph.generatedExecutionGraphId}`] : [],
       ...proposals.flatMap((proposal) => [
         `tool_call_draft:${proposal.toolCallDraft.toolCallDraftId}`,
         `intent_compilation:${proposal.intentCompilation.intentCompilationId}`
       ])
     ]),
-    runtimeExecutionRef: runtimeExecution.runtimeExecutionId,
-    generatedExecutionGraphRef: graph.generatedExecutionGraphId,
-    graphCoverageStatus: graph.coverageStatus,
+    runtimeExecutionRef: runtimeExecution?.runtimeExecutionId ?? null,
+    generatedExecutionGraphRef: graph?.generatedExecutionGraphId ?? null,
+    graphCoverageStatus: graph?.coverageStatus ?? "unknown",
     toolCallDraftRefs: proposals.map((proposal) => proposal.toolCallDraft.toolCallDraftId),
     intentCompilationRefs: proposals.map((proposal) => proposal.intentCompilation.intentCompilationId),
     actionContractRefs: proposals.map((proposal) => proposal.actionContract?.actionContractId ?? null).filter((ref) => ref !== null),
-    refusalRefs: [],
-    dispatchCount: block.dispatches.length
+    refusalRefs: unique4([
+      ...wireRefusalIds,
+      ...proposals.map((proposal) => ("refusalRef" in proposal) ? proposal.refusalRef : null).filter((ref) => ref !== null)
+    ]),
+    dispatchCount: block?.dispatches.length ?? 0
   };
 }
 async function buildRuntimeIngressExecutionInput(config2, block) {
@@ -17093,24 +17111,25 @@ var runtimeIngressSameEnvelopeFields = [
   "operatingEnvelopeId",
   "gatewayRegistryRef"
 ];
-function assertRuntimeIngressSameEnvelope(config2, block) {
+function runtimeIngressSameEnvelopeError(config2, block) {
   const familyConfigs = uniqueRuntimeIngressFamilyConfigs(config2, block);
   if (familyConfigs.length <= 1)
-    return;
+    return null;
   const base = familyConfigs[0];
   if (!base)
-    return;
+    return null;
   for (const candidate of familyConfigs.slice(1)) {
     for (const field of runtimeIngressSameEnvelopeFields) {
       if (candidate.config[field] !== base.config[field]) {
-        throw new Error([
+        return [
           "Runtime ingress mixed-family dispatch block requires one same-envelope projection.",
           `${candidate.familyId} config ${field} does not match ${base.familyId}.`,
           "Split the generated execution block into separate protected-action proposals or align the execution envelope before projection."
-        ].join(" "));
+        ].join(" ");
       }
     }
   }
+  return null;
 }
 function uniqueRuntimeIngressFamilyConfigs(config2, block) {
   const familyConfigs = new Map;
@@ -17171,6 +17190,35 @@ function refusalReasonCodesForCompilation(intentCompilation) {
 }
 function unique4(values) {
   return [...new Set(values)];
+}
+function ingressTenantScope(config2) {
+  const family = config2.packageInstall ?? config2.x402Payment ?? config2.authMdProtectedApiCall;
+  if (!family) {
+    throw new Error("Runtime ingress proposal requires at least one dispatch-family config.");
+  }
+  return { tenantId: family.tenantId, organizationId: family.organizationId };
+}
+async function refuseRuntimeIngressWire(protocol, config2, reason) {
+  const { tenantId, organizationId } = ingressTenantScope(config2);
+  const createdAt = nowIso();
+  const refusal = await protocol.commitIngressRefusal({
+    tenantId,
+    organizationId,
+    createdAt,
+    phase: "compilation",
+    refusedObjectRef: "runtime_ingress:wire:invalid",
+    reasonCode: "runtime_ingress_wire_invalid",
+    reason,
+    evidenceRefs: ["runtime_ingress:wire:invalid"],
+    refusedAt: createdAt
+  });
+  return {
+    outcome: "one_or_more_dispatches_refused",
+    responsePosture: runtimeIngressResponsePosture("one_or_more_dispatches_refused", null, null, null, [], [refusal.refusalId]),
+    runtimeExecution: null,
+    generatedExecutionGraph: null,
+    proposals: []
+  };
 }
 export {
   runtimeIngressDispatchNodeId,

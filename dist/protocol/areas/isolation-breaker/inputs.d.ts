@@ -18,10 +18,10 @@ export declare const CreateIsolationInputSchema: z.ZodObject<{
     state: z.ZodEnum<{
         active: "active";
         revoked: "revoked";
-        halted: "halted";
-        quarantined: "quarantined";
         review_only: "review_only";
         rate_limited: "rate_limited";
+        quarantined: "quarantined";
+        halted: "halted";
         state_suspect: "state_suspect";
     }>;
     reasonCode: z.ZodString;
@@ -53,10 +53,10 @@ export declare const CreateBreakerDecisionInputSchema: z.ZodObject<{
     }, z.core.$strict>>;
     decision: z.ZodEnum<{
         revoked: "revoked";
-        halted: "halted";
-        quarantined: "quarantined";
         review_only: "review_only";
         rate_limited: "rate_limited";
+        quarantined: "quarantined";
+        halted: "halted";
         state_suspect: "state_suspect";
     }>;
     decisionReasonCode: z.ZodString;

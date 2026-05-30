@@ -102,12 +102,23 @@ export declare const CandidateActionSchema: z.ZodObject<{
     toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+        invalid: "invalid";
         opened: "opened";
         streaming: "streaming";
         finalized: "finalized";
-        invalid: "invalid";
         abandoned: "abandoned";
     }>>>;
+    delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        delegationEvidenceRefId: z.ZodString;
+        evidenceBindingDigest: z.ZodString;
+        a1ChainFingerprint: z.ZodString;
+        storeRef: z.ZodString;
+        verifyOutcome: z.ZodEnum<{
+            valid: "valid";
+            invalid: "invalid";
+        }>;
+        a1VerifierVersion: z.ZodString;
+    }, z.core.$strict>>>;
 }, z.core.$strict>;
 export type CandidateAction = z.infer<typeof CandidateActionSchema>;
 export declare const IntentCompilationRecordSchema: z.ZodObject<{
@@ -228,17 +239,29 @@ export declare const IntentCompilationRecordSchema: z.ZodObject<{
         toolCallDraftId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         toolCallDraftDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         toolCallDraftState: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+            invalid: "invalid";
             opened: "opened";
             streaming: "streaming";
             finalized: "finalized";
-            invalid: "invalid";
             abandoned: "abandoned";
         }>>>;
+        delegationEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+            delegationEvidenceRefId: z.ZodString;
+            evidenceBindingDigest: z.ZodString;
+            a1ChainFingerprint: z.ZodString;
+            storeRef: z.ZodString;
+            verifyOutcome: z.ZodEnum<{
+                valid: "valid";
+                invalid: "invalid";
+            }>;
+            a1VerifierVersion: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>;
     candidateActionContractRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     rejectedCandidateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     overreachReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
     requiredEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    compilationRefusalId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     compilerVersion: z.ZodString;
 }, z.core.$strict>;
 export type IntentCompilationRecord = z.infer<typeof IntentCompilationRecordSchema>;

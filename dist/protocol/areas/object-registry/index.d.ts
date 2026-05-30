@@ -14,7 +14,7 @@ export type ProtocolObjectRegistryEntry<T extends ProtocolObjectType = ProtocolO
     exportPosture: ProtocolObjectExportPosture;
     rawReadPosture: ProtocolObjectRawReadPosture;
 };
-export declare const protocolObjectTypes: ("refusal" | "proof_gap" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "gateway_check_attempt" | "receipt_export" | "surface_operation_reconciliation" | "credential_resolution_evidence" | "idempotency_ledger_entry" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "isolation_state" | "generated_execution_graph" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "transition_request_context" | "runtime_execution" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "negotiation_session" | "negotiation_offer" | "negotiation_decision" | "linked_agreement" | "agreement_obligation_binding" | "agreement_status_transition" | "authority_certificate" | "review_artifact" | "review_decision" | "breaker_decision" | "protected_surface_operation_claim" | "contract_stream_event")[];
+export declare const protocolObjectTypes: ("refusal" | "proof_gap" | "receipt" | "greenlight" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "credential_resolution_evidence" | "transition_request_context" | "runtime_execution" | "generated_execution_graph" | "idempotency_ledger_entry" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "intent_compilation" | "delegation_evidence_record" | "negotiation_session" | "negotiation_offer" | "negotiation_decision" | "linked_agreement" | "agreement_obligation_binding" | "agreement_status_transition" | "action_contract" | "authority_certificate" | "policy_decision" | "review_artifact" | "review_decision" | "breaker_decision" | "isolation_state" | "gateway_check_attempt" | "mutation_attempt" | "protected_surface_operation_claim" | "surface_operation_reconciliation" | "receipt_export" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "contract_stream_event")[];
 export declare const protocolObjectRegistry: {
     tool_capability: ProtocolObjectRegistryEntry<"tool_capability">;
     action_type: ProtocolObjectRegistryEntry<"action_type">;
@@ -33,6 +33,7 @@ export declare const protocolObjectRegistry: {
     tool_call_draft: ProtocolObjectRegistryEntry<"tool_call_draft">;
     protected_path_posture: ProtocolObjectRegistryEntry<"protected_path_posture">;
     intent_compilation: ProtocolObjectRegistryEntry<"intent_compilation">;
+    delegation_evidence_record: ProtocolObjectRegistryEntry<"delegation_evidence_record">;
     negotiation_session: ProtocolObjectRegistryEntry<"negotiation_session">;
     negotiation_offer: ProtocolObjectRegistryEntry<"negotiation_offer">;
     negotiation_decision: ProtocolObjectRegistryEntry<"negotiation_decision">;

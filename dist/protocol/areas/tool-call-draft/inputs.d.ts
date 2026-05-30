@@ -57,9 +57,9 @@ export type CreateToolCallDraftInput = z.input<typeof CreateToolCallDraftInputSc
 export declare const TransitionToolCallDraftInputSchema: z.ZodObject<{
     toolCallDraftId: z.ZodString;
     nextDraftState: z.ZodEnum<{
+        invalid: "invalid";
         streaming: "streaming";
         finalized: "finalized";
-        invalid: "invalid";
         abandoned: "abandoned";
     }>;
     parameters: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodType<import("./types").JsonValue, unknown, z.core.$ZodTypeInternals<import("./types").JsonValue, unknown>>>>;

@@ -418,12 +418,21 @@ export declare const transitionInvokers: {
             generatedExecutionNodeGatewayBindingDigest: string | null;
             toolCallDraftId: string | null;
             toolCallDraftDigest: string | null;
-            toolCallDraftState: "opened" | "streaming" | "finalized" | "invalid" | "abandoned" | null;
+            toolCallDraftState: "invalid" | "opened" | "streaming" | "finalized" | "abandoned" | null;
+            delegationEvidenceRef: {
+                delegationEvidenceRefId: string;
+                evidenceBindingDigest: string;
+                a1ChainFingerprint: string;
+                storeRef: string;
+                verifyOutcome: "valid" | "invalid";
+                a1VerifierVersion: string;
+            } | null;
         };
         candidateActionContractRefs: string[];
         rejectedCandidateRefs: string[];
         overreachReasonCodes: string[];
         requiredEvidenceRefs: string[];
+        compilationRefusalId: string | null;
         compilerVersion: string;
     }>;
     createRuntimeExecution: (kernel: HandshakeKernel, body: unknown) => Promise<{
@@ -493,7 +502,7 @@ export declare const transitionInvokers: {
         actionClass: string;
         gatewayId: string;
         resourceRef: string;
-        draftState: "opened" | "streaming" | "finalized" | "invalid" | "abandoned";
+        draftState: "invalid" | "opened" | "streaming" | "finalized" | "abandoned";
         parameters: Record<string, import("../..").JsonValue>;
         nonSecretParamsSummary: Record<string, import("../..").JsonValue>;
         secretRefs: Record<string, string>;
@@ -538,7 +547,7 @@ export declare const transitionInvokers: {
         actionClass: string;
         gatewayId: string;
         resourceRef: string;
-        draftState: "opened" | "streaming" | "finalized" | "invalid" | "abandoned";
+        draftState: "invalid" | "opened" | "streaming" | "finalized" | "abandoned";
         parameters: Record<string, import("../..").JsonValue>;
         nonSecretParamsSummary: Record<string, import("../..").JsonValue>;
         secretRefs: Record<string, string>;
@@ -762,7 +771,7 @@ export declare const transitionInvokers: {
         isolationStateId: string;
         scopeType: "gateway" | "agent" | "tenant" | "organization" | "run" | "envelope" | "action_class" | "credential_ref" | "authority_ref" | "resource";
         scopeId: string;
-        state: "active" | "revoked" | "halted" | "quarantined" | "review_only" | "rate_limited" | "state_suspect";
+        state: "active" | "revoked" | "review_only" | "rate_limited" | "quarantined" | "halted" | "state_suspect";
         reasonCode: string;
         reasonSummary: string;
         sourceDecisionRef: string;
@@ -800,7 +809,7 @@ export declare const transitionInvokers: {
         gatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
         gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
         gatewayCheckedAt: string | null;
-        greenlightConsumptionStatus: "replayed" | "not_applicable" | "not_consumed" | "consumed";
+        greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
         mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
         downstreamExecutionStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
         downstreamOutcomeStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
@@ -829,6 +838,18 @@ export declare const transitionInvokers: {
         evidenceRetentionUntil: string | null;
         exportedAt: string;
         exportDigest: string;
+        delegationProvenance?: {
+            a1ChainFingerprint: string;
+            chainDepth: number;
+            principalPkFingerprint: string;
+            terminalDelegatePkFingerprint: string;
+            verifyOutcome: "valid" | "invalid";
+            reasonCodes: string[];
+            evidenceBindingDigest: string;
+            a1VerifierVersion: string;
+            mutationAuthorityCreated: false;
+            greenlightCreated: false;
+        } | undefined;
     }>;
     createRecoveryRecommendation: (kernel: HandshakeKernel, body: unknown) => Promise<{
         schemaVersion: "0.2.4";

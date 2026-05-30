@@ -15534,6 +15534,158 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   consumedByGateAttemptId: IdSchema.nullable()
 });
 
+// src/protocol/areas/intent-compilation/delegation-evidence-ref.ts
+var DelegationEvidenceRefSchema = exports_external.object({
+  delegationEvidenceRefId: IdSchema,
+  evidenceBindingDigest: DigestSchema,
+  a1ChainFingerprint: DigestSchema,
+  storeRef: exports_external.string().min(1).refine((value) => !/signedChain|certs|signature|delegator_pk|delegate_pk/i.test(value), {
+    message: "storeRef must not embed raw A1 wire payloads"
+  }),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  a1VerifierVersion: exports_external.string().min(1)
+}).strict();
+
+// src/protocol/areas/intent-compilation/schemas.ts
+var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
+var CandidateActionSchema = exports_external.strictObject({
+  candidateActionId: IdSchema,
+  candidateStatus: CandidateActionStatusSchema,
+  candidateDigest: DigestSchema.nullable(),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  toolCapabilityId: IdSchema,
+  toolCapabilityDigest: DigestSchema.nullable(),
+  toolCatalogVersion: exports_external.string().min(1).nullable(),
+  actionTypeId: IdSchema,
+  actionTypeDigest: DigestSchema.nullable(),
+  actionCatalogVersion: exports_external.string().min(1).nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema.nullable(),
+  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
+  operatingEnvelopeId: IdSchema,
+  operatingEnvelopeDigest: DigestSchema.nullable(),
+  actionClass: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  sequenceNumber: exports_external.number().int().nonnegative(),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
+  recoveryRecommendationId: IdSchema.nullable(),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  purposeCode: exports_external.string().min(1),
+  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  rollbackHint: exports_external.string().max(500).nullable(),
+  expiresAt: IsoDateSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
+  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  toolCallDraftId: IdSchema.nullable().default(null),
+  toolCallDraftDigest: DigestSchema.nullable().default(null),
+  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null)
+});
+var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
+  intentCompilationId: IdSchema,
+  principalIntentRef: exports_external.string().min(1),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  operatingEnvelopeId: IdSchema,
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
+  candidateAction: CandidateActionSchema,
+  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
+  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
+  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  compilationRefusalId: IdSchema.nullable().default(null),
+  compilerVersion: exports_external.string().min(1)
+});
+// src/protocol/areas/intent-compilation/inputs.ts
+var CompileIntentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null),
+  candidate: exports_external.strictObject({
+    toolCapabilityId: exports_external.string().min(1),
+    actionTypeId: exports_external.string().min(1),
+    gatewayRegistryEntryId: exports_external.string().min(1),
+    actionClass: exports_external.string().min(1),
+    gatewayId: exports_external.string().min(1),
+    resourceRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().nonnegative(),
+    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
+    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+    purposeCode: exports_external.string().min(1),
+    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+    evidenceRefs: exports_external.array(exports_external.string()).default([]),
+    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+    idempotencyKey: exports_external.string().min(1),
+    rollbackHint: exports_external.string().max(500).nullable().default(null),
+    expiresAt: exports_external.string().datetime({ offset: true })
+  }),
+  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
+});
+// src/protocol/areas/receipt-export/delegation-provenance.ts
+var ReceiptDelegationProvenanceSchema = exports_external.strictObject({
+  a1ChainFingerprint: DigestSchema,
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: DigestSchema,
+  terminalDelegatePkFingerprint: DigestSchema,
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: DigestSchema,
+  a1VerifierVersion: exports_external.string().min(1),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+});
+
 // src/protocol/areas/receipt-export/schemas.ts
 var GatewayAdmissionStatusSchema = exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]);
 var DownstreamOutcomeStatusSchema = exports_external.enum([
@@ -15617,7 +15769,8 @@ var ReceiptExportSchema = ProtocolBaseSchema.extend({
   requestedByRef: exports_external.string().min(1),
   evidenceRetentionUntil: IsoDateSchema.nullable(),
   exportedAt: IsoDateSchema,
-  exportDigest: DigestSchema
+  exportDigest: DigestSchema,
+  delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
 });
 
 // src/protocol/events/schemas.ts
@@ -15678,7 +15831,15 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
   eventDigest: DigestSchema,
   payload: exports_external.record(exports_external.string(), JsonValueSchema)
 });
-
+// src/protocol/areas/receipt-export/inputs.ts
+var CreateReceiptExportInputSchema = exports_external.strictObject({
+  receiptId: exports_external.string().min(1),
+  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
+  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
+  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
 // src/protocol/evidence-projections/schemas.ts
 var ContractEvidenceProjectionSchema = exports_external.strictObject({
   actionContractRef: IdSchema,
@@ -15783,6 +15944,7 @@ var ReceiptTimelineProjectionSchema = exports_external.strictObject({
   events: exports_external.array(ReceiptTimelineEventProjectionSchema).default([]),
   missingEventCount: exports_external.number().int().nonnegative(),
   failureEvidence: ReceiptTimelineFailureEvidenceProjectionSchema.nullable(),
+  delegationProvenance: ReceiptDelegationProvenanceSchema.nullable().default(null),
   redactionProfileRef: exports_external.literal("receipt-timeline:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([])
 });
@@ -16077,83 +16239,6 @@ var ToolCallDraftSchema = ProtocolBaseSchema.extend({
   invalidReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   draftDigest: DigestSchema
-});
-// src/protocol/areas/intent-compilation/schemas.ts
-var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
-var CandidateActionSchema = exports_external.strictObject({
-  candidateActionId: IdSchema,
-  candidateStatus: CandidateActionStatusSchema,
-  candidateDigest: DigestSchema.nullable(),
-  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  toolCapabilityId: IdSchema,
-  toolCapabilityDigest: DigestSchema.nullable(),
-  toolCatalogVersion: exports_external.string().min(1).nullable(),
-  actionTypeId: IdSchema,
-  actionTypeDigest: DigestSchema.nullable(),
-  actionCatalogVersion: exports_external.string().min(1).nullable(),
-  gatewayRegistryEntryId: IdSchema,
-  gatewayRegistryDigest: DigestSchema.nullable(),
-  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
-  operatingEnvelopeId: IdSchema,
-  operatingEnvelopeDigest: DigestSchema.nullable(),
-  actionClass: exports_external.string().min(1),
-  gatewayId: IdSchema,
-  resourceRef: ResourceRefSchema,
-  sequenceNumber: exports_external.number().int().nonnegative(),
-  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
-  recoveryRecommendationId: IdSchema.nullable(),
-  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
-  paramsDigest: DigestSchema,
-  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
-  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
-  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
-  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
-  purposeCode: exports_external.string().min(1),
-  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
-  evidenceRefs: exports_external.array(exports_external.string()).default([]),
-  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
-  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
-  idempotencyKey: IdSchema,
-  rollbackHint: exports_external.string().max(500).nullable(),
-  expiresAt: IsoDateSchema,
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGraphId: IdSchema.nullable().default(null),
-  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
-  generatedExecutionNodeId: IdSchema.nullable().default(null),
-  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
-  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
-  toolCallDraftId: IdSchema.nullable().default(null),
-  toolCallDraftDigest: DigestSchema.nullable().default(null),
-  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null)
-});
-var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
-  intentCompilationId: IdSchema,
-  principalIntentRef: exports_external.string().min(1),
-  principalId: IdSchema,
-  agentId: IdSchema,
-  runId: IdSchema,
-  runtimeAdapterId: IdSchema,
-  operatingEnvelopeId: IdSchema,
-  toolCatalogRef: exports_external.string().min(1),
-  actionCatalogRef: exports_external.string().min(1),
-  gatewayRegistryRef: exports_external.string().min(1),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
-  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
-  candidateAction: CandidateActionSchema,
-  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
-  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
-  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
-  compilerVersion: exports_external.string().min(1)
 });
 // src/protocol/areas/action-contract/schemas.ts
 var ActionContractSchema = ProtocolBaseSchema.extend({
@@ -16768,6 +16853,31 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/integrations/a1-evidence/delegation-evidence-record.ts
+var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
+var DelegationEvidenceRecordSchema = exports_external.object({
+  schemaId: exports_external.literal("delegation-evidence-record"),
+  schemaVersion: exports_external.literal(1),
+  a1ChainFingerprint: Hex32Schema,
+  certFingerprints: exports_external.array(Hex32Schema),
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: Hex32Schema,
+  terminalDelegatePkFingerprint: Hex32Schema,
+  a1VerifierVersion: exports_external.string().min(1),
+  verifyPath: exports_external.enum(["ts", "sidecar"]),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: Hex32Schema.nullable(),
+  presentedAtUnix: exports_external.number().int().nonnegative(),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+}).strict();
+
+// src/protocol/areas/delegation-evidence-record/schemas.ts
+var StoredDelegationEvidenceRecordSchema = ProtocolBaseSchema.extend({
+  delegationEvidenceRecordId: IdSchema,
+  evidenceRecord: DelegationEvidenceRecordSchema
+});
 // src/protocol/areas/negotiation/schemas.ts
 var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
   "self_attested",
@@ -17016,6 +17126,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "delegation_evidence_record",
   "negotiation_session",
   "negotiation_offer",
   "negotiation_decision",
@@ -17069,6 +17180,10 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("delegation_evidence_record"),
+    payload: StoredDelegationEvidenceRecordSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
@@ -17927,7 +18042,14 @@ var runtimeSurfaceBoundaryManifest = {
       "protected_path_posture_write",
       "surface_reconciliation_write"
     ],
-    allowedImportRoots: ["src/mcp", "src/protocol/evidence-projections", "src/protocol/foundation/failure-class", "src/sdk", "src/surfaces"],
+    allowedImportRoots: [
+      "src/mcp",
+      "src/integrations/a1-evidence",
+      "src/protocol/evidence-projections",
+      "src/protocol/foundation/failure-class",
+      "src/sdk",
+      "src/surfaces"
+    ],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
     forbiddenCredentialShapes: [...authorityCredentialShapes, "review_custody_token"],
     forbiddenOutputFields: [
@@ -18098,11 +18220,7 @@ var productSurfaceBoundaryManifest = {
       "surface_reconciliation_write",
       "tool_call_draft_write"
     ],
-    allowedImportRoots: [
-      "src/surfaces/service-workflow-admission",
-      "src/protocol/public",
-      "src/protocol/foundation"
-    ],
+    allowedImportRoots: ["src/surfaces/service-workflow-admission", "src/protocol/public", "src/protocol/foundation"],
     forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
     forbiddenCredentialShapes: [...authorityCredentialShapes],
     forbiddenOutputFields: [...cliAuthorityOutputFields, "downstreamSuccess"],
@@ -18726,12 +18844,12 @@ function projectCodexHostActivationReadback(input) {
   const targetPresent = observedMcpServers.includes(targetServerName);
   const expectedServerMatches = input.expectedServer ? targetServer !== null && targetServer.command === input.expectedServer.command && arrayEquals(targetServer.args ?? [], input.expectedServer.args) : targetPresent;
   const hostToolInvocationObserved = expectedServerMatches && input.hostToolInvocation?.toolVisible === true && input.hostToolInvocation.toolCallAttempted === true;
-  const status = targetPresent ? hostToolInvocationObserved ? "host_tool_invocation_observed" : expectedServerMatches ? "configured_unverified" : "blocked" : "blocked";
+  const status2 = targetPresent ? hostToolInvocationObserved ? "host_tool_invocation_observed" : expectedServerMatches ? "configured_unverified" : "blocked" : "blocked";
   return {
     proofKind: "codex_host_activation_readback",
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
-    status,
+    status: status2,
     scope: "Read-only Codex-local MCP host configuration readback for the Handshake x402 proposal/evidence server.",
     config: {
       path: input.configPath,
@@ -18809,12 +18927,12 @@ function projectDistributionProvenanceReadback(input) {
   const currentSurfacePublished = input.npmLatest.status === 200 && npmLatestMatchesLocalVersion && missingLocalExports.length === 0;
   const mcpRegistryAccepted = input.mcpRegistry.lookupStatus === 200;
   const mcpRegistryDiscoverable = mcpRegistryAccepted && input.mcpRegistry.searchCount !== null && input.mcpRegistry.searchCount > 0;
-  const status = currentSurfacePublished && mcpRegistryDiscoverable ? "registry_discoverable" : "blocked";
+  const status2 = currentSurfacePublished && mcpRegistryDiscoverable ? "registry_discoverable" : "blocked";
   return {
     proofKind: "distribution_provenance_readback",
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
-    status,
+    status: status2,
     scope: "Public npm and MCP Registry readback for the current local package surface. Publication and registry discovery are distribution facts only.",
     localPackage: {
       ...input.localPackage,
@@ -19413,18 +19531,18 @@ class ParseStatus {
     if (this.value !== "aborted")
       this.value = "aborted";
   }
-  static mergeArray(status, results) {
+  static mergeArray(status2, results) {
     const arrayValue = [];
     for (const s of results) {
       if (s.status === "aborted")
         return INVALID;
       if (s.status === "dirty")
-        status.dirty();
+        status2.dirty();
       arrayValue.push(s.value);
     }
-    return { status: status.value, value: arrayValue };
+    return { status: status2.value, value: arrayValue };
   }
-  static async mergeObjectAsync(status, pairs) {
+  static async mergeObjectAsync(status2, pairs) {
     const syncPairs = [];
     for (const pair of pairs) {
       const key = await pair.key;
@@ -19434,9 +19552,9 @@ class ParseStatus {
         value
       });
     }
-    return ParseStatus.mergeObjectSync(status, syncPairs);
+    return ParseStatus.mergeObjectSync(status2, syncPairs);
   }
-  static mergeObjectSync(status, pairs) {
+  static mergeObjectSync(status2, pairs) {
     const finalObject = {};
     for (const pair of pairs) {
       const { key, value } = pair;
@@ -19445,14 +19563,14 @@ class ParseStatus {
       if (value.status === "aborted")
         return INVALID;
       if (key.status === "dirty")
-        status.dirty();
+        status2.dirty();
       if (value.status === "dirty")
-        status.dirty();
+        status2.dirty();
       if (key.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
         finalObject[key.value] = value.value;
       }
     }
-    return { status: status.value, value: finalObject };
+    return { status: status2.value, value: finalObject };
   }
 }
 var INVALID = Object.freeze({
@@ -19913,7 +20031,7 @@ class ZodString2 extends ZodType2 {
       });
       return INVALID;
     }
-    const status = new ParseStatus;
+    const status2 = new ParseStatus;
     let ctx = undefined;
     for (const check2 of this._def.checks) {
       if (check2.kind === "min") {
@@ -19927,7 +20045,7 @@ class ZodString2 extends ZodType2 {
             exact: false,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "max") {
         if (input.data.length > check2.value) {
@@ -19940,7 +20058,7 @@ class ZodString2 extends ZodType2 {
             exact: false,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "length") {
         const tooBig = input.data.length > check2.value;
@@ -19966,7 +20084,7 @@ class ZodString2 extends ZodType2 {
               message: check2.message
             });
           }
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "email") {
         if (!emailRegex.test(input.data)) {
@@ -19976,7 +20094,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "emoji") {
         if (!emojiRegex) {
@@ -19989,7 +20107,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "uuid") {
         if (!uuidRegex.test(input.data)) {
@@ -19999,7 +20117,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "nanoid") {
         if (!nanoidRegex.test(input.data)) {
@@ -20009,7 +20127,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "cuid") {
         if (!cuidRegex.test(input.data)) {
@@ -20019,7 +20137,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "cuid2") {
         if (!cuid2Regex.test(input.data)) {
@@ -20029,7 +20147,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "ulid") {
         if (!ulidRegex.test(input.data)) {
@@ -20039,7 +20157,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "url") {
         try {
@@ -20051,7 +20169,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "regex") {
         check2.regex.lastIndex = 0;
@@ -20063,7 +20181,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "trim") {
         input.data = input.data.trim();
@@ -20075,7 +20193,7 @@ class ZodString2 extends ZodType2 {
             validation: { includes: check2.value, position: check2.position },
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "toLowerCase") {
         input.data = input.data.toLowerCase();
@@ -20089,7 +20207,7 @@ class ZodString2 extends ZodType2 {
             validation: { startsWith: check2.value },
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "endsWith") {
         if (!input.data.endsWith(check2.value)) {
@@ -20099,7 +20217,7 @@ class ZodString2 extends ZodType2 {
             validation: { endsWith: check2.value },
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "datetime") {
         const regex = datetimeRegex(check2);
@@ -20110,7 +20228,7 @@ class ZodString2 extends ZodType2 {
             validation: "datetime",
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "date") {
         const regex = dateRegex;
@@ -20121,7 +20239,7 @@ class ZodString2 extends ZodType2 {
             validation: "date",
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "time") {
         const regex = timeRegex(check2);
@@ -20132,7 +20250,7 @@ class ZodString2 extends ZodType2 {
             validation: "time",
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "duration") {
         if (!durationRegex.test(input.data)) {
@@ -20142,7 +20260,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "ip") {
         if (!isValidIP(input.data, check2.version)) {
@@ -20152,7 +20270,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "jwt") {
         if (!isValidJWT2(input.data, check2.alg)) {
@@ -20162,7 +20280,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "cidr") {
         if (!isValidCidr(input.data, check2.version)) {
@@ -20172,7 +20290,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "base64") {
         if (!base64Regex.test(input.data)) {
@@ -20182,7 +20300,7 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "base64url") {
         if (!base64urlRegex.test(input.data)) {
@@ -20192,13 +20310,13 @@ class ZodString2 extends ZodType2 {
             code: ZodIssueCode2.invalid_string,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else {
         util.assertNever(check2);
       }
     }
-    return { status: status.value, value: input.data };
+    return { status: status2.value, value: input.data };
   }
   _regex(regex, validation, message) {
     return this.refinement((data) => regex.test(data), {
@@ -20472,7 +20590,7 @@ class ZodNumber2 extends ZodType2 {
       return INVALID;
     }
     let ctx = undefined;
-    const status = new ParseStatus;
+    const status2 = new ParseStatus;
     for (const check2 of this._def.checks) {
       if (check2.kind === "int") {
         if (!util.isInteger(input.data)) {
@@ -20483,7 +20601,7 @@ class ZodNumber2 extends ZodType2 {
             received: "float",
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "min") {
         const tooSmall = check2.inclusive ? input.data < check2.value : input.data <= check2.value;
@@ -20497,7 +20615,7 @@ class ZodNumber2 extends ZodType2 {
             exact: false,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "max") {
         const tooBig = check2.inclusive ? input.data > check2.value : input.data >= check2.value;
@@ -20511,7 +20629,7 @@ class ZodNumber2 extends ZodType2 {
             exact: false,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "multipleOf") {
         if (floatSafeRemainder2(input.data, check2.value) !== 0) {
@@ -20521,7 +20639,7 @@ class ZodNumber2 extends ZodType2 {
             multipleOf: check2.value,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "finite") {
         if (!Number.isFinite(input.data)) {
@@ -20530,13 +20648,13 @@ class ZodNumber2 extends ZodType2 {
             code: ZodIssueCode2.not_finite,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else {
         util.assertNever(check2);
       }
     }
-    return { status: status.value, value: input.data };
+    return { status: status2.value, value: input.data };
   }
   gte(value, message) {
     return this.setLimit("min", value, true, errorUtil.toString(message));
@@ -20702,7 +20820,7 @@ class ZodBigInt2 extends ZodType2 {
       return this._getInvalidInput(input);
     }
     let ctx = undefined;
-    const status = new ParseStatus;
+    const status2 = new ParseStatus;
     for (const check2 of this._def.checks) {
       if (check2.kind === "min") {
         const tooSmall = check2.inclusive ? input.data < check2.value : input.data <= check2.value;
@@ -20715,7 +20833,7 @@ class ZodBigInt2 extends ZodType2 {
             inclusive: check2.inclusive,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "max") {
         const tooBig = check2.inclusive ? input.data > check2.value : input.data >= check2.value;
@@ -20728,7 +20846,7 @@ class ZodBigInt2 extends ZodType2 {
             inclusive: check2.inclusive,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "multipleOf") {
         if (input.data % check2.value !== BigInt(0)) {
@@ -20738,13 +20856,13 @@ class ZodBigInt2 extends ZodType2 {
             multipleOf: check2.value,
             message: check2.message
           });
-          status.dirty();
+          status2.dirty();
         }
       } else {
         util.assertNever(check2);
       }
     }
-    return { status: status.value, value: input.data };
+    return { status: status2.value, value: input.data };
   }
   _getInvalidInput(input) {
     const ctx = this._getOrReturnCtx(input);
@@ -20904,7 +21022,7 @@ class ZodDate2 extends ZodType2 {
       });
       return INVALID;
     }
-    const status = new ParseStatus;
+    const status2 = new ParseStatus;
     let ctx = undefined;
     for (const check2 of this._def.checks) {
       if (check2.kind === "min") {
@@ -20918,7 +21036,7 @@ class ZodDate2 extends ZodType2 {
             minimum: check2.value,
             type: "date"
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (check2.kind === "max") {
         if (input.data.getTime() > check2.value) {
@@ -20931,14 +21049,14 @@ class ZodDate2 extends ZodType2 {
             maximum: check2.value,
             type: "date"
           });
-          status.dirty();
+          status2.dirty();
         }
       } else {
         util.assertNever(check2);
       }
     }
     return {
-      status: status.value,
+      status: status2.value,
       value: new Date(input.data.getTime())
     };
   }
@@ -21132,7 +21250,7 @@ ZodVoid2.create = (params) => {
 
 class ZodArray2 extends ZodType2 {
   _parse(input) {
-    const { ctx, status } = this._processInputParams(input);
+    const { ctx, status: status2 } = this._processInputParams(input);
     const def = this._def;
     if (ctx.parsedType !== ZodParsedType.array) {
       addIssueToContext(ctx, {
@@ -21155,7 +21273,7 @@ class ZodArray2 extends ZodType2 {
           exact: true,
           message: def.exactLength.message
         });
-        status.dirty();
+        status2.dirty();
       }
     }
     if (def.minLength !== null) {
@@ -21168,7 +21286,7 @@ class ZodArray2 extends ZodType2 {
           exact: false,
           message: def.minLength.message
         });
-        status.dirty();
+        status2.dirty();
       }
     }
     if (def.maxLength !== null) {
@@ -21181,20 +21299,20 @@ class ZodArray2 extends ZodType2 {
           exact: false,
           message: def.maxLength.message
         });
-        status.dirty();
+        status2.dirty();
       }
     }
     if (ctx.common.async) {
       return Promise.all([...ctx.data].map((item, i) => {
         return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
       })).then((result2) => {
-        return ParseStatus.mergeArray(status, result2);
+        return ParseStatus.mergeArray(status2, result2);
       });
     }
     const result = [...ctx.data].map((item, i) => {
       return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
     });
-    return ParseStatus.mergeArray(status, result);
+    return ParseStatus.mergeArray(status2, result);
   }
   get element() {
     return this._def.type;
@@ -21284,7 +21402,7 @@ class ZodObject2 extends ZodType2 {
       });
       return INVALID;
     }
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     const { shape, keys: shapeKeys } = this._getCached();
     const extraKeys = [];
     if (!(this._def.catchall instanceof ZodNever2 && this._def.unknownKeys === "strip")) {
@@ -21319,7 +21437,7 @@ class ZodObject2 extends ZodType2 {
             code: ZodIssueCode2.unrecognized_keys,
             keys: extraKeys
           });
-          status.dirty();
+          status2.dirty();
         }
       } else if (unknownKeys === "strip") {} else {
         throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
@@ -21349,10 +21467,10 @@ class ZodObject2 extends ZodType2 {
         }
         return syncPairs;
       }).then((syncPairs) => {
-        return ParseStatus.mergeObjectSync(status, syncPairs);
+        return ParseStatus.mergeObjectSync(status2, syncPairs);
       });
     } else {
-      return ParseStatus.mergeObjectSync(status, pairs);
+      return ParseStatus.mergeObjectSync(status2, pairs);
     }
   }
   get shape() {
@@ -21744,7 +21862,7 @@ function mergeValues2(a, b) {
 
 class ZodIntersection2 extends ZodType2 {
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     const handleParsed = (parsedLeft, parsedRight) => {
       if (isAborted(parsedLeft) || isAborted(parsedRight)) {
         return INVALID;
@@ -21757,9 +21875,9 @@ class ZodIntersection2 extends ZodType2 {
         return INVALID;
       }
       if (isDirty(parsedLeft) || isDirty(parsedRight)) {
-        status.dirty();
+        status2.dirty();
       }
-      return { status: status.value, value: merged.data };
+      return { status: status2.value, value: merged.data };
     };
     if (ctx.common.async) {
       return Promise.all([
@@ -21798,7 +21916,7 @@ ZodIntersection2.create = (left, right, params) => {
 
 class ZodTuple2 extends ZodType2 {
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     if (ctx.parsedType !== ZodParsedType.array) {
       addIssueToContext(ctx, {
         code: ZodIssueCode2.invalid_type,
@@ -21826,7 +21944,7 @@ class ZodTuple2 extends ZodType2 {
         exact: false,
         type: "array"
       });
-      status.dirty();
+      status2.dirty();
     }
     const items = [...ctx.data].map((item, itemIndex) => {
       const schema = this._def.items[itemIndex] || this._def.rest;
@@ -21836,10 +21954,10 @@ class ZodTuple2 extends ZodType2 {
     }).filter((x) => !!x);
     if (ctx.common.async) {
       return Promise.all(items).then((results) => {
-        return ParseStatus.mergeArray(status, results);
+        return ParseStatus.mergeArray(status2, results);
       });
     } else {
-      return ParseStatus.mergeArray(status, items);
+      return ParseStatus.mergeArray(status2, items);
     }
   }
   get items() {
@@ -21852,12 +21970,12 @@ class ZodTuple2 extends ZodType2 {
     });
   }
 }
-ZodTuple2.create = (schemas37, params) => {
-  if (!Array.isArray(schemas37)) {
+ZodTuple2.create = (schemas44, params) => {
+  if (!Array.isArray(schemas44)) {
     throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
   }
   return new ZodTuple2({
-    items: schemas37,
+    items: schemas44,
     typeName: ZodFirstPartyTypeKind2.ZodTuple,
     rest: null,
     ...processCreateParams(params)
@@ -21872,7 +21990,7 @@ class ZodRecord2 extends ZodType2 {
     return this._def.valueType;
   }
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     if (ctx.parsedType !== ZodParsedType.object) {
       addIssueToContext(ctx, {
         code: ZodIssueCode2.invalid_type,
@@ -21892,9 +22010,9 @@ class ZodRecord2 extends ZodType2 {
       });
     }
     if (ctx.common.async) {
-      return ParseStatus.mergeObjectAsync(status, pairs);
+      return ParseStatus.mergeObjectAsync(status2, pairs);
     } else {
-      return ParseStatus.mergeObjectSync(status, pairs);
+      return ParseStatus.mergeObjectSync(status2, pairs);
     }
   }
   get element() {
@@ -21926,7 +22044,7 @@ class ZodMap2 extends ZodType2 {
     return this._def.valueType;
   }
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     if (ctx.parsedType !== ZodParsedType.map) {
       addIssueToContext(ctx, {
         code: ZodIssueCode2.invalid_type,
@@ -21953,11 +22071,11 @@ class ZodMap2 extends ZodType2 {
             return INVALID;
           }
           if (key.status === "dirty" || value.status === "dirty") {
-            status.dirty();
+            status2.dirty();
           }
           finalMap.set(key.value, value.value);
         }
-        return { status: status.value, value: finalMap };
+        return { status: status2.value, value: finalMap };
       });
     } else {
       const finalMap = new Map;
@@ -21968,11 +22086,11 @@ class ZodMap2 extends ZodType2 {
           return INVALID;
         }
         if (key.status === "dirty" || value.status === "dirty") {
-          status.dirty();
+          status2.dirty();
         }
         finalMap.set(key.value, value.value);
       }
-      return { status: status.value, value: finalMap };
+      return { status: status2.value, value: finalMap };
     }
   }
 }
@@ -21987,7 +22105,7 @@ ZodMap2.create = (keyType, valueType, params) => {
 
 class ZodSet2 extends ZodType2 {
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     if (ctx.parsedType !== ZodParsedType.set) {
       addIssueToContext(ctx, {
         code: ZodIssueCode2.invalid_type,
@@ -22007,7 +22125,7 @@ class ZodSet2 extends ZodType2 {
           exact: false,
           message: def.minSize.message
         });
-        status.dirty();
+        status2.dirty();
       }
     }
     if (def.maxSize !== null) {
@@ -22020,7 +22138,7 @@ class ZodSet2 extends ZodType2 {
           exact: false,
           message: def.maxSize.message
         });
-        status.dirty();
+        status2.dirty();
       }
     }
     const valueType = this._def.valueType;
@@ -22030,10 +22148,10 @@ class ZodSet2 extends ZodType2 {
         if (element.status === "aborted")
           return INVALID;
         if (element.status === "dirty")
-          status.dirty();
+          status2.dirty();
         parsedSet.add(element.value);
       }
-      return { status: status.value, value: parsedSet };
+      return { status: status2.value, value: parsedSet };
     }
     const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
     if (ctx.common.async) {
@@ -22371,15 +22489,15 @@ class ZodEffects extends ZodType2 {
     return this._def.schema._def.typeName === ZodFirstPartyTypeKind2.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
   }
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     const effect = this._def.effect || null;
     const checkCtx = {
       addIssue: (arg) => {
         addIssueToContext(ctx, arg);
         if (arg.fatal) {
-          status.abort();
+          status2.abort();
         } else {
-          status.dirty();
+          status2.dirty();
         }
       },
       get path() {
@@ -22391,7 +22509,7 @@ class ZodEffects extends ZodType2 {
       const processed = effect.transform(ctx.data, checkCtx);
       if (ctx.common.async) {
         return Promise.resolve(processed).then(async (processed2) => {
-          if (status.value === "aborted")
+          if (status2.value === "aborted")
             return INVALID;
           const result = await this._def.schema._parseAsync({
             data: processed2,
@@ -22402,12 +22520,12 @@ class ZodEffects extends ZodType2 {
             return INVALID;
           if (result.status === "dirty")
             return DIRTY(result.value);
-          if (status.value === "dirty")
+          if (status2.value === "dirty")
             return DIRTY(result.value);
           return result;
         });
       } else {
-        if (status.value === "aborted")
+        if (status2.value === "aborted")
           return INVALID;
         const result = this._def.schema._parseSync({
           data: processed,
@@ -22418,7 +22536,7 @@ class ZodEffects extends ZodType2 {
           return INVALID;
         if (result.status === "dirty")
           return DIRTY(result.value);
-        if (status.value === "dirty")
+        if (status2.value === "dirty")
           return DIRTY(result.value);
         return result;
       }
@@ -22443,17 +22561,17 @@ class ZodEffects extends ZodType2 {
         if (inner.status === "aborted")
           return INVALID;
         if (inner.status === "dirty")
-          status.dirty();
+          status2.dirty();
         executeRefinement(inner.value);
-        return { status: status.value, value: inner.value };
+        return { status: status2.value, value: inner.value };
       } else {
         return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
           if (inner.status === "aborted")
             return INVALID;
           if (inner.status === "dirty")
-            status.dirty();
+            status2.dirty();
           return executeRefinement(inner.value).then(() => {
-            return { status: status.value, value: inner.value };
+            return { status: status2.value, value: inner.value };
           });
         });
       }
@@ -22471,13 +22589,13 @@ class ZodEffects extends ZodType2 {
         if (result instanceof Promise) {
           throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
         }
-        return { status: status.value, value: result };
+        return { status: status2.value, value: result };
       } else {
         return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
           if (!isValid(base))
             return INVALID;
           return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
-            status: status.value,
+            status: status2.value,
             value: result
           }));
         });
@@ -22662,7 +22780,7 @@ class ZodBranded extends ZodType2 {
 
 class ZodPipeline extends ZodType2 {
   _parse(input) {
-    const { status, ctx } = this._processInputParams(input);
+    const { status: status2, ctx } = this._processInputParams(input);
     if (ctx.common.async) {
       const handleAsync = async () => {
         const inResult = await this._def.in._parseAsync({
@@ -22673,7 +22791,7 @@ class ZodPipeline extends ZodType2 {
         if (inResult.status === "aborted")
           return INVALID;
         if (inResult.status === "dirty") {
-          status.dirty();
+          status2.dirty();
           return DIRTY(inResult.value);
         } else {
           return this._def.out._parseAsync({
@@ -22693,7 +22811,7 @@ class ZodPipeline extends ZodType2 {
       if (inResult.status === "aborted")
         return INVALID;
       if (inResult.status === "dirty") {
-        status.dirty();
+        status2.dirty();
         return {
           status: "dirty",
           value: inResult.value
@@ -22954,7 +23072,7 @@ function projectLiveX402RequirementReadback(input) {
   if (selectedPaymentRequirement.scheme !== "exact") {
     throw new Error("The live x402 first wedge only admits exact requirements.");
   }
-  const status = input.request.responseStatus === 402 && input.customerGatewayCustody.present ? "ready_for_gateway_signed_retry" : "blocked";
+  const status2 = input.request.responseStatus === 402 && input.customerGatewayCustody.present ? "ready_for_gateway_signed_retry" : "blocked";
   const selectedPaymentRequirementDigest = stableDigest({
     paymentRequired,
     selectedPaymentRequirementIndex: input.selectedPaymentRequirementIndex,
@@ -22964,7 +23082,7 @@ function projectLiveX402RequirementReadback(input) {
     proofKind: "live_x402_requirement_readback",
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
-    status,
+    status: status2,
     scope: "Live x402 Payment Required challenge readback for one buyer-side exact protected action. This is not payment execution.",
     request: input.request,
     paymentRequired: {
@@ -23013,11 +23131,7 @@ function liveX402ProofGaps(input) {
 }
 // src/surfaces/proof-packets/product-completion-contract/index.ts
 var PRODUCT_COMPLETION_READBACK_KIND = "product_completion_readback";
-var PRODUCT_COMPLETION_STATUSES = [
-  "completed",
-  "closed_with_hard_blocks",
-  "incomplete"
-];
+var PRODUCT_COMPLETION_STATUSES = ["completed", "closed_with_hard_blocks", "incomplete"];
 var PRODUCT_COMPLETION_GATE_IDS = [
   "codex_local_host_activation",
   "public_distribution_and_registry",
@@ -23081,12 +23195,12 @@ function projectProductCompletionReadback(input) {
   const incompleteGateIds = gateResults.filter((result) => result.status !== "completed" && result.status !== "hard_blocked").map((result) => result.gateId);
   const hardBlockedGateIds = gateResults.filter((result) => result.status === "hard_blocked").map((result) => result.gateId);
   const overclaimViolations = productCompletionOverclaimViolations(input);
-  const status = input.qualityGate.passed && incompleteGateIds.length === 0 && overclaimViolations.length === 0 ? hardBlockedGateIds.length === 0 ? "completed" : "closed_with_hard_blocks" : "incomplete";
+  const status2 = input.qualityGate.passed && incompleteGateIds.length === 0 && overclaimViolations.length === 0 ? hardBlockedGateIds.length === 0 ? "completed" : "closed_with_hard_blocks" : "incomplete";
   return {
     proofKind: PRODUCT_COMPLETION_READBACK_KIND,
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
-    status,
+    status: status2,
     scope: "Aggregate source-owned closeout readback for the product gates. This object audits evidence posture only; it creates no authority.",
     qualityGate: input.qualityGate,
     gates: gateResults,
@@ -23109,7 +23223,7 @@ function projectProductCompletionReadback(input) {
       hostsOperation: false,
       certifiesMarketplace: false
     },
-    nextMechanism: status === "completed" ? "Move from local/product-surface closeout to hosted operation design." : hardBlockedGateIds.includes("public_distribution_and_registry") ? "Resolve public distribution: publish the current package with provenance support or explicitly accept the no-provenance release risk, then verify npm and MCP Registry readback." : "Resolve the remaining incomplete gate with source-owned evidence before claiming product closeout."
+    nextMechanism: status2 === "completed" ? "Move from local/product-surface closeout to hosted operation design." : hardBlockedGateIds.includes("public_distribution_and_registry") ? "Resolve public distribution: publish the current package with provenance support or explicitly accept the no-provenance release risk, then verify npm and MCP Registry readback." : "Resolve the remaining incomplete gate with source-owned evidence before claiming product closeout."
   };
 }
 function dualEnforcementPostureGateResult(input) {
@@ -23145,11 +23259,11 @@ function perCustomerBypassScaffoldGateResult(input) {
   });
 }
 function productCompletionGateResult(input) {
-  const status = input.completed ? "completed" : input.hardBlocked ? "hard_blocked" : "incomplete";
+  const status2 = input.completed ? "completed" : input.hardBlocked ? "hard_blocked" : "incomplete";
   return {
     gateId: input.gateId,
     title: input.title,
-    status,
+    status: status2,
     blockers: [...input.blockers].sort(),
     evidenceRefs: [...input.evidenceRefs]
   };
@@ -23336,12 +23450,12 @@ var firstPartyDogfoodAllowlist = new Set(["handshake-internal-dogfood"]);
 function projectPerCustomerBypassScaffoldReadback(input) {
   const proofGaps = input.customerOnboardingRef === null ? [gap("customer_onboarding_ref_absent", "Per-customer bypass evidence is absent for this customer.")] : [];
   const dogfoodReady = input.firstPartyDogfoodCustomerId !== null && firstPartyDogfoodAllowlist.has(input.firstPartyDogfoodCustomerId) && input.customerOnboardingRef !== null;
-  const status = dogfoodReady ? "observed_scaffold_only" : "blocked";
+  const status2 = dogfoodReady ? "observed_scaffold_only" : "blocked";
   return {
     proofKind: "per_customer_bypass_scaffold",
     proofVersion: PROOF_PACKET_VERSION,
     generatedAt: input.generatedAt,
-    status,
+    status: status2,
     customerOnboardingRef: input.customerOnboardingRef,
     proofGaps,
     commandRefs: input.commandRefs,
@@ -23349,7 +23463,7 @@ function projectPerCustomerBypassScaffoldReadback(input) {
       ...nonAuthorityBoundary,
       ...serviceWorkflowAuthorityBoundary
     },
-    nextMechanism: status === "observed_scaffold_only" ? "Capture named first-party dogfood bypass packet before claiming per-customer containment." : "Provide customer onboarding ref for per-customer bypass scaffold; integrators stay incomplete."
+    nextMechanism: status2 === "observed_scaffold_only" ? "Capture named first-party dogfood bypass packet before claiming per-customer containment." : "Provide customer onboarding ref for per-customer bypass scaffold; integrators stay incomplete."
   };
 }
 // src/surfaces/release-proof.ts
@@ -23590,6 +23704,16 @@ var protocolNavigation = [
     eventsEmitted: ["intent_compiled"],
     authorityBoundary: "candidate evidence only",
     evidenceObligation: "record uncertainty or compiler refusal before any ActionContract exists"
+  },
+  {
+    transitionId: "commitIngressRefusal",
+    kernelMethod: "commitIngressRefusal",
+    phase: "intent_compilation",
+    outcomeClasses: ["refusal"],
+    recordsWritten: ["refusal", "contract_stream_event"],
+    eventsEmitted: ["action_refused"],
+    authorityBoundary: "ingress wire refusal evidence only",
+    evidenceObligation: "record structured runtime ingress wire refusal without policy, greenlight, gate, mutation, receipt, or certificate authority"
   },
   {
     transitionId: "createGeneratedExecutionGraph",
@@ -24152,6 +24276,12 @@ var actionAttemptLifecycleMatrix = {
     authorityEffect: "none",
     terminalOutcome: "refusal"
   }, "invalid or overreaching candidate stops before contract"),
+  "commitIngressRefusal:refusal": entry({
+    phase: "compilation",
+    state: "candidate_refused",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "malformed runtime ingress wire stops before runtime evidence or contract"),
   "proposeActionContract:recorded": entry({
     phase: "contract",
     state: "contract_proposed",

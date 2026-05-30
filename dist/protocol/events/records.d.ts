@@ -20,6 +20,7 @@ export declare class ProtocolRecorder {
     private readonly transitionRequestContext?;
     constructor(store: ProtocolStore, transitionRequestContext?: TransitionRequestContextDraft | undefined);
     requiredRecord<T>(objectType: ProtocolObjectType, objectId: string, code: string): Promise<StoredProtocolRecord<T>>;
+    optionalRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
     persistRecord(record: ProtocolRecord): Promise<void>;
     persistRecordIfAbsentOrSame(record: ProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
     buildRecord(record: ProtocolRecord): Promise<StoredProtocolRecord>;

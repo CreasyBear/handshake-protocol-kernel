@@ -21,8 +21,8 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         gatewayId: string;
         gatewayPolicyVersion: string;
         sourceAuthority: "protocol_store_projection";
-        operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "candidate_action" | "action_contract" | "policy_decision" | "gateway_check" | "mutation_attempt";
+        operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         policyDecisionRef: string;
         policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
         agreementObligationPolicy: {
@@ -47,7 +47,7 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         finalityStatus: "unknown" | "pending" | "final" | "suspect" | null;
         greenlightUsePosture: "unknown" | "none" | "consumed" | "available_for_one_gateway_check" | "replayed_or_unusable";
         reasonCodes: string[];
-        nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+        nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         safeToRetryReadback: true;
         safeToReuseGreenlight: boolean;
         requiresNewContract: boolean;
@@ -78,9 +78,9 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
             surface: "operation_readback";
             actionContractRef: string;
             requestIdentity: string | null;
-            operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+            operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
             reasonCodes: string[];
-            nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+            nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
             safeToRetryReadback: true;
             safeToReuseGreenlight: boolean;
             requiresNewContract: boolean;
@@ -99,9 +99,9 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         schemaVersion: "handshake.cli.operation-readback-view.v1";
         viewBoundary: "redacted_cli_projection_view";
         title: string;
-        status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "candidate_action" | "action_contract" | "policy_decision" | "gateway_check" | "mutation_attempt";
-        nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+        status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         stageOrder: readonly ["intent_compilation", "candidate_action", "action_contract", "policy_decision", "greenlight", "gateway_check", "mutation_attempt", "receipt", "recovery", "isolation"];
         correlationSummary: {
             policyDecisionRef: string;
@@ -127,8 +127,8 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         gatewayId: string;
         gatewayPolicyVersion: string;
         sourceAuthority: "protocol_store_projection";
-        operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "candidate_action" | "action_contract" | "policy_decision" | "gateway_check" | "mutation_attempt";
+        operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         policyDecisionRef: string;
         policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
         agreementObligationPolicy: {
@@ -153,7 +153,7 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         finalityStatus: "unknown" | "pending" | "final" | "suspect" | null;
         greenlightUsePosture: "unknown" | "none" | "consumed" | "available_for_one_gateway_check" | "replayed_or_unusable";
         reasonCodes: string[];
-        nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+        nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         safeToRetryReadback: true;
         safeToReuseGreenlight: boolean;
         requiresNewContract: boolean;
@@ -184,9 +184,9 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
             surface: "operation_readback";
             actionContractRef: string;
             requestIdentity: string | null;
-            operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+            operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
             reasonCodes: string[];
-            nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+            nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
             safeToRetryReadback: true;
             safeToReuseGreenlight: boolean;
             requiresNewContract: boolean;
@@ -205,9 +205,9 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         schemaVersion: "handshake.cli.operation-readback-view.v1";
         viewBoundary: "redacted_cli_projection_view";
         title: string;
-        status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "halted" | "quarantined" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "candidate_action" | "action_contract" | "policy_decision" | "gateway_check" | "mutation_attempt";
-        nextMechanism: "read_evidence" | "use_greenlight_at_gateway" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
+        status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "downstream_refused" | "gateway_refused" | "quarantined" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
+        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         stageOrder: readonly ["intent_compilation", "candidate_action", "action_contract", "policy_decision", "greenlight", "gateway_check", "mutation_attempt", "receipt", "recovery", "isolation"];
         correlationSummary: {
             policyDecisionRef: string;

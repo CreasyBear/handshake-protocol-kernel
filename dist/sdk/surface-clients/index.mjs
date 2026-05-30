@@ -15567,6 +15567,158 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   consumedByGateAttemptId: IdSchema.nullable()
 });
 
+// src/protocol/areas/intent-compilation/delegation-evidence-ref.ts
+var DelegationEvidenceRefSchema = exports_external.object({
+  delegationEvidenceRefId: IdSchema,
+  evidenceBindingDigest: DigestSchema,
+  a1ChainFingerprint: DigestSchema,
+  storeRef: exports_external.string().min(1).refine((value) => !/signedChain|certs|signature|delegator_pk|delegate_pk/i.test(value), {
+    message: "storeRef must not embed raw A1 wire payloads"
+  }),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  a1VerifierVersion: exports_external.string().min(1)
+}).strict();
+
+// src/protocol/areas/intent-compilation/schemas.ts
+var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
+var CandidateActionSchema = exports_external.strictObject({
+  candidateActionId: IdSchema,
+  candidateStatus: CandidateActionStatusSchema,
+  candidateDigest: DigestSchema.nullable(),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  toolCapabilityId: IdSchema,
+  toolCapabilityDigest: DigestSchema.nullable(),
+  toolCatalogVersion: exports_external.string().min(1).nullable(),
+  actionTypeId: IdSchema,
+  actionTypeDigest: DigestSchema.nullable(),
+  actionCatalogVersion: exports_external.string().min(1).nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema.nullable(),
+  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
+  operatingEnvelopeId: IdSchema,
+  operatingEnvelopeDigest: DigestSchema.nullable(),
+  actionClass: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  sequenceNumber: exports_external.number().int().nonnegative(),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
+  recoveryRecommendationId: IdSchema.nullable(),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  purposeCode: exports_external.string().min(1),
+  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  rollbackHint: exports_external.string().max(500).nullable(),
+  expiresAt: IsoDateSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
+  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  toolCallDraftId: IdSchema.nullable().default(null),
+  toolCallDraftDigest: DigestSchema.nullable().default(null),
+  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null)
+});
+var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
+  intentCompilationId: IdSchema,
+  principalIntentRef: exports_external.string().min(1),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  operatingEnvelopeId: IdSchema,
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
+  candidateAction: CandidateActionSchema,
+  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
+  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
+  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  compilationRefusalId: IdSchema.nullable().default(null),
+  compilerVersion: exports_external.string().min(1)
+});
+// src/protocol/areas/intent-compilation/inputs.ts
+var CompileIntentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null),
+  candidate: exports_external.strictObject({
+    toolCapabilityId: exports_external.string().min(1),
+    actionTypeId: exports_external.string().min(1),
+    gatewayRegistryEntryId: exports_external.string().min(1),
+    actionClass: exports_external.string().min(1),
+    gatewayId: exports_external.string().min(1),
+    resourceRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().nonnegative(),
+    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
+    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+    purposeCode: exports_external.string().min(1),
+    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+    evidenceRefs: exports_external.array(exports_external.string()).default([]),
+    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+    idempotencyKey: exports_external.string().min(1),
+    rollbackHint: exports_external.string().max(500).nullable().default(null),
+    expiresAt: exports_external.string().datetime({ offset: true })
+  }),
+  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
+});
+// src/protocol/areas/receipt-export/delegation-provenance.ts
+var ReceiptDelegationProvenanceSchema = exports_external.strictObject({
+  a1ChainFingerprint: DigestSchema,
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: DigestSchema,
+  terminalDelegatePkFingerprint: DigestSchema,
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: DigestSchema,
+  a1VerifierVersion: exports_external.string().min(1),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+});
+
 // src/protocol/areas/receipt-export/schemas.ts
 var GatewayAdmissionStatusSchema = exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]);
 var DownstreamOutcomeStatusSchema = exports_external.enum([
@@ -15650,7 +15802,8 @@ var ReceiptExportSchema = ProtocolBaseSchema.extend({
   requestedByRef: exports_external.string().min(1),
   evidenceRetentionUntil: IsoDateSchema.nullable(),
   exportedAt: IsoDateSchema,
-  exportDigest: DigestSchema
+  exportDigest: DigestSchema,
+  delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
 });
 
 // src/protocol/events/schemas.ts
@@ -15711,7 +15864,15 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
   eventDigest: DigestSchema,
   payload: exports_external.record(exports_external.string(), JsonValueSchema)
 });
-
+// src/protocol/areas/receipt-export/inputs.ts
+var CreateReceiptExportInputSchema = exports_external.strictObject({
+  receiptId: exports_external.string().min(1),
+  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
+  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
+  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
 // src/protocol/evidence-projections/schemas.ts
 var ContractEvidenceProjectionSchema = exports_external.strictObject({
   actionContractRef: IdSchema,
@@ -15816,6 +15977,7 @@ var ReceiptTimelineProjectionSchema = exports_external.strictObject({
   events: exports_external.array(ReceiptTimelineEventProjectionSchema).default([]),
   missingEventCount: exports_external.number().int().nonnegative(),
   failureEvidence: ReceiptTimelineFailureEvidenceProjectionSchema.nullable(),
+  delegationProvenance: ReceiptDelegationProvenanceSchema.nullable().default(null),
   redactionProfileRef: exports_external.literal("receipt-timeline:v0.2-redacted"),
   omittedFields: exports_external.array(exports_external.string().min(1)).default([])
 });
@@ -16110,83 +16272,6 @@ var ToolCallDraftSchema = ProtocolBaseSchema.extend({
   invalidReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   draftDigest: DigestSchema
-});
-// src/protocol/areas/intent-compilation/schemas.ts
-var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
-var CandidateActionSchema = exports_external.strictObject({
-  candidateActionId: IdSchema,
-  candidateStatus: CandidateActionStatusSchema,
-  candidateDigest: DigestSchema.nullable(),
-  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  toolCapabilityId: IdSchema,
-  toolCapabilityDigest: DigestSchema.nullable(),
-  toolCatalogVersion: exports_external.string().min(1).nullable(),
-  actionTypeId: IdSchema,
-  actionTypeDigest: DigestSchema.nullable(),
-  actionCatalogVersion: exports_external.string().min(1).nullable(),
-  gatewayRegistryEntryId: IdSchema,
-  gatewayRegistryDigest: DigestSchema.nullable(),
-  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
-  operatingEnvelopeId: IdSchema,
-  operatingEnvelopeDigest: DigestSchema.nullable(),
-  actionClass: exports_external.string().min(1),
-  gatewayId: IdSchema,
-  resourceRef: ResourceRefSchema,
-  sequenceNumber: exports_external.number().int().nonnegative(),
-  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
-  recoveryRecommendationId: IdSchema.nullable(),
-  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
-  paramsDigest: DigestSchema,
-  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
-  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
-  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
-  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
-  purposeCode: exports_external.string().min(1),
-  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
-  evidenceRefs: exports_external.array(exports_external.string()).default([]),
-  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
-  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
-  idempotencyKey: IdSchema,
-  rollbackHint: exports_external.string().max(500).nullable(),
-  expiresAt: IsoDateSchema,
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGraphId: IdSchema.nullable().default(null),
-  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
-  generatedExecutionNodeId: IdSchema.nullable().default(null),
-  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
-  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
-  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
-  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
-  toolCallDraftId: IdSchema.nullable().default(null),
-  toolCallDraftDigest: DigestSchema.nullable().default(null),
-  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null)
-});
-var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
-  intentCompilationId: IdSchema,
-  principalIntentRef: exports_external.string().min(1),
-  principalId: IdSchema,
-  agentId: IdSchema,
-  runId: IdSchema,
-  runtimeAdapterId: IdSchema,
-  operatingEnvelopeId: IdSchema,
-  toolCatalogRef: exports_external.string().min(1),
-  actionCatalogRef: exports_external.string().min(1),
-  gatewayRegistryRef: exports_external.string().min(1),
-  runtimeExecutionId: IdSchema.nullable().default(null),
-  runtimeExecutionDigest: DigestSchema.nullable().default(null),
-  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
-  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
-  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
-  candidateAction: CandidateActionSchema,
-  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
-  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
-  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
-  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
-  compilerVersion: exports_external.string().min(1)
 });
 // src/protocol/areas/action-contract/schemas.ts
 var ActionContractSchema = ProtocolBaseSchema.extend({
@@ -16801,6 +16886,31 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/integrations/a1-evidence/delegation-evidence-record.ts
+var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
+var DelegationEvidenceRecordSchema = exports_external.object({
+  schemaId: exports_external.literal("delegation-evidence-record"),
+  schemaVersion: exports_external.literal(1),
+  a1ChainFingerprint: Hex32Schema,
+  certFingerprints: exports_external.array(Hex32Schema),
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: Hex32Schema,
+  terminalDelegatePkFingerprint: Hex32Schema,
+  a1VerifierVersion: exports_external.string().min(1),
+  verifyPath: exports_external.enum(["ts", "sidecar"]),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: Hex32Schema.nullable(),
+  presentedAtUnix: exports_external.number().int().nonnegative(),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+}).strict();
+
+// src/protocol/areas/delegation-evidence-record/schemas.ts
+var StoredDelegationEvidenceRecordSchema = ProtocolBaseSchema.extend({
+  delegationEvidenceRecordId: IdSchema,
+  evidenceRecord: DelegationEvidenceRecordSchema
+});
 // src/protocol/areas/negotiation/schemas.ts
 var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
   "self_attested",
@@ -17049,6 +17159,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_call_draft",
   "protected_path_posture",
   "intent_compilation",
+  "delegation_evidence_record",
   "negotiation_session",
   "negotiation_offer",
   "negotiation_decision",
@@ -17102,6 +17213,10 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("delegation_evidence_record"),
+    payload: StoredDelegationEvidenceRecordSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
@@ -17299,6 +17414,7 @@ var protocolReasonCodes = [
   code2("protected_x402_readiness_binding_mismatch", "protected_path_posture", "protected_path_posture"),
   code2("protected_x402_trusted_readiness_missing", "protected_path_posture", "protected_path_posture"),
   code2("mcp_input_schema_invalid", "refusal", "intent_compilation"),
+  code2("runtime_ingress_wire_invalid", "refusal", "intent_compilation"),
   code2("mcp_candidate_not_contractable", "refusal", "intent_compilation"),
   code2("candidate_params_digest_mismatch", "transition_error", "action_contract"),
   code2("candidate_action_mismatch", "transition_error", "action_contract"),
@@ -17640,16 +17756,16 @@ var internalMisconfigurationCodes = new Set([
   "hosted_caller_verifier_not_configured",
   "durable_store_unavailable"
 ]);
-function failureClassFromHttpStatus(status) {
-  if (status === 401)
+function failureClassFromHttpStatus(status2) {
+  if (status2 === 401)
     return "auth";
-  if (status === 403 || status === 409)
+  if (status2 === 403 || status2 === 409)
     return "protected_action_refusal";
-  if (status === 422)
+  if (status2 === 422)
     return "proof_gap";
-  if (status >= 500)
+  if (status2 >= 500)
     return "internal";
-  if (status >= 400 && status < 500)
+  if (status2 >= 400 && status2 < 500)
     return "proof_gap";
   return "internal";
 }
@@ -17710,9 +17826,9 @@ class HandshakeClientError extends Error {
   failureClass;
   failurePhase;
   problemType;
-  constructor(status, envelope) {
+  constructor(status2, envelope) {
     super(`Handshake ${envelope.transitionName ?? "request"} failed: ${envelope.code}`);
-    this.status = status;
+    this.status = status2;
     this.envelope = envelope;
     this.name = "HandshakeClientError";
     this.code = envelope.code;
@@ -18004,30 +18120,30 @@ function trustFailuresForKey(trustMaterial, trustKey, signature, verifiedAt) {
   return failures;
 }
 function certificateStatusFailures(trustMaterial, certificate) {
-  const status = trustMaterial.statusRecords.find((record2) => record2.subjectKind === "certificate" && record2.subjectRef === certificate.authorityCertificateId);
-  if (!status)
+  const status2 = trustMaterial.statusRecords.find((record2) => record2.subjectKind === "certificate" && record2.subjectRef === certificate.authorityCertificateId);
+  if (!status2)
     return [];
-  if (status.status === "status_unavailable") {
+  if (status2.status === "status_unavailable") {
     return [
       failure("trust_status_unavailable", "Certificate status is unavailable.", certificate.authorityCertificateId)
     ];
   }
-  if (status.status === "revoked") {
+  if (status2.status === "revoked") {
     return [
       failure("trust_certificate_status_revoked", "Certificate status record marks the certificate revoked.", certificate.authorityCertificateId)
     ];
   }
-  if (status.status === "stale" || status.status === "retired") {
+  if (status2.status === "stale" || status2.status === "retired") {
     return [
       failure("trust_certificate_status_stale", "Certificate status record is stale or retired.", certificate.authorityCertificateId)
     ];
   }
   return [];
 }
-function statusFailureFor(subject, status, ref) {
-  if (status === "retired")
+function statusFailureFor(subject, status2, ref) {
+  if (status2 === "retired")
     return failure("trust_key_retired", `Pinned trust ${subject} is retired.`, ref);
-  if (status === "revoked")
+  if (status2 === "revoked")
     return failure("trust_key_revoked", `Pinned trust ${subject} is revoked.`, ref);
   return failure("trust_key_stale", `Pinned trust ${subject} is stale.`, ref);
 }

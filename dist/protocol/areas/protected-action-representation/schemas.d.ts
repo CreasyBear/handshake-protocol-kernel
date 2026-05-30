@@ -166,11 +166,11 @@ export declare const ProtectedActionEvidenceProjectionSchema: z.ZodObject<{
         gateway_admission: "gateway_admission";
         proof_gap: "proof_gap";
         receipt: "receipt";
+        authority_certificate: "authority_certificate";
         policy_decision: "policy_decision";
         mutation_attempt: "mutation_attempt";
         durable_refusal: "durable_refusal";
         replay_refusal: "replay_refusal";
-        authority_certificate: "authority_certificate";
         generated_graph: "generated_graph";
         runtime_proposal: "runtime_proposal";
         greenlight_state: "greenlight_state";
