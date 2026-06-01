@@ -55,6 +55,135 @@ export declare const HostedReadinessStateSchema: z.ZodEnum<{
     not_promoted: "not_promoted";
 }>;
 export type HostedReadinessState = z.infer<typeof HostedReadinessStateSchema>;
+export declare const HostedAgenticEndpointAccessBypassPostureSchema: z.ZodEnum<{
+    unknown: "unknown";
+    stale: "stale";
+    blocked: "blocked";
+    unblocked: "unblocked";
+    inconclusive: "inconclusive";
+}>;
+export type HostedAgenticEndpointAccessBypassPosture = z.infer<typeof HostedAgenticEndpointAccessBypassPostureSchema>;
+export declare const HostedAgenticEndpointAccessCapabilityStatusSchema: z.ZodEnum<{
+    unknown: "unknown";
+    stale: "stale";
+    unsupported: "unsupported";
+    supported: "supported";
+}>;
+export type HostedAgenticEndpointAccessCapabilityStatus = z.infer<typeof HostedAgenticEndpointAccessCapabilityStatusSchema>;
+export declare const HostedAgenticEndpointAccessConfigSchema: z.ZodObject<{
+    enabled: z.ZodBoolean;
+    protectedSurfaceBindingRef: z.ZodString;
+    protectedSurfaceBindingDigest: z.ZodString;
+    gatewayAuthorityHolderRef: z.ZodString;
+    capabilityReportRef: z.ZodString;
+    kernelVersion: z.ZodString;
+    middlewareVersion: z.ZodString;
+    cloudConfigRevision: z.ZodString;
+    runtimePostureStatus: z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        unsupported: "unsupported";
+        supported: "supported";
+    }>;
+    rawBypassPosture: z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        blocked: "blocked";
+        unblocked: "unblocked";
+        inconclusive: "inconclusive";
+    }>;
+    siblingBypassPosture: z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        blocked: "blocked";
+        unblocked: "unblocked";
+        inconclusive: "inconclusive";
+    }>;
+    supportedEndpointAccessSchemaVersions: z.ZodArray<z.ZodString>;
+    supportedDelegationEvidenceKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    supportedPolicyFeatures: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    supportedReadbackKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    delegatedRequestTranscriptRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    delegatedRequestTranscriptDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    delegatedRequestTranscriptBindingDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    dryRunTranscriptRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    dryRunTranscriptDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    dryRunTranscriptBindingDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    readbackRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    readbackDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+}, z.core.$strict>;
+export type HostedAgenticEndpointAccessConfig = z.infer<typeof HostedAgenticEndpointAccessConfigSchema>;
+export type HostedAgenticEndpointAccessConfigInput = z.input<typeof HostedAgenticEndpointAccessConfigSchema>;
+export declare const HostedAgenticEndpointAccessReadinessReportSchema: z.ZodObject<{
+    configured: z.ZodBoolean;
+    readinessState: z.ZodEnum<{
+        read_only: "read_only";
+        active: "active";
+        missing: "missing";
+        disabled: "disabled";
+        configured_but_unverified: "configured_but_unverified";
+        not_promoted: "not_promoted";
+    }>;
+    supported: z.ZodBoolean;
+    protectedSurfaceBindingRef: z.ZodNullable<z.ZodString>;
+    protectedSurfaceBindingDigest: z.ZodNullable<z.ZodString>;
+    gatewayAuthorityHolderRef: z.ZodNullable<z.ZodString>;
+    capabilityReportRef: z.ZodNullable<z.ZodString>;
+    kernelVersion: z.ZodNullable<z.ZodString>;
+    middlewareVersion: z.ZodNullable<z.ZodString>;
+    cloudConfigRevision: z.ZodNullable<z.ZodString>;
+    runtimePostureStatus: z.ZodNullable<z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        unsupported: "unsupported";
+        supported: "supported";
+    }>>;
+    rawBypassPosture: z.ZodNullable<z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        blocked: "blocked";
+        unblocked: "unblocked";
+        inconclusive: "inconclusive";
+    }>>;
+    siblingBypassPosture: z.ZodNullable<z.ZodEnum<{
+        unknown: "unknown";
+        stale: "stale";
+        blocked: "blocked";
+        unblocked: "unblocked";
+        inconclusive: "inconclusive";
+    }>>;
+    supportedEndpointAccessSchemaVersions: z.ZodArray<z.ZodString>;
+    supportedDelegationEvidenceKinds: z.ZodArray<z.ZodString>;
+    supportedPolicyFeatures: z.ZodArray<z.ZodString>;
+    supportedReadbackKinds: z.ZodArray<z.ZodString>;
+    delegatedRequestTranscriptRef: z.ZodNullable<z.ZodString>;
+    delegatedRequestTranscriptDigest: z.ZodNullable<z.ZodString>;
+    delegatedRequestTranscriptBindingDigest: z.ZodNullable<z.ZodString>;
+    dryRunTranscriptRef: z.ZodNullable<z.ZodString>;
+    dryRunTranscriptDigest: z.ZodNullable<z.ZodString>;
+    dryRunTranscriptBindingDigest: z.ZodNullable<z.ZodString>;
+    readbackRef: z.ZodNullable<z.ZodString>;
+    readbackDigest: z.ZodNullable<z.ZodString>;
+    storagePosture: z.ZodObject<{
+        d1Authority: z.ZodEnum<{
+            missing: "missing";
+            structured_evidence: "structured_evidence";
+        }>;
+        kvAuthority: z.ZodLiteral<"non_authoritative_cache">;
+    }, z.core.$strict>;
+    authorityBoundary: z.ZodObject<{
+        createsPolicyDecision: z.ZodLiteral<false>;
+        createsGreenlight: z.ZodLiteral<false>;
+        performsGatewayCheck: z.ZodLiteral<false>;
+        createsMutationAuthority: z.ZodLiteral<false>;
+        storesCredentialMaterial: z.ZodLiteral<false>;
+        storesPaymentMaterial: z.ZodLiteral<false>;
+        exportsDownstreamReceipt: z.ZodLiteral<false>;
+        mintsTerminalCertificate: z.ZodLiteral<false>;
+    }, z.core.$strict>;
+    unsupportedReasonCodes: z.ZodArray<z.ZodString>;
+}, z.core.$strict>;
+export type HostedAgenticEndpointAccessReadinessReport = z.infer<typeof HostedAgenticEndpointAccessReadinessReportSchema>;
 export declare const HostedRolePolicySchema: z.ZodObject<{
     admittedTransitionRoles: z.ZodArray<z.ZodEnum<{
         control_plane: "control_plane";
@@ -207,6 +336,48 @@ export declare const HostedAdmissionConfigSchema: z.ZodObject<{
         redacted_only: "redacted_only";
     }>;
     readinessExpectations: z.ZodArray<z.ZodString>;
+    agenticEndpointAccess: z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodBoolean;
+        protectedSurfaceBindingRef: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        gatewayAuthorityHolderRef: z.ZodString;
+        capabilityReportRef: z.ZodString;
+        kernelVersion: z.ZodString;
+        middlewareVersion: z.ZodString;
+        cloudConfigRevision: z.ZodString;
+        runtimePostureStatus: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            unsupported: "unsupported";
+            supported: "supported";
+        }>;
+        rawBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        siblingBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        supportedEndpointAccessSchemaVersions: z.ZodArray<z.ZodString>;
+        supportedDelegationEvidenceKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        supportedPolicyFeatures: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        supportedReadbackKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        delegatedRequestTranscriptRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        delegatedRequestTranscriptDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        delegatedRequestTranscriptBindingDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        dryRunTranscriptRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        dryRunTranscriptDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        dryRunTranscriptBindingDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        readbackRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        readbackDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
 export type HostedAdmissionConfig = z.infer<typeof HostedAdmissionConfigSchema>;
 export type HostedAdmissionConfigInput = z.input<typeof HostedAdmissionConfigSchema>;
@@ -357,6 +528,75 @@ export declare const HostedReadinessReportSchema: z.ZodObject<{
         redacted_only: "redacted_only";
     }>>;
     readinessExpectations: z.ZodArray<z.ZodString>;
+    agenticEndpointAccess: z.ZodObject<{
+        configured: z.ZodBoolean;
+        readinessState: z.ZodEnum<{
+            read_only: "read_only";
+            active: "active";
+            missing: "missing";
+            disabled: "disabled";
+            configured_but_unverified: "configured_but_unverified";
+            not_promoted: "not_promoted";
+        }>;
+        supported: z.ZodBoolean;
+        protectedSurfaceBindingRef: z.ZodNullable<z.ZodString>;
+        protectedSurfaceBindingDigest: z.ZodNullable<z.ZodString>;
+        gatewayAuthorityHolderRef: z.ZodNullable<z.ZodString>;
+        capabilityReportRef: z.ZodNullable<z.ZodString>;
+        kernelVersion: z.ZodNullable<z.ZodString>;
+        middlewareVersion: z.ZodNullable<z.ZodString>;
+        cloudConfigRevision: z.ZodNullable<z.ZodString>;
+        runtimePostureStatus: z.ZodNullable<z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            unsupported: "unsupported";
+            supported: "supported";
+        }>>;
+        rawBypassPosture: z.ZodNullable<z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>>;
+        siblingBypassPosture: z.ZodNullable<z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>>;
+        supportedEndpointAccessSchemaVersions: z.ZodArray<z.ZodString>;
+        supportedDelegationEvidenceKinds: z.ZodArray<z.ZodString>;
+        supportedPolicyFeatures: z.ZodArray<z.ZodString>;
+        supportedReadbackKinds: z.ZodArray<z.ZodString>;
+        delegatedRequestTranscriptRef: z.ZodNullable<z.ZodString>;
+        delegatedRequestTranscriptDigest: z.ZodNullable<z.ZodString>;
+        delegatedRequestTranscriptBindingDigest: z.ZodNullable<z.ZodString>;
+        dryRunTranscriptRef: z.ZodNullable<z.ZodString>;
+        dryRunTranscriptDigest: z.ZodNullable<z.ZodString>;
+        dryRunTranscriptBindingDigest: z.ZodNullable<z.ZodString>;
+        readbackRef: z.ZodNullable<z.ZodString>;
+        readbackDigest: z.ZodNullable<z.ZodString>;
+        storagePosture: z.ZodObject<{
+            d1Authority: z.ZodEnum<{
+                missing: "missing";
+                structured_evidence: "structured_evidence";
+            }>;
+            kvAuthority: z.ZodLiteral<"non_authoritative_cache">;
+        }, z.core.$strict>;
+        authorityBoundary: z.ZodObject<{
+            createsPolicyDecision: z.ZodLiteral<false>;
+            createsGreenlight: z.ZodLiteral<false>;
+            performsGatewayCheck: z.ZodLiteral<false>;
+            createsMutationAuthority: z.ZodLiteral<false>;
+            storesCredentialMaterial: z.ZodLiteral<false>;
+            storesPaymentMaterial: z.ZodLiteral<false>;
+            exportsDownstreamReceipt: z.ZodLiteral<false>;
+            mintsTerminalCertificate: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+        unsupportedReasonCodes: z.ZodArray<z.ZodString>;
+    }, z.core.$strict>;
     unsupportedCapabilities: z.ZodArray<z.ZodString>;
 }, z.core.$strict>;
 export type HostedReadinessReport = z.infer<typeof HostedReadinessReportSchema>;

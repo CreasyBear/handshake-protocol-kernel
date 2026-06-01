@@ -4,8 +4,8 @@ export declare const ReconcileSurfaceOperationInputSchema: z.ZodObject<{
     idempotencyKey: z.ZodString;
     observedDownstreamStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
     }>;

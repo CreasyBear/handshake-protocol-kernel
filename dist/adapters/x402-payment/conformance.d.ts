@@ -101,8 +101,8 @@ export declare const X402AuthorityCertificateEvidenceProfileSchema: z.ZodObject<
     }>>;
     downstreamOutcomeStatus: z.ZodNullable<z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";

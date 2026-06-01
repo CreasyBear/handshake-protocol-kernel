@@ -1,4 +1,4 @@
-import type { ContractStreamEvent, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
 export declare class D1ProtocolStore implements ProtocolStore {
     private readonly db;
     private readonly statements;
@@ -19,5 +19,9 @@ export declare class D1ProtocolStore implements ProtocolStore {
     consumeGreenlight(consumption: GreenlightConsumption): Promise<"consumed" | "already_consumed">;
     commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
     commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
+    commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
+    getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
+    commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
     private hasGreenlightConsumption;
+    private hasEndpointAccessLeaseClaim;
 }

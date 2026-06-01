@@ -16,3 +16,4 @@ export * from "../areas/operation-lifecycle/inputs";
 export * from "../areas/isolation-breaker/inputs";
 export * from "../areas/receipt-export/inputs";
 export * from "../areas/recovery/inputs";
+export * from "../areas/agentic-endpoint-access/inputs";

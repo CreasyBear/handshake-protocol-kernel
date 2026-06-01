@@ -46,6 +46,11 @@ export declare const ActionAttemptLifecycleStateSchema: z.ZodEnum<{
     gateway_proof_gap: "gateway_proof_gap";
     gateway_replayed: "gateway_replayed";
     gateway_conflict: "gateway_conflict";
+    endpoint_access_leased: "endpoint_access_leased";
+    endpoint_access_refused: "endpoint_access_refused";
+    endpoint_access_proof_gap: "endpoint_access_proof_gap";
+    endpoint_access_usage_recorded: "endpoint_access_usage_recorded";
+    endpoint_access_exhausted: "endpoint_access_exhausted";
     operation_reconciled: "operation_reconciled";
     downstream_proof_gap: "downstream_proof_gap";
     downstream_recovery_available: "downstream_recovery_available";
@@ -67,6 +72,7 @@ export declare const ActionAttemptAuthorityEffectSchema: z.ZodEnum<{
     proposed_commitment: "proposed_commitment";
     one_use_authority: "one_use_authority";
     gateway_admission: "gateway_admission";
+    bounded_endpoint_access: "bounded_endpoint_access";
     downstream_evidence: "downstream_evidence";
     future_authority_reduction: "future_authority_reduction";
 }>;
@@ -132,6 +138,11 @@ export declare const ActionAttemptLifecycleEntrySchema: z.ZodObject<{
         gateway_proof_gap: "gateway_proof_gap";
         gateway_replayed: "gateway_replayed";
         gateway_conflict: "gateway_conflict";
+        endpoint_access_leased: "endpoint_access_leased";
+        endpoint_access_refused: "endpoint_access_refused";
+        endpoint_access_proof_gap: "endpoint_access_proof_gap";
+        endpoint_access_usage_recorded: "endpoint_access_usage_recorded";
+        endpoint_access_exhausted: "endpoint_access_exhausted";
         operation_reconciled: "operation_reconciled";
         downstream_proof_gap: "downstream_proof_gap";
         downstream_recovery_available: "downstream_recovery_available";
@@ -152,6 +163,7 @@ export declare const ActionAttemptLifecycleEntrySchema: z.ZodObject<{
         proposed_commitment: "proposed_commitment";
         one_use_authority: "one_use_authority";
         gateway_admission: "gateway_admission";
+        bounded_endpoint_access: "bounded_endpoint_access";
         downstream_evidence: "downstream_evidence";
         future_authority_reduction: "future_authority_reduction";
     }>;

@@ -9,9 +9,9 @@ export declare const BypassProbeKindSchema: z.ZodEnum<{
 }>;
 export type BypassProbeKind = z.infer<typeof BypassProbeKindSchema>;
 export declare const BypassProbeOutcomeSchema: z.ZodEnum<{
+    inconclusive: "inconclusive";
     passed: "passed";
     failed: "failed";
-    inconclusive: "inconclusive";
 }>;
 export type BypassProbeOutcome = z.infer<typeof BypassProbeOutcomeSchema>;
 export declare const BypassProbeSchema: z.ZodObject<{
@@ -35,9 +35,9 @@ export declare const BypassProbeSchema: z.ZodObject<{
         failure_closed: "failure_closed";
     }>;
     probeOutcome: z.ZodEnum<{
+        inconclusive: "inconclusive";
         passed: "passed";
         failed: "failed";
-        inconclusive: "inconclusive";
     }>;
     sourceAuthority: z.ZodEnum<{
         unknown: "unknown";

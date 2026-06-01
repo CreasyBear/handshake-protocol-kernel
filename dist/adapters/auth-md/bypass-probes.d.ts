@@ -71,5 +71,5 @@ export type AuthMdProtectedApiCallBypassProbeSurface = {
 };
 export type AuthMdBypassPostureLabel = "prevented" | "detected" | "proof_gap";
 export declare function authMdProtectedApiCallBypassProbeExecutors(surface: AuthMdProtectedApiCallBypassProbeSurface): BypassProbeExecutor[];
-export declare function bypassProbeOutcomeForPostureLabel(label: AuthMdBypassPostureLabel): "passed" | "failed" | "inconclusive";
+export declare function bypassProbeOutcomeForPostureLabel(label: AuthMdBypassPostureLabel): "inconclusive" | "passed" | "failed";
 export declare function reasonCodeForPostureLabel(label: AuthMdBypassPostureLabel): string;

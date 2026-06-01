@@ -15114,6 +15114,11 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "gateway_proof_gap",
   "gateway_replayed",
   "gateway_conflict",
+  "endpoint_access_leased",
+  "endpoint_access_refused",
+  "endpoint_access_proof_gap",
+  "endpoint_access_usage_recorded",
+  "endpoint_access_exhausted",
   "operation_reconciled",
   "downstream_proof_gap",
   "downstream_recovery_available",
@@ -15134,6 +15139,7 @@ var ActionAttemptAuthorityEffectSchema = exports_external.enum([
   "proposed_commitment",
   "one_use_authority",
   "gateway_admission",
+  "bounded_endpoint_access",
   "downstream_evidence",
   "future_authority_reduction"
 ]);
@@ -17579,6 +17585,314 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/foundation/authority-safe-reference/index.ts
+var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "authority references must carry opaque refs or digests, not raw authority material"
+});
+function looksLikeEndpointAccessSecret(value) {
+  return endpointAccessStringVariants(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /PAYMENT-SIGNATURE\s*:/i,
+    /raw[_-]?payment[_-]?signature/i,
+    /private[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/.*\/secret/i,
+    /infisical:\/\/.*\/secret/i
+  ].some((pattern) => pattern.test(variant)));
+}
+function endpointAccessStringVariants(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like3(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like3(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/protocol/areas/agentic-endpoint-access/schemas.ts
+var agenticEndpointAccessSchemaVersion = "handshake.agentic-endpoint-access.v0.3.0";
+var AgenticEndpointAccessSafeReferenceSchema = AuthoritySafeReferenceSchema.describe("Rejects raw authority material such as PAYMENT-SIGNATURE, private keys, API keys, access tokens, and bearer tokens.");
+var AuthoritySafeStringSchema2 = AgenticEndpointAccessSafeReferenceSchema;
+var NonNegativeCounterSchema = exports_external.number().finite().nonnegative();
+var PositiveLimitSchema = exports_external.number().finite().positive();
+var BudgetSchema = exports_external.record(exports_external.string(), JsonValueSchema).default({});
+var EndpointAccessSurfaceBindingSourceSchema = exports_external.enum([
+  "protocol_config",
+  "cloud_config",
+  "ae_projection",
+  "operator_config",
+  "fixture"
+]);
+var EndpointAccessSurfaceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  actionClass: AuthoritySafeStringSchema2,
+  protectedSurfaceIntegrationRef: ResourceRefSchema.nullable().default(null),
+  bindingSource: EndpointAccessSurfaceBindingSourceSchema,
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  bindingDigest: DigestSchema
+});
+var AgenticEndpointAccessAuthorityBoundarySchema = exports_external.strictObject({
+  permitsEndpointAccess: exports_external.literal(true),
+  permitsMutation: exports_external.literal(false),
+  createsIndependentPolicyDecision: exports_external.literal(false),
+  createsIndependentGreenlight: exports_external.literal(false),
+  performsIndependentGatewayCheck: exports_external.literal(false),
+  exportsDownstreamReceipt: exports_external.literal(false),
+  mintsTerminalCertificate: exports_external.literal(false),
+  containsCredentialMaterial: exports_external.literal(false),
+  containsPaymentMaterial: exports_external.literal(false),
+  widensOperatingBounds: exports_external.literal(false),
+  freshActionContractRequiredForDownstreamAction: exports_external.literal(true)
+});
+var AgenticEndpointAccessBypassPostureSchema = exports_external.enum([
+  "blocked",
+  "unblocked",
+  "unknown",
+  "stale",
+  "inconclusive"
+]);
+var AgenticEndpointAccessStateSchema = exports_external.enum([
+  "attempted",
+  "leased",
+  "refused",
+  "proof_gap",
+  "expired",
+  "exhausted",
+  "quarantined",
+  "revoked"
+]);
+var AgenticEndpointAccessClearanceStatusSchema = exports_external.enum(["leased", "refused", "proof_gap"]);
+var AgenticEndpointAccessFailClosedBehaviorSchema = exports_external.enum(["refuse", "proof_gap", "quarantine"]);
+var AgenticEndpointAccessUsageKindSchema = exports_external.enum(["request", "token", "tool_call", "cost_unit"]);
+var AgenticEndpointAccessCapabilityStatusSchema = exports_external.enum(["supported", "unsupported", "stale", "unknown"]);
+var AgenticEndpointAccessPolicySchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  policyId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  operatingBoundsId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  requiredDelegationEvidence: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  acceptedAgentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  principalBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  agentBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  runtimePostureRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  rawBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  siblingBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  leaseTtlSeconds: PositiveLimitSchema,
+  failClosedBehavior: AgenticEndpointAccessFailClosedBehaviorSchema,
+  capabilityRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema
+});
+var AgenticEndpointAccessAttemptSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  generatedCodeOrSpecRef: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  objectiveRef: AuthoritySafeStringSchema2,
+  delegationEvidenceRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  agentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  runtimePostureRefs: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  requestedLeaseTtlSeconds: PositiveLimitSchema,
+  requestedBudget: BudgetSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  capabilitiesPresented: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  attemptedAt: IsoDateSchema
+});
+var AgenticEndpointAccessClearanceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  clearanceBindingId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema.nullable(),
+  greenlightId: IdSchema.nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema.nullable(),
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  refusalRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  clearanceStatus: AgenticEndpointAccessClearanceStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evaluatedAt: IsoDateSchema
+});
+var AgenticEndpointAccessLeaseSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  leaseId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  operatingBoundsId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  allowedUse: exports_external.literal("bounded_endpoint_entry_only"),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  usageCounters: exports_external.record(exports_external.string(), NonNegativeCounterSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  revokedAt: IsoDateSchema.nullable().default(null),
+  authorityBoundary: AgenticEndpointAccessAuthorityBoundarySchema
+});
+var AgenticEndpointAccessUsageEventSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  usageEventId: IdSchema,
+  leaseId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  usageKind: AgenticEndpointAccessUsageKindSchema,
+  amount: PositiveLimitSchema,
+  counterAfter: NonNegativeCounterSchema,
+  occurredAt: IsoDateSchema,
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([])
+});
+var AgenticEndpointAccessReadbackSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  readbackId: IdSchema,
+  leaseId: IdSchema.nullable(),
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  attemptDigest: DigestSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  capabilityReportRef: AuthoritySafeStringSchema2,
+  healthReportRef: AuthoritySafeStringSchema2,
+  usageSummary: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  linkedActionRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedReceiptRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedProofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  publicVerifyUrl: exports_external.string().url(),
+  downstreamReceiptBoundary: exports_external.literal("linked_receipts_are_not_endpoint_access_authorization")
+});
+var AgenticEndpointAccessCapabilitiesSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  capabilityReportId: IdSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  cloudConfigRevision: AuthoritySafeStringSchema2,
+  runtimePostureStatus: AgenticEndpointAccessCapabilityStatusSchema,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  supportedEndpointAccessSchemaVersions: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  supportedDelegationEvidenceKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedPolicyFeatures: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedReadbackKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  failClosedReasons: exports_external.array(ReasonCodeSchema).default([]),
+  reportedAt: IsoDateSchema
+});
+
 // src/integrations/a1-evidence/delegation-evidence-record.ts
 var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
 var DelegationEvidenceRecordSchema = exports_external.object({
@@ -17839,6 +18153,14 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "action_type",
   "gateway_registry_entry",
   "operating_envelope",
+  "endpoint_access_surface_binding",
+  "agentic_endpoint_access_policy",
+  "agentic_endpoint_access_attempt",
+  "agentic_endpoint_access_clearance_binding",
+  "agentic_endpoint_access_lease",
+  "agentic_endpoint_access_usage_event",
+  "agentic_endpoint_access_readback",
+  "agentic_endpoint_access_capabilities",
   "gateway_credential_ref",
   "delegated_authority_ref",
   "delegated_authority_status_transition",
@@ -17884,6 +18206,38 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("action_type"), payload: ActionTypeSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("gateway_registry_entry"), payload: GatewayRegistryEntrySchema }),
   exports_external.strictObject({ objectType: exports_external.literal("operating_envelope"), payload: OperatingEnvelopeSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("endpoint_access_surface_binding"),
+    payload: EndpointAccessSurfaceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_policy"),
+    payload: AgenticEndpointAccessPolicySchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_attempt"),
+    payload: AgenticEndpointAccessAttemptSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_clearance_binding"),
+    payload: AgenticEndpointAccessClearanceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_lease"),
+    payload: AgenticEndpointAccessLeaseSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_usage_event"),
+    payload: AgenticEndpointAccessUsageEventSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_readback"),
+    payload: AgenticEndpointAccessReadbackSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_capabilities"),
+    payload: AgenticEndpointAccessCapabilitiesSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("gateway_credential_ref"), payload: GatewayCredentialRefSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("delegated_authority_ref"), payload: DelegatedAuthorityRefSchema }),
   exports_external.strictObject({

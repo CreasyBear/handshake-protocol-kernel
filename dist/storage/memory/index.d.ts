@@ -1,4 +1,4 @@
-import type { ContractStreamEvent, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
 export declare class InMemoryProtocolStore implements ProtocolStore {
     private records;
     private events;
@@ -10,6 +10,8 @@ export declare class InMemoryProtocolStore implements ProtocolStore {
     private currentProtectedPathPostures;
     private currentProtectedSurfaceOperationClaims;
     private receiptsByMutationAttempt;
+    private endpointAccessLeaseClaims;
+    private endpointAccessUsageCounters;
     putRecord(record: StoredProtocolRecord): Promise<void>;
     putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
     getRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
@@ -33,8 +35,12 @@ export declare class InMemoryProtocolStore implements ProtocolStore {
     consumeGreenlight(consumption: GreenlightConsumption): Promise<"consumed" | "already_consumed">;
     commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
     commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
+    commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
+    getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
+    commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
     countRecordsOfType(objectType: ProtocolObjectType): number;
     listEventsForPartition(streamId: string, partitionKey: string): ContractStreamEvent[];
     private hasStreamOffset;
+    private hasRecordDigestConflict;
     private stageRecordsAndEvents;
 }

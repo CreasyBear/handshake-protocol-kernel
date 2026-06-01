@@ -39,8 +39,8 @@ export declare const RecoveryRecommendationSchema: z.ZodObject<{
     }>;
     sourceGatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
         proof_gap: "proof_gap";
-        passed: "passed";
         refused: "refused";
+        passed: "passed";
     }>>;
     sourceMutationAttemptStatus: z.ZodEnum<{
         unknown: "unknown";
@@ -52,8 +52,8 @@ export declare const RecoveryRecommendationSchema: z.ZodObject<{
     }>;
     sourceDownstreamExecutionStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";

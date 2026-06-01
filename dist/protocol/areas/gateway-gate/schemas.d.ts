@@ -1,8 +1,8 @@
 import { z } from "zod";
 export declare const GateDecisionSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
-    passed: "passed";
     refused: "refused";
+    passed: "passed";
 }>;
 export type GateDecision = z.infer<typeof GateDecisionSchema>;
 export declare const GatewayCheckAttemptSchema: z.ZodObject<{
@@ -40,8 +40,8 @@ export declare const GatewayCheckAttemptSchema: z.ZodObject<{
     }>>;
     gateDecision: z.ZodEnum<{
         proof_gap: "proof_gap";
-        passed: "passed";
         refused: "refused";
+        passed: "passed";
     }>;
     gateDecisionReasonCode: z.ZodString;
     consumedGreenlight: z.ZodBoolean;

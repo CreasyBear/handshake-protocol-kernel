@@ -154,10 +154,10 @@ export declare const AuthorityCertificateSchema: z.ZodObject<{
         policyDecisionStatus: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         greenlightRef: z.ZodNullable<z.ZodString>;
         gateAttemptRef: z.ZodNullable<z.ZodString>;
@@ -246,8 +246,8 @@ export declare const AuthorityCertificateSchema: z.ZodObject<{
         }>>;
         downstreamOutcomeStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -674,10 +674,10 @@ export declare const AuthorityCertificateVerificationResponseSchema: z.ZodObject
         policyDecisionStatus: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         greenlightRef: z.ZodNullable<z.ZodString>;
         gateAttemptRef: z.ZodNullable<z.ZodString>;
@@ -766,8 +766,8 @@ export declare const AuthorityCertificateVerificationResponseSchema: z.ZodObject
         }>>;
         downstreamOutcomeStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";

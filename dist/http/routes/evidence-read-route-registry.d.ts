@@ -204,10 +204,10 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         policyDecisionStatus: import("zod").ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         greenlightRef: import("zod").ZodNullable<import("zod").ZodString>;
         gateAttemptRef: import("zod").ZodNullable<import("zod").ZodString>;
@@ -296,8 +296,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         }>>;
         downstreamOutcomeStatus: import("zod").ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -380,9 +380,9 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             gateway_proof_gap: "gateway_proof_gap";
             replay_refused: "replay_refused";
             isolated: "isolated";
+            quarantined: "quarantined";
             downstream_refused: "downstream_refused";
             gateway_refused: "gateway_refused";
-            quarantined: "quarantined";
             halted: "halted";
             greenlight_available: "greenlight_available";
             downstream_pending: "downstream_pending";
@@ -407,17 +407,17 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         policyDecisionStatus: import("zod").ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         agreementObligationPolicy: import("zod").ZodObject<{
             sourceAuthority: import("zod").ZodLiteral<"policy_decision_snapshot">;
             evaluationStatus: import("zod").ZodEnum<{
                 proof_gap: "proof_gap";
-                greenlight: "greenlight";
                 refuse: "refuse";
+                greenlight: "greenlight";
             }>;
             ok: import("zod").ZodBoolean;
             reasonCode: import("zod").ZodNullable<import("zod").ZodString>;
@@ -447,8 +447,8 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         }>;
         downstreamOutcomeStatus: import("zod").ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -515,9 +515,9 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 gateway_proof_gap: "gateway_proof_gap";
                 replay_refused: "replay_refused";
                 isolated: "isolated";
+                quarantined: "quarantined";
                 downstream_refused: "downstream_refused";
                 gateway_refused: "gateway_refused";
-                quarantined: "quarantined";
                 halted: "halted";
                 greenlight_available: "greenlight_available";
                 downstream_pending: "downstream_pending";
@@ -657,15 +657,15 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         policyDecisionStatus: import("zod").ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         gatewayCheckStatus: import("zod").ZodNullable<import("zod").ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         gatewayAdmissionStatus: import("zod").ZodEnum<{
             proof_gap: "proof_gap";
@@ -690,16 +690,16 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         }>;
         downstreamExecutionStatus: import("zod").ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
         }>;
         downstreamOutcomeStatus: import("zod").ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -899,9 +899,9 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 failure_closed: "failure_closed";
             }>;
             probeOutcome: import("zod").ZodEnum<{
+                inconclusive: "inconclusive";
                 passed: "passed";
                 failed: "failed";
-                inconclusive: "inconclusive";
             }>;
             sourceAuthority: import("zod").ZodEnum<{
                 unknown: "unknown";

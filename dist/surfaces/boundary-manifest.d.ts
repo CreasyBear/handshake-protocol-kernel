@@ -1,5 +1,5 @@
 export declare const surfaceBoundaryManifestVersion: "surface-boundary.v0.1";
-export declare const surfaceIds: readonly ["sdk.runtime", "sdk.evidence", "sdk.control_plane", "sdk.policy", "sdk.adapter", "sdk.install", "sdk.gateway", "cli.operator", "cli.evidence", "cli.process", "mcp.runtime", "x402.protected_tool", "surfaces.a2a_negotiation", "surfaces.a2a_readback", "surfaces.service_workflow_admission", "surfaces.hosted_admission"];
+export declare const surfaceIds: readonly ["sdk.runtime", "sdk.evidence", "sdk.control_plane", "sdk.policy", "sdk.adapter", "sdk.install", "sdk.gateway", "cli.operator", "cli.evidence", "cli.process", "mcp.runtime", "x402.protected_tool", "surfaces.a2a_negotiation", "surfaces.a2a_readback", "surfaces.service_workflow_admission", "surfaces.hosted_admission", "surfaces.agentic_endpoint_access_readback"];
 export type SurfaceId = (typeof surfaceIds)[number];
 export declare const surfaceRouteFamilies: readonly ["action_contract_proposal_write", "adapter_definition_write", "bypass_probe_write", "catalog_install_write", "certificate_mint_write", "certificate_verify_local", "delegated_authority_write", "evidence_projection_read", "gateway_credential_write", "gateway_check_write", "install_health_read", "install_proposal_shape_read", "isolation_write", "local_process_supervision", "policy_decision_write", "protected_path_posture_write", "raw_record_read", "receipt_export_write", "recovery_write", "runtime_evidence_write", "runtime_ingress_proposal_write", "surface_reconciliation_write", "tool_call_draft_write"];
 export type SurfaceRouteFamily = (typeof surfaceRouteFamilies)[number];
@@ -134,6 +134,32 @@ export declare const surfaceBoundaryManifest: {
             readonly receiptExportCreated: false;
         };
         readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "hosted_admission_package_is_not_http_internals", "hosted_caller_identity_is_not_reusable_auth", "verifier_adapter_claim_is_not_gateway_check"];
+    };
+    readonly "surfaces.agentic_endpoint_access_readback": {
+        readonly id: "surfaces.agentic_endpoint_access_readback";
+        readonly status: "active";
+        readonly plane: "evidence";
+        readonly custodyRole: "review_custody";
+        readonly authorityPosture: "evidence_only";
+        readonly sourceRoots: readonly ["src/surfaces/agentic-endpoint-access-readback"];
+        readonly allowedRouteFamilies: readonly ["evidence_projection_read", "install_health_read"];
+        readonly forbiddenRouteFamilies: readonly ["certificate_mint_write", "isolation_write", "policy_decision_write", "raw_record_read", "receipt_export_write", "recovery_write", "action_contract_proposal_write", "bypass_probe_write", "catalog_install_write", "gateway_check_write", "gateway_credential_write", "runtime_evidence_write", "surface_reconciliation_write", "tool_call_draft_write"];
+        readonly allowedImportRoots: readonly ["src/surfaces/agentic-endpoint-access-readback", "src/protocol/areas/agentic-endpoint-access"];
+        readonly forbiddenImportFragments: readonly ["protocol/kernel", "protocol/areas/policy-greenlight/guards", "protocol/areas/policy-greenlight/policy", "protocol/areas/policy-greenlight/policy-record", "protocol/areas/policy-greenlight/sequence-dependencies", "protocol/areas/policy-greenlight/transitions", "protocol/areas/gateway-gate/artifacts", "protocol/areas/gateway-gate/gateway-policy", "protocol/areas/gateway-gate/guards", "protocol/areas/gateway-gate/replay-refusal", "protocol/areas/gateway-gate/transitions", "protocol/areas/receipt-export/transitions", "protocol/areas/authority-certificate/signing", "protocol/areas/authority-certificate/transitions", "storage/", "adapters/x402-payment/wallet-gateway", "experimental", "adapters/", "storage/"];
+        readonly forbiddenCredentialShapes: readonly ["allRoles", "CallerAuthTokens", "transitionToken", "transitionTokens", "control_plane_token", "gateway_custody_token", "private_key", "signer", "wallet"];
+        readonly forbiddenOutputFields: readonly [...("signer" | "PAYMENT-SIGNATURE" | "rawInternalRecord" | "PaymentPayload" | "authorityCertificateMint" | "gatewayCheckInput" | "mutationCommand" | "privateKey" | "rawCredentialMaterial" | "receiptExport")[], "downstreamSuccess"];
+        readonly requiredNonAuthorityFlags: {
+            readonly authorityCreated: false;
+            readonly authorityCertificateMinted: false;
+            readonly credentialMaterialIncluded: false;
+            readonly gatewayCheckPerformed: false;
+            readonly greenlightCreated: false;
+            readonly mutationAttempted: false;
+            readonly mutationCommandIncluded: false;
+            readonly rawInternalRecordIncluded: false;
+            readonly receiptExportCreated: false;
+        };
+        readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "endpoint_access_readback_is_not_mutation_authority", "endpoint_access_lease_is_endpoint_entry_only", "fresh_action_contract_required"];
     };
     readonly "mcp.runtime": {
         readonly id: "mcp.runtime";

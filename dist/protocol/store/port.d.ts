@@ -97,6 +97,34 @@ export type GatewayCheckCommit = {
     records: StoredProtocolRecord[];
     events: ContractStreamEvent[];
 };
+export type EndpointAccessLeaseClaim = {
+    greenlightId: string;
+    leaseId: string;
+    tenantId: string;
+    organizationId: string;
+    claimedAt: string;
+};
+export type EndpointAccessUsageCounterKey = {
+    tenantId: string;
+    organizationId: string;
+    leaseId: string;
+    usageKind: string;
+};
+export type EndpointAccessUsageCounterReservation = EndpointAccessUsageCounterKey & {
+    expectedCounter: number;
+    counterAfter: number;
+    updatedAt: string;
+};
+export type EndpointAccessLeaseCommit = {
+    leaseClaim: EndpointAccessLeaseClaim;
+    records: StoredProtocolRecord[];
+    events: ContractStreamEvent[];
+};
+export type EndpointAccessUsageCommit = {
+    usageCounterReservation: EndpointAccessUsageCounterReservation;
+    records: StoredProtocolRecord[];
+    events: ContractStreamEvent[];
+};
 export type ProtocolCommit = {
     recordConflictMode?: "replace" | "absent_or_same";
     greenlightIssuanceClaims?: GreenlightIssuanceClaim[];
@@ -113,6 +141,8 @@ export type ProtocolCommit = {
 };
 export type ProtocolCommitResult = "committed" | "stream_conflict" | "record_digest_conflict" | "recovery_terminal_conflict" | "greenlight_issuance_conflict" | "idempotency_ledger_conflict";
 export type GatewayCheckCommitResult = "committed" | "already_consumed" | "operation_claim_conflict" | "receipt_index_conflict" | "stream_conflict";
+export type EndpointAccessLeaseCommitResult = "committed" | "greenlight_already_leased" | "record_digest_conflict" | "stream_conflict";
+export type EndpointAccessUsageCommitResult = "committed" | "counter_conflict" | "record_digest_conflict" | "stream_conflict";
 export type StreamTail = {
     offset: number;
     eventDigest: string;
@@ -143,4 +173,7 @@ export interface ProtocolStore {
     consumeGreenlight(consumption: GreenlightConsumption): Promise<"consumed" | "already_consumed">;
     commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
     commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
+    commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
+    getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
+    commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
 }

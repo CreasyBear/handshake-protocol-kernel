@@ -72,13 +72,13 @@ export declare function evidenceReceiptTimelineCommand(value: unknown): import("
     gateAttemptRef: string | null;
     mutationAttemptRef: string | null;
     gatewayId: string;
-    policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
-    gatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
+    policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
+    gatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
     gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
     greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
     mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
-    downstreamExecutionStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
-    downstreamOutcomeStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
+    downstreamExecutionStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
+    downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
     proofGapRefs: string[];
     finalityStatus: "unknown" | "pending" | "final" | "suspect";
     receiptDigest: string | null;
@@ -146,7 +146,7 @@ export declare function installHealthProjectionCommand(value: unknown): import("
     bypassProbeCoverage: {
         bypassProbeId: string;
         probeKind: "credential_custody" | "raw_sibling_blocking" | "mcp_direct_call_blocking" | "token_passthrough_blocking" | "wrapper_drift" | "failure_closed";
-        probeOutcome: "passed" | "failed" | "inconclusive";
+        probeOutcome: "inconclusive" | "passed" | "failed";
         sourceAuthority: "unknown" | "conformance_fixture" | "runtime_probe" | "gateway_probe" | "operator_attestation" | "hosted_monitor";
         probeDigest: string;
     }[];

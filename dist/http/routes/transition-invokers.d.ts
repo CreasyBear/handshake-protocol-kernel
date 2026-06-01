@@ -479,7 +479,7 @@ export declare const transitionInvokers: {
         resourceRef: string;
         protectedSurfaceKind: string;
         probeKind: "credential_custody" | "raw_sibling_blocking" | "mcp_direct_call_blocking" | "token_passthrough_blocking" | "wrapper_drift" | "failure_closed";
-        probeOutcome: "passed" | "failed" | "inconclusive";
+        probeOutcome: "inconclusive" | "passed" | "failed";
         sourceAuthority: "unknown" | "conformance_fixture" | "runtime_probe" | "gateway_probe" | "operator_attestation" | "hosted_monitor";
         reasonCodes: string[];
         evidenceRefs: string[];
@@ -600,7 +600,7 @@ export declare const transitionInvokers: {
         bypassProbeCoverage: {
             bypassProbeId: string;
             probeKind: "credential_custody" | "raw_sibling_blocking" | "mcp_direct_call_blocking" | "token_passthrough_blocking" | "wrapper_drift" | "failure_closed";
-            probeOutcome: "passed" | "failed" | "inconclusive";
+            probeOutcome: "inconclusive" | "passed" | "failed";
             sourceAuthority: "unknown" | "conformance_fixture" | "runtime_probe" | "gateway_probe" | "operator_attestation" | "hosted_monitor";
             probeDigest: string;
         }[];
@@ -771,7 +771,7 @@ export declare const transitionInvokers: {
         isolationStateId: string;
         scopeType: "gateway" | "agent" | "tenant" | "organization" | "run" | "envelope" | "action_class" | "credential_ref" | "authority_ref" | "resource";
         scopeId: string;
-        state: "active" | "revoked" | "review_only" | "rate_limited" | "quarantined" | "halted" | "state_suspect";
+        state: "active" | "revoked" | "quarantined" | "review_only" | "rate_limited" | "halted" | "state_suspect";
         reasonCode: string;
         reasonSummary: string;
         sourceDecisionRef: string;
@@ -805,14 +805,14 @@ export declare const transitionInvokers: {
         agentId: string;
         runId: string;
         gatewayPolicyVersion: string;
-        policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
-        gatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
+        policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
+        gatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
         gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
         gatewayCheckedAt: string | null;
         greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
         mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
-        downstreamExecutionStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
-        downstreamOutcomeStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
+        downstreamExecutionStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
+        downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         proofGapStatus: "none" | "present";
         proofGapIds: string[];
         proofGapReasonCodes: string[];
@@ -865,9 +865,9 @@ export declare const transitionInvokers: {
         sourceMutationAttemptId: string | null;
         sourceRefusalOrGapRef: string;
         sourceFinalityStatus: "unknown" | "pending" | "final" | "suspect";
-        sourceGatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
+        sourceGatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
         sourceMutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
-        sourceDownstreamExecutionStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
+        sourceDownstreamExecutionStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         recommendedPath: "narrower_action_contract_required" | "gateway_reconciliation_required" | "human_review_required" | "compensating_action_contract_required" | "halt_without_retry";
         allowedNextActionClasses: string[];
         requiredNewEvidence: string[];

@@ -1,4 +1,5 @@
 import type { ActionContract, ProposeActionContractInput } from "./areas/action-contract";
+import { type AgenticEndpointAccessLeaseIssueResult, type AgenticEndpointAccessUsageResult, type IssueAgenticEndpointAccessLeaseInput, type RecordAgenticEndpointAccessUsageEventInput } from "./areas/agentic-endpoint-access";
 import type { AuthorityCertificate, CreateAuthorityCertificateInput } from "./areas/authority-certificate";
 import type { CredentialResolutionEvidence, GatewayCredentialRef, GatewayCustodyProofPacket, RecordCredentialResolutionEvidenceInput, RecordGatewayCustodyProofPacketInput, RegisterGatewayCredentialRefInput } from "./areas/credential-custody";
 import type { DelegatedAuthorityRef, DelegatedAuthorityStatusTransition, RegisterDelegatedAuthorityRefInput, TransitionDelegatedAuthorityStatusInput } from "./areas/delegated-authority";
@@ -55,6 +56,8 @@ export declare class HandshakeKernel {
     createAuthorityCertificate(input: CreateAuthorityCertificateInput): Promise<AuthorityCertificate>;
     evaluatePolicy(input: EvaluatePolicyInput): Promise<PolicyEvaluationResponse>;
     gatewayCheck(input: GatewayCheckInput): Promise<GatewayCheckResult>;
+    issueAgenticEndpointAccessLease(input: IssueAgenticEndpointAccessLeaseInput): Promise<AgenticEndpointAccessLeaseIssueResult>;
+    recordAgenticEndpointAccessUsageEvent(input: RecordAgenticEndpointAccessUsageEventInput): Promise<AgenticEndpointAccessUsageResult>;
     createReviewDecision(input: CreateReviewDecisionInput): Promise<ReviewDecision>;
     createReviewArtifact(input: CreateReviewArtifactInput): Promise<ReviewArtifactRecord>;
     reconcileSurfaceOperation(input: ReconcileSurfaceOperationInput): Promise<SurfaceOperationReconciliationResult>;

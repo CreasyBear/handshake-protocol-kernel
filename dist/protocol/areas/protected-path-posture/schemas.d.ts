@@ -34,9 +34,9 @@ export declare const ProtectedPathBypassProbeCoverageSchema: z.ZodObject<{
         failure_closed: "failure_closed";
     }>;
     probeOutcome: z.ZodEnum<{
+        inconclusive: "inconclusive";
         passed: "passed";
         failed: "failed";
-        inconclusive: "inconclusive";
     }>;
     sourceAuthority: z.ZodEnum<{
         unknown: "unknown";
@@ -109,9 +109,9 @@ export declare const ProtectedPathPostureSchema: z.ZodObject<{
             failure_closed: "failure_closed";
         }>;
         probeOutcome: z.ZodEnum<{
+            inconclusive: "inconclusive";
             passed: "passed";
             failed: "failed";
-            inconclusive: "inconclusive";
         }>;
         sourceAuthority: z.ZodEnum<{
             unknown: "unknown";

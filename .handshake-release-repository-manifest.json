@@ -1,15 +1,15 @@
 {
   "manifestKind": "handshake.release_repository_artifact_projection",
   "manifestVersion": "v1",
-  "generatedAt": "2026-05-30T06:05:10.812Z",
+  "generatedAt": "2026-06-01T13:55:30.331Z",
   "repositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel",
   "package": {
     "name": "handshake-protocol-kernel",
-    "version": "0.2.9",
+    "version": "0.3.0",
     "mcpName": "io.github.CreasyBear/handshake-protocol-kernel",
     "repositoryUrl": "git+https://github.com/CreasyBear/handshake-protocol-kernel.git",
     "serverJsonName": "io.github.CreasyBear/handshake-protocol-kernel",
-    "serverJsonVersion": "0.2.9",
+    "serverJsonVersion": "0.3.0",
     "serverJsonRepositoryUrl": "https://github.com/CreasyBear/handshake-protocol-kernel"
   },
   "authorityBoundary": {
@@ -44,8 +44,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "d6f6c2878e260d658da2b89a48699558f556c645d11cc93920d05bf44848dfcc",
-      "sizeBytes": 7991,
+      "sha256": "0e961b325290d9ce95dc55017c7600bccd199f825653ab128ac50fc6b752f9de",
+      "sizeBytes": 9869,
       "executable": false
     },
     {
@@ -86,7 +86,7 @@
     },
     {
       "path": "dist/adapters/auth-md/bypass-probes.d.ts",
-      "sha256": "1b7d3eda3f9754b202bb58ff202d3845ff6914a55a7c82b48ba06e0dd719ec17",
+      "sha256": "7aa6dc145198c6218bcb186c58038e42057af7e553cd7199d460ba36ebd734ed",
       "sizeBytes": 2627,
       "executable": false
     },
@@ -212,7 +212,7 @@
     },
     {
       "path": "dist/adapters/x402-payment/conformance.d.ts",
-      "sha256": "5539848cb8e8db4a84495ead1c5b336ee9b4468311cf44a71cf9e42928e7cbb6",
+      "sha256": "68197600d4fa5eec6905d4b1b8f974fd2e778791517ec336071858b97d0c4ff6",
       "sizeBytes": 10347,
       "executable": false
     },
@@ -308,14 +308,14 @@
     },
     {
       "path": "dist/bin/handshake-mcp.mjs",
-      "sha256": "a1181b2ec143345856155fb1a4e3da008629bd1c2697793cc03f097353300e0b",
-      "sizeBytes": 1032184,
+      "sha256": "aefb615a3c58f3f9ab23f061ed88e32008e0ad66cce607af58177bd3e27b8d3e",
+      "sizeBytes": 1037578,
       "executable": false
     },
     {
       "path": "dist/bin/handshake.mjs",
-      "sha256": "b03da0ab0d5fe35dc3ec6f98486ceff8443304d46d8af1d5fbeef249cb6b5020",
-      "sizeBytes": 1570183,
+      "sha256": "b1685133a2f5d030d7825c135036025383eaf4f3f6a33f221f2180dfca0f79d2",
+      "sizeBytes": 1640587,
       "executable": false
     },
     {
@@ -350,13 +350,13 @@
     },
     {
       "path": "dist/cli/evidence/fetch.d.ts",
-      "sha256": "be47d6d2e3ff93621880ec70f9d07977a59983e1a22f1dd3280d2da338f39d59",
+      "sha256": "220a117d7b7a5ac9c0909999f56c957b0822533b65436670244a7ad9576e6058",
       "sizeBytes": 13016,
       "executable": false
     },
     {
       "path": "dist/cli/evidence/operation-readback-view.d.ts",
-      "sha256": "15d247e6d3a0346a3844d3fb411a5d74916f6ac7da1b041a83dd30c7709e8366",
+      "sha256": "7dea94a1f4af68a7170e4478b195229c9e0f344a66a31f121592ac6db8e9d2f7",
       "sizeBytes": 1782,
       "executable": false
     },
@@ -374,8 +374,8 @@
     },
     {
       "path": "dist/cli/index.mjs",
-      "sha256": "a7af73d5bc7fdef78d1c8556243527bf9a6cb0246247aa9c61bb21912769138f",
-      "sizeBytes": 1569381,
+      "sha256": "237b70c6545c9650bdb648d1cdd8cc189f785bb4f0bf8aa0542d01eff6a3e6d1",
+      "sizeBytes": 1639785,
       "executable": false
     },
     {
@@ -416,7 +416,7 @@
     },
     {
       "path": "dist/cli/projection-evidence.d.ts",
-      "sha256": "965da0d1d2e35e8fd4d165738715d05ec5e9a4e5969d6e743f91e8ba9688a346",
+      "sha256": "07064e278ab31f350164c42bacb9a49756b98eee6ef0134e9f448b1bd4b06795",
       "sizeBytes": 8408,
       "executable": false
     },
@@ -464,19 +464,19 @@
     },
     {
       "path": "dist/cli/support-bundle.d.ts",
-      "sha256": "a1a1ae7e10ff08d7907c61017ee00894d248993ad821fbfc329c91222316cbf8",
+      "sha256": "f19710075425985b804051961d1455366d6a70a4dea39fe0caf2a1b35e389e7e",
       "sizeBytes": 4351,
       "executable": false
     },
     {
       "path": "dist/cli/x402/index.d.ts",
-      "sha256": "5ea9e08429490d924f30f95598aa37d10efaa1ed4ef2594b6482270a90403733",
+      "sha256": "12b1a6150f7b81c67a6dcc0b82b2b6415e03a1ef6f66d543bb671b9e0b0b74d6",
       "sizeBytes": 13476,
       "executable": false
     },
     {
       "path": "dist/cli/x402/local-state.d.ts",
-      "sha256": "611b997865a1fa91865ad00166ce8e39f2d15fcfc3e344632514227452a20c29",
+      "sha256": "f1c9878ccd8fffbf948fa534c4f158b2dc7ecf039e9798153de8a5b15b8e4545",
       "sizeBytes": 20904,
       "executable": false
     },
@@ -494,8 +494,8 @@
     },
     {
       "path": "dist/conformance/index.mjs",
-      "sha256": "61cfaf62db9a5caa67d7bae5fe41f130a28ac6f9436b155b18fb70a5c8328301",
-      "sizeBytes": 670380,
+      "sha256": "dc4f47e2da87089587d01c78be65edb2ae040d38453188230fa281eae3292ef5",
+      "sizeBytes": 687785,
       "executable": false
     },
     {
@@ -512,14 +512,14 @@
     },
     {
       "path": "dist/experimental.mjs",
-      "sha256": "1f63e920053207507a5cf0cd8e764d0dd3fd032639b0f384851d77020b65b6f0",
-      "sizeBytes": 874337,
+      "sha256": "b6404204fb8e34c392bf92a7ca7fcd2b65e134866fe3a92879f6de8f582de8b4",
+      "sizeBytes": 891742,
       "executable": false
     },
     {
       "path": "dist/hosted-admission/hosted-admission-config.d.ts",
-      "sha256": "225e2347f0aa3ce9621ad769cdac12032a81c0c6acead38ccc4e8d5fdb59c614",
-      "sizeBytes": 15717,
+      "sha256": "41c6043be9f1470e9d0df31e1e4116984eec7acfaa111c5b2327bf511c212923",
+      "sizeBytes": 26516,
       "executable": false
     },
     {
@@ -536,8 +536,8 @@
     },
     {
       "path": "dist/hosted-admission/index.d.ts",
-      "sha256": "9ae9e5cfe34f643a68e877f8127f387af760dda2e6fa01c644d91ba201fcdc31",
-      "sizeBytes": 1954,
+      "sha256": "18e43f5ad04eb0283476a869ab380b9be72e8ec9bd8a5a75fe7c3909f9764215",
+      "sizeBytes": 2375,
       "executable": false
     },
     {
@@ -680,8 +680,8 @@
     },
     {
       "path": "dist/http/navigation/index.d.ts",
-      "sha256": "c5b8f8eb6ffef69f953bcce992836e9fc649f842bf8ffc2b0256385ac5fc15f3",
-      "sizeBytes": 5391,
+      "sha256": "2434867c7db67beca204ede5b8c49b54bb5bf3e8fac1395bbe7737e1873003af",
+      "sizeBytes": 5696,
       "executable": false
     },
     {
@@ -692,7 +692,7 @@
     },
     {
       "path": "dist/http/routes/evidence-read-route-registry.d.ts",
-      "sha256": "ed64d4803cf3f9a466c5d916fb451f51fcab792f57aa947c8e45df4d09e99566",
+      "sha256": "7c33bbcb6b7336ecf215636470b711af0c956891ac831ed14c48a99989f18f29",
       "sizeBytes": 53689,
       "executable": false
     },
@@ -704,13 +704,13 @@
     },
     {
       "path": "dist/http/routes/transition-invokers.d.ts",
-      "sha256": "7bdc8c9415e3ff8fea02349daeffb4d48e3ba66ddd49d00274711056f484ea8d",
+      "sha256": "d613540c8e54d90116b59e4ea2e601c4dff260d576a0d3d54a3e86bda2d5d8c8",
       "sizeBytes": 43027,
       "executable": false
     },
     {
       "path": "dist/http/routes/transition-response-schemas.d.ts",
-      "sha256": "d80cfe865cbc45ef166bf5b7fd339b50ed090ab4fbc9b64f050cd1cf1f19d7e8",
+      "sha256": "b919b2ba4f1eeb12dc6232c326d110d03ada7fa27b61fa3ac2d7865c42de11bb",
       "sizeBytes": 110048,
       "executable": false
     },
@@ -746,8 +746,8 @@
     },
     {
       "path": "dist/index.mjs",
-      "sha256": "cf462cb67a44742fd5956c7ba90bc66bfb0cd1aaa25c6be04e2d76047050598c",
-      "sizeBytes": 1465550,
+      "sha256": "5ce5100ec215858a2db5b28cf5753d40d3ee0203a2ab433ed26792639e089ae9",
+      "sizeBytes": 1537393,
       "executable": false
     },
     {
@@ -890,8 +890,8 @@
     },
     {
       "path": "dist/mcp/index.mjs",
-      "sha256": "9035fb676b9f8b7f0575a97f8262473b570eec4c7023749cab933f2c31a37991",
-      "sizeBytes": 614693,
+      "sha256": "48d7ba28c1e59d9f1d8dd503009e6ae09ceef1baef42328cf0ade59abd7b95ae",
+      "sizeBytes": 620087,
       "executable": false
     },
     {
@@ -968,8 +968,8 @@
     },
     {
       "path": "dist/protocol/areas/action-attempt-lifecycle/schemas.d.ts",
-      "sha256": "550e3e02cde26531a59ff059e5e7c879938d4e43a3aece1e4c973dc5bccabb10",
-      "sizeBytes": 7451,
+      "sha256": "ae43a1bf2ccbc329dccf25f815a97330caa29fe7201339708c662ebb8587c3a9",
+      "sizeBytes": 8187,
       "executable": false
     },
     {
@@ -1021,6 +1021,42 @@
       "executable": false
     },
     {
+      "path": "dist/protocol/areas/agentic-endpoint-access/index.d.ts",
+      "sha256": "5465551002960fee34c45702f5707e6999b3d1e65bcc85450b2d5c27645dbbc6",
+      "sizeBytes": 112,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/agentic-endpoint-access/inputs.d.ts",
+      "sha256": "be743bea75c40e4899659e7709a13a88744d9efa641af68f316c3ad9cccee5bb",
+      "sizeBytes": 1037,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/agentic-endpoint-access/readback.d.ts",
+      "sha256": "8434390525dc0579ee5ccdcc75d9fb103c1e3013a18dcb3e89bf835f512b499b",
+      "sizeBytes": 2233,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/agentic-endpoint-access/schemas.d.ts",
+      "sha256": "7a0f9e659a175ee8dc165e6f33bb01531f6f485f051434faa9c0a167c705a54e",
+      "sizeBytes": 18380,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/agentic-endpoint-access/transitions.d.ts",
+      "sha256": "0110b2f674e71bae266670ae879197abc7aed91848e01198a09323f6c56049da",
+      "sizeBytes": 2643,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/areas/agentic-endpoint-access/types.d.ts",
+      "sha256": "652f3c61edafb62adf368947b03c86f967209a39019f65d6b4c43fb152bebfea",
+      "sizeBytes": 99,
+      "executable": false
+    },
+    {
       "path": "dist/protocol/areas/authority-certificate/index.d.ts",
       "sha256": "e223ce86c6c22a3ab87c0973b1654d431397128f6dfa182c6c5aedba88ae0df8",
       "sizeBytes": 137,
@@ -1034,7 +1070,7 @@
     },
     {
       "path": "dist/protocol/areas/authority-certificate/schemas.d.ts",
-      "sha256": "50eb31f0d8e1007b3e8181ba72ae46903dca114a6b22cb5d23bb7134a5f96eb1",
+      "sha256": "8cf4a61cf6fbd887782ca3b0a35d8edfc74340012ebfa21b4a7eeea606fbf01e",
       "sizeBytes": 45168,
       "executable": false
     },
@@ -1070,13 +1106,13 @@
     },
     {
       "path": "dist/protocol/areas/bypass-probe/inputs.d.ts",
-      "sha256": "62413b0599ba05e97ed1bdc1bee91b2b78145f550467bae47fa8918bc101f049",
+      "sha256": "4df3b975f14e71daa5450cd4b1d324e2e4574e24f223027f552a9ee1413086e2",
       "sizeBytes": 1374,
       "executable": false
     },
     {
       "path": "dist/protocol/areas/bypass-probe/schemas.d.ts",
-      "sha256": "8541edc41639734ae061e37ad1baeb4fd62cb62943fbc8b97e1a2939e4a563b3",
+      "sha256": "55f9701bde4ed0ffa68bfb56303eed097ef3b96d9cb6cd66be8fa5ad72debb68",
       "sizeBytes": 2336,
       "executable": false
     },
@@ -1106,8 +1142,8 @@
     },
     {
       "path": "dist/protocol/areas/catalog-envelope/schemas.d.ts",
-      "sha256": "5bffc5e5a63e4cf70277bde2d523e666152556f4b8976312c6b4b84992eee6af",
-      "sizeBytes": 8780,
+      "sha256": "2fb7b2db7f6facf0e6ca1d0e4c1ed6b6b66713f53b114339ab127c3e198631bb",
+      "sizeBytes": 10464,
       "executable": false
     },
     {
@@ -1238,7 +1274,7 @@
     },
     {
       "path": "dist/protocol/areas/gateway-gate/schemas.d.ts",
-      "sha256": "47ba824255f2d9eabbfc50aa4d509fed6e975d1f6eb78fdee20e9c6c8bebb921",
+      "sha256": "0116270c6796237f017708bdcc58110fca628f76e411204e6474eda24dcb7dac",
       "sizeBytes": 2768,
       "executable": false
     },
@@ -1322,8 +1358,8 @@
     },
     {
       "path": "dist/protocol/areas/index.d.ts",
-      "sha256": "257d3e07253ddcddc3ed6bce419c83c57b27914ac50c03a66d33576a36bdc3b1",
-      "sizeBytes": 738,
+      "sha256": "8361d4b9afe899b2b05cb4266838ce6fc0e8fdceded0d732d4aa0f05225d4d4e",
+      "sizeBytes": 781,
       "executable": false
     },
     {
@@ -1412,7 +1448,7 @@
     },
     {
       "path": "dist/protocol/areas/isolation-breaker/inputs.d.ts",
-      "sha256": "2101e8f7635c532b377413934762071cc074567e52b1a7b040c3fce3a534d9bb",
+      "sha256": "7e711de222306670e729a3208509096c5101ddbcd64a64de6cbd242dc8a99089",
       "sizeBytes": 3277,
       "executable": false
     },
@@ -1424,7 +1460,7 @@
     },
     {
       "path": "dist/protocol/areas/isolation-breaker/schemas.d.ts",
-      "sha256": "cdb6052ab6f47039bbca77c4a49d0882b5c1fe447a6e0fe33c563213376257bb",
+      "sha256": "90e3f31b204e37949af81385f6551cca02b023c0448445756f13dd3848db03a5",
       "sizeBytes": 4299,
       "executable": false
     },
@@ -1472,14 +1508,14 @@
     },
     {
       "path": "dist/protocol/areas/object-registry/index.d.ts",
-      "sha256": "775a61a4ae7dabb0c492c13e83015abb8c2dafe84856f2bffd4fbfdaa905d54a",
-      "sizeBytes": 5892,
+      "sha256": "ff6cecd96af3c9d8087cff51acd2f26a14ac58144a4d12fda4bfb0e7ebc5ae69",
+      "sizeBytes": 7039,
       "executable": false
     },
     {
       "path": "dist/protocol/areas/object-registry/schemas.d.ts",
-      "sha256": "a30347ac09ad57d3cae414b7205a3bb1e34f84d1a8d873269b08547cd83d5b4f",
-      "sizeBytes": 120043,
+      "sha256": "b339a188c820136a97f57044c3683a7e0ec0013320cae8260521e637e070cece",
+      "sizeBytes": 136415,
       "executable": false
     },
     {
@@ -1502,7 +1538,7 @@
     },
     {
       "path": "dist/protocol/areas/operation-lifecycle/inputs.d.ts",
-      "sha256": "f3426d7779d0700a65a6d9fe2d89f996c7acc4348c5b9e07d33789697be31f46",
+      "sha256": "ec51c076eabbc1c249d914bade880b68e4cb89fc1d3c0178591ef616b38fb74c",
       "sizeBytes": 1395,
       "executable": false
     },
@@ -1514,7 +1550,7 @@
     },
     {
       "path": "dist/protocol/areas/operation-lifecycle/schemas.d.ts",
-      "sha256": "a8afe830c2c19ac855c3624a5b9322cb070bcc01c4b0e2117ce87bac22bd4c04",
+      "sha256": "ef80c00f4eaf48a9e2b3f5a824844f672c4df2486a331ae0d8d77e803717388c",
       "sizeBytes": 4311,
       "executable": false
     },
@@ -1562,7 +1598,7 @@
     },
     {
       "path": "dist/protocol/areas/policy-greenlight/schemas.d.ts",
-      "sha256": "29771c0ca81f69d808ff8c0595994ec3508b907a9a416076f295a63e2ad7fe7f",
+      "sha256": "c08bea414ceff1afbba3e27da3bb98e3c6b841985907d67ab38961bfe412c5de",
       "sizeBytes": 4262,
       "executable": false
     },
@@ -1646,7 +1682,7 @@
     },
     {
       "path": "dist/protocol/areas/protected-path-posture/schemas.d.ts",
-      "sha256": "9870f3a128d2df326eab5e240ef5445c345f54e1fc5d3d733d07fb6850a3c76c",
+      "sha256": "872cedc09291f408f01ec060e31794eeae2672f200a5a9fb3566b87c0e913ddf",
       "sizeBytes": 5075,
       "executable": false
     },
@@ -1688,7 +1724,7 @@
     },
     {
       "path": "dist/protocol/areas/receipt-export/schemas.d.ts",
-      "sha256": "a2bf859c762ddbcb44b751984820e2aae588d1bac92a827cc5ea69f953eaa060",
+      "sha256": "054757884d1673bee69739249719f61db3fb61398812b156a9b056e61b2d1385",
       "sizeBytes": 8457,
       "executable": false
     },
@@ -1736,7 +1772,7 @@
     },
     {
       "path": "dist/protocol/areas/recovery/schemas.d.ts",
-      "sha256": "b5041b22d17878b1c968fc14b51ff22dee1a35ccd9dba0f58760e875f265ba40",
+      "sha256": "647f927a869895b99352bcc2cd682484311d63e3a36f3454f15d7ddfe004f5c9",
       "sizeBytes": 5989,
       "executable": false
     },
@@ -1952,7 +1988,7 @@
     },
     {
       "path": "dist/protocol/evidence-projections/schemas.d.ts",
-      "sha256": "ae4758fdb9e9b26b1f2329c3f5e0950f37a772e281dd15c6cfd9cef12344a15d",
+      "sha256": "b2c973ccdcf8a2ddbb5cc4a14d212d2e5bf4c586c785935ab83963405ffb719b",
       "sizeBytes": 44336,
       "executable": false
     },
@@ -1960,6 +1996,12 @@
       "path": "dist/protocol/evidence-projections/store-reader.d.ts",
       "sha256": "93006dc7b6462bffd61bc5debfb10556efc5762458679c13f1554df104514cc4",
       "sizeBytes": 518,
+      "executable": false
+    },
+    {
+      "path": "dist/protocol/foundation/authority-safe-reference/index.d.ts",
+      "sha256": "2d2cb811321ac60efc89a08c0ca212e8167e4cca259bf0ca1742fa8cce5509be",
+      "sizeBytes": 168,
       "executable": false
     },
     {
@@ -2030,8 +2072,8 @@
     },
     {
       "path": "dist/protocol/foundation/reason-codes.d.ts",
-      "sha256": "4f08d44cda82a2789dacbea45afbe792cd8ddb9545a913d502b37fb99d2ca41a",
-      "sizeBytes": 10105,
+      "sha256": "d1481000b42eac50e7aacebc5a0d5076506b4748d722c87c70ef7645872040cd",
+      "sizeBytes": 11480,
       "executable": false
     },
     {
@@ -2060,14 +2102,14 @@
     },
     {
       "path": "dist/protocol/kernel.d.ts",
-      "sha256": "60bf3e880edb57c513f732dbfa9dae6822bdba6baf2cd8144ea0aaa7fb67bcaa",
-      "sizeBytes": 6559,
+      "sha256": "3339028a77c57bab3f2c99c7762aaef3dc2f0c45d0f065c296b7abb35e0f84c8",
+      "sizeBytes": 7051,
       "executable": false
     },
     {
       "path": "dist/protocol/navigation/index.d.ts",
-      "sha256": "93912546887f0a6a27507ec7996f526e4fd0446dd077e22436dfede8db9d3808",
-      "sizeBytes": 24261,
+      "sha256": "92e025e0c73ebbe3692407490ee92c3a24cfdeb60229eee83266d5c059cca6ba",
+      "sizeBytes": 25884,
       "executable": false
     },
     {
@@ -2078,8 +2120,8 @@
     },
     {
       "path": "dist/protocol/public/inputs.d.ts",
-      "sha256": "8751252798bf6baa5fd703255f551452507955ce82153f5751e40f4e9a072442",
-      "sizeBytes": 907,
+      "sha256": "f87675457307c606bc6676194f298d63b3bd7884dcff9c7e6478c77cc128fc3f",
+      "sizeBytes": 964,
       "executable": false
     },
     {
@@ -2108,8 +2150,8 @@
     },
     {
       "path": "dist/protocol/store/port.d.ts",
-      "sha256": "b8a2d71f0b4c3ff253e0069633c997d7c885ebf15d63fbd7cbebaa40568fa2d4",
-      "sizeBytes": 6769,
+      "sha256": "4e99e672041c618b308119153b90e3e43b8417748eef3913fcfb4cdf35fd74d9",
+      "sizeBytes": 8154,
       "executable": false
     },
     {
@@ -2234,8 +2276,8 @@
     },
     {
       "path": "dist/sdk/surface-clients/index.mjs",
-      "sha256": "49226c3178714817307d095fbe97c4978d533982a706f3f74dde8e46c227db9f",
-      "sizeBytes": 692344,
+      "sha256": "af83ac5e57d474e8ec66c192fae8e7d0580bc3db02cfdfb9a48a878fb2fdd115",
+      "sizeBytes": 713539,
       "executable": false
     },
     {
@@ -2270,14 +2312,14 @@
     },
     {
       "path": "dist/storage/d1/index.d.ts",
-      "sha256": "2dcbde7c7203f77032429701688c301151d0d3e3685e8474967942ee30b014f0",
-      "sizeBytes": 2322,
+      "sha256": "71f9d51cb920928a0be29eae8b8df03c8508625c9871697396c6c5329e33d02e",
+      "sizeBytes": 2818,
       "executable": false
     },
     {
       "path": "dist/storage/d1/statements.d.ts",
-      "sha256": "d158846de8e17aea8293df1f4073482bc32167236c607ca8a6efbdd7c3cbbe07",
-      "sizeBytes": 2257,
+      "sha256": "2f4c42b193f57f1628bc5c3ae4bb2eab83cf9812f990debf7bb1178c503d2f01",
+      "sizeBytes": 2532,
       "executable": false
     },
     {
@@ -2288,8 +2330,8 @@
     },
     {
       "path": "dist/storage/memory/index.d.ts",
-      "sha256": "7cd0bc682ab6cd13569c5ea5cd682276d4d535bf344ae6b827cebc9f5b668b89",
-      "sizeBytes": 2908,
+      "sha256": "14b05fa687649e0dc58acce2b548acdc376bb96289f584c362ab1d414a100cd6",
+      "sizeBytes": 3480,
       "executable": false
     },
     {
@@ -2383,6 +2425,12 @@
       "executable": false
     },
     {
+      "path": "dist/surfaces/agentic-endpoint-access-readback/index.d.ts",
+      "sha256": "dd2897cd56574012a202bddee599c5470421fde14aab26d340029e0f68295067",
+      "sizeBytes": 5923,
+      "executable": false
+    },
+    {
       "path": "dist/surfaces/auth-md-x402-interlock.d.ts",
       "sha256": "de42292c64d41d0b6a3a0daf05d2541e4b97f5a5c99f0df89643b2bc6efdeea6",
       "sizeBytes": 14384,
@@ -2390,20 +2438,20 @@
     },
     {
       "path": "dist/surfaces/boundary-manifest.d.ts",
-      "sha256": "0f42c2223323f37ebd525ce3aace91f27a9c9ff25ed1a61aaf0f5f7aadda2ae0",
-      "sizeBytes": 52704,
+      "sha256": "029fdd517895db432442e4eeba3336cf15c98e24bf8b2b988b00db0102d2e146",
+      "sizeBytes": 55925,
       "executable": false
     },
     {
       "path": "dist/surfaces/index.d.ts",
-      "sha256": "242eb374fe49bc026882d11c560ddf18a235e47874d42bb905389243e1c7c38c",
-      "sizeBytes": 369,
+      "sha256": "0aa1bc0dd211210aec5c9d117960a92e5251e3e0dd1609d608a96688ff99345c",
+      "sizeBytes": 421,
       "executable": false
     },
     {
       "path": "dist/surfaces/index.mjs",
-      "sha256": "b4f61dd07a59685a3c132ecdf180657b7260af3f1578d4f286079369c7c756ba",
-      "sizeBytes": 916037,
+      "sha256": "8e1b50580a96f9ae29e9362c4589e8757ddfec906245942e2b4698acfad9158c",
+      "sizeBytes": 944168,
       "executable": false
     },
     {
@@ -2576,8 +2624,8 @@
     },
     {
       "path": "dist/x402-protected-tool/index.mjs",
-      "sha256": "57afd7963e328ce5d5dc0577de7c3441d85f2a9787524f90f1f1fdda9ca6d8c5",
-      "sizeBytes": 771448,
+      "sha256": "0f98525517997c50de0b5aadf0367db03becd066f0ec35a1acca083b063b8cf5",
+      "sizeBytes": 787249,
       "executable": false
     },
     {
@@ -2594,19 +2642,19 @@
     },
     {
       "path": "package.json",
-      "sha256": "1db05c68bf75a363b8bb6daf72a1d26c1921c316d87ea3029037d46de17f0810",
+      "sha256": "47ed39422de8837f7dbe8f53de4a3cc9749a478637c6a9b056569ecb692c4b40",
       "sizeBytes": 3575,
       "executable": false
     },
     {
       "path": "README.md",
-      "sha256": "4f1d4e52b982c490dde05ba8ddc6914ecf4e1b4e19051185799b44aa80b49cfb",
-      "sizeBytes": 9394,
+      "sha256": "75d5986ad57b90673a22b1b18dc10df178db1980d0338dc59ca4bd9fb381eb02",
+      "sizeBytes": 9532,
       "executable": false
     },
     {
       "path": "server.json",
-      "sha256": "20fd9ee7824b164c593d59be17fa782350c5b2b6230740ff147986bc1b393663",
+      "sha256": "22ea9617745aac1816b687074de2f14674243a85a3c335eeb1389fe01fa9ccf8",
       "sizeBytes": 826,
       "executable": false
     }

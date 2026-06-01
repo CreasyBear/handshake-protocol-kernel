@@ -224,15 +224,15 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
     policyDecisionStatus: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
         proof_gap: "proof_gap";
-        passed: "passed";
         refused: "refused";
+        passed: "passed";
     }>>;
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
@@ -257,16 +257,16 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
     }>;
     downstreamExecutionStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
     }>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
@@ -409,10 +409,10 @@ export declare const AgentTransactionEnvelopeProjectionSchema: z.ZodObject<{
     policyDecisionStatus: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     greenlightRef: z.ZodNullable<z.ZodString>;
     gateAttemptRef: z.ZodNullable<z.ZodString>;
@@ -501,8 +501,8 @@ export declare const AgentTransactionEnvelopeProjectionSchema: z.ZodObject<{
     }>>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
@@ -561,9 +561,9 @@ export declare const OperationReadbackStatusSchema: z.ZodEnum<{
     gateway_proof_gap: "gateway_proof_gap";
     replay_refused: "replay_refused";
     isolated: "isolated";
+    quarantined: "quarantined";
     downstream_refused: "downstream_refused";
     gateway_refused: "gateway_refused";
-    quarantined: "quarantined";
     halted: "halted";
     greenlight_available: "greenlight_available";
     downstream_pending: "downstream_pending";
@@ -651,9 +651,9 @@ export declare const OperationSupportContextSchema: z.ZodObject<{
         gateway_proof_gap: "gateway_proof_gap";
         replay_refused: "replay_refused";
         isolated: "isolated";
+        quarantined: "quarantined";
         downstream_refused: "downstream_refused";
         gateway_refused: "gateway_refused";
-        quarantined: "quarantined";
         halted: "halted";
         greenlight_available: "greenlight_available";
         downstream_pending: "downstream_pending";
@@ -714,9 +714,9 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
         gateway_proof_gap: "gateway_proof_gap";
         replay_refused: "replay_refused";
         isolated: "isolated";
+        quarantined: "quarantined";
         downstream_refused: "downstream_refused";
         gateway_refused: "gateway_refused";
-        quarantined: "quarantined";
         halted: "halted";
         greenlight_available: "greenlight_available";
         downstream_pending: "downstream_pending";
@@ -741,17 +741,17 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
     policyDecisionStatus: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     agreementObligationPolicy: z.ZodObject<{
         sourceAuthority: z.ZodLiteral<"policy_decision_snapshot">;
         evaluationStatus: z.ZodEnum<{
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
+            greenlight: "greenlight";
         }>;
         ok: z.ZodBoolean;
         reasonCode: z.ZodNullable<z.ZodString>;
@@ -781,8 +781,8 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
     }>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
@@ -849,9 +849,9 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
             gateway_proof_gap: "gateway_proof_gap";
             replay_refused: "replay_refused";
             isolated: "isolated";
+            quarantined: "quarantined";
             downstream_refused: "downstream_refused";
             gateway_refused: "gateway_refused";
-            quarantined: "quarantined";
             halted: "halted";
             greenlight_available: "greenlight_available";
             downstream_pending: "downstream_pending";
@@ -967,9 +967,9 @@ export declare const ProtectedPathInstallHealthProjectionSchema: z.ZodObject<{
             failure_closed: "failure_closed";
         }>;
         probeOutcome: z.ZodEnum<{
+            inconclusive: "inconclusive";
             passed: "passed";
             failed: "failed";
-            inconclusive: "inconclusive";
         }>;
         sourceAuthority: z.ZodEnum<{
             unknown: "unknown";

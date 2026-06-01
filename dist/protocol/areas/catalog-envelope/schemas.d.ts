@@ -215,3 +215,43 @@ export declare const OperatingEnvelopeSchema: z.ZodObject<{
     revokedAt: z.ZodNullable<z.ZodString>;
 }, z.core.$strict>;
 export type OperatingEnvelope = z.infer<typeof OperatingEnvelopeSchema>;
+export declare const OperatingBoundsSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    envelopeId: z.ZodString;
+    principalId: z.ZodString;
+    agentId: z.ZodString;
+    participantIdentityBindings: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        participantRole: z.ZodEnum<{
+            principal: "principal";
+            agent: "agent";
+        }>;
+        participantRef: z.ZodString;
+        identityProviderRef: z.ZodString;
+        subjectRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        subjectDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        claimsDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        verificationEvidenceRef: z.ZodString;
+        bindingEvidenceRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        issuedAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        expiresAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        authorityPosture: z.ZodDefault<z.ZodLiteral<"evidence_only">>;
+    }, z.core.$strict>>>;
+    objectiveRef: z.ZodString;
+    allowedActionClasses: z.ZodArray<z.ZodString>;
+    allowedGateways: z.ZodArray<z.ZodString>;
+    allowedResources: z.ZodArray<z.ZodString>;
+    requiredProtectedPathState: z.ZodDefault<z.ZodEnum<{
+        not_required: "not_required";
+        gateway_checked: "gateway_checked";
+    }>>;
+    evidenceRequirements: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    policyPackRef: z.ZodString;
+    policyPackVersion: z.ZodString;
+    issuedAt: z.ZodString;
+    expiresAt: z.ZodString;
+    revokedAt: z.ZodNullable<z.ZodString>;
+}, z.core.$strict>;
+export type OperatingBounds = OperatingEnvelope;

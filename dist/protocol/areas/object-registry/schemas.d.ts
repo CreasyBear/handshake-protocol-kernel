@@ -8,6 +8,14 @@ export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     action_type: "action_type";
     gateway_registry_entry: "gateway_registry_entry";
     operating_envelope: "operating_envelope";
+    endpoint_access_surface_binding: "endpoint_access_surface_binding";
+    agentic_endpoint_access_policy: "agentic_endpoint_access_policy";
+    agentic_endpoint_access_attempt: "agentic_endpoint_access_attempt";
+    agentic_endpoint_access_clearance_binding: "agentic_endpoint_access_clearance_binding";
+    agentic_endpoint_access_lease: "agentic_endpoint_access_lease";
+    agentic_endpoint_access_usage_event: "agentic_endpoint_access_usage_event";
+    agentic_endpoint_access_readback: "agentic_endpoint_access_readback";
+    agentic_endpoint_access_capabilities: "agentic_endpoint_access_capabilities";
     gateway_credential_ref: "gateway_credential_ref";
     delegated_authority_ref: "delegated_authority_ref";
     delegated_authority_status_transition: "delegated_authority_status_transition";
@@ -216,6 +224,333 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         issuedAt: z.ZodString;
         expiresAt: z.ZodString;
         revokedAt: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"endpoint_access_surface_binding">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        actionClass: z.ZodString;
+        protectedSurfaceIntegrationRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        bindingSource: z.ZodEnum<{
+            protocol_config: "protocol_config";
+            cloud_config: "cloud_config";
+            ae_projection: "ae_projection";
+            operator_config: "operator_config";
+            fixture: "fixture";
+        }>;
+        issuedAt: z.ZodString;
+        expiresAt: z.ZodString;
+        bindingDigest: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_policy">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        policyId: z.ZodString;
+        policyVersionId: z.ZodString;
+        configRevision: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        operatingBoundsId: z.ZodString;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        gatewayAuthorityHolderRef: z.ZodString;
+        requiredDelegationEvidence: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        acceptedAgentRegistrationRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        principalBindingRequirements: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        agentBindingRequirements: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        runtimePostureRequirements: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        rawBypassPostureRequirements: z.ZodDefault<z.ZodArray<z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>>>;
+        siblingBypassPostureRequirements: z.ZodDefault<z.ZodArray<z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>>>;
+        rateLimit: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        tokenBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        toolBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        costBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        leaseTtlSeconds: z.ZodNumber;
+        failClosedBehavior: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refuse: "refuse";
+            quarantine: "quarantine";
+        }>;
+        capabilityRequirements: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        issuedAt: z.ZodString;
+        expiresAt: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_attempt">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        attemptId: z.ZodString;
+        candidateActionId: z.ZodString;
+        generatedCodeOrSpecRef: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        principalRef: z.ZodString;
+        agentRef: z.ZodString;
+        objectiveRef: z.ZodString;
+        delegationEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        agentRegistrationRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        runtimePostureRefs: z.ZodArray<z.ZodString>;
+        rawBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        siblingBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        requestedLeaseTtlSeconds: z.ZodNumber;
+        requestedBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        kernelVersion: z.ZodString;
+        middlewareVersion: z.ZodString;
+        capabilitiesPresented: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        idempotencyKey: z.ZodString;
+        attemptedAt: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_clearance_binding">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        clearanceBindingId: z.ZodString;
+        attemptId: z.ZodString;
+        candidateActionId: z.ZodString;
+        actionContractId: z.ZodString;
+        policyDecisionId: z.ZodNullable<z.ZodString>;
+        greenlightId: z.ZodNullable<z.ZodString>;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        gatewayAuthorityHolderRef: z.ZodString;
+        gatewayCheckAttemptId: z.ZodNullable<z.ZodString>;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        refusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        clearanceStatus: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            leased: "leased";
+            refused: "refused";
+        }>;
+        reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        evaluatedAt: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_lease">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        leaseId: z.ZodString;
+        attemptId: z.ZodString;
+        candidateActionId: z.ZodString;
+        actionContractId: z.ZodString;
+        policyDecisionId: z.ZodString;
+        greenlightId: z.ZodString;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        gatewayAuthorityHolderRef: z.ZodString;
+        gatewayCheckAttemptId: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        principalRef: z.ZodString;
+        agentRef: z.ZodString;
+        operatingBoundsId: z.ZodString;
+        policyVersionId: z.ZodString;
+        configRevision: z.ZodString;
+        runtimePostureRef: z.ZodString;
+        rawBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        siblingBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        allowedUse: z.ZodLiteral<"bounded_endpoint_entry_only">;
+        rateLimit: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        tokenBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        toolBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        costBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        usageCounters: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodNumber>>;
+        issuedAt: z.ZodString;
+        expiresAt: z.ZodString;
+        revokedAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        authorityBoundary: z.ZodObject<{
+            permitsEndpointAccess: z.ZodLiteral<true>;
+            permitsMutation: z.ZodLiteral<false>;
+            createsIndependentPolicyDecision: z.ZodLiteral<false>;
+            createsIndependentGreenlight: z.ZodLiteral<false>;
+            performsIndependentGatewayCheck: z.ZodLiteral<false>;
+            exportsDownstreamReceipt: z.ZodLiteral<false>;
+            mintsTerminalCertificate: z.ZodLiteral<false>;
+            containsCredentialMaterial: z.ZodLiteral<false>;
+            containsPaymentMaterial: z.ZodLiteral<false>;
+            widensOperatingBounds: z.ZodLiteral<false>;
+            freshActionContractRequiredForDownstreamAction: z.ZodLiteral<true>;
+        }, z.core.$strict>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_usage_event">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        usageEventId: z.ZodString;
+        leaseId: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        usageKind: z.ZodEnum<{
+            request: "request";
+            token: "token";
+            tool_call: "tool_call";
+            cost_unit: "cost_unit";
+        }>;
+        amount: z.ZodNumber;
+        counterAfter: z.ZodNumber;
+        occurredAt: z.ZodString;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_readback">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        readbackId: z.ZodString;
+        leaseId: z.ZodNullable<z.ZodString>;
+        attemptId: z.ZodString;
+        candidateActionId: z.ZodString;
+        attemptDigest: z.ZodString;
+        protectedSurfaceBindingId: z.ZodString;
+        protectedSurfaceBindingDigest: z.ZodString;
+        protectedSurfaceRef: z.ZodString;
+        protectedSurfaceKind: z.ZodString;
+        resourceRef: z.ZodString;
+        policyVersionId: z.ZodString;
+        configRevision: z.ZodString;
+        kernelVersion: z.ZodString;
+        middlewareVersion: z.ZodString;
+        runtimePostureRef: z.ZodString;
+        gatewayRegistryEntryId: z.ZodString;
+        gatewayId: z.ZodString;
+        gatewayAuthorityHolderRef: z.ZodString;
+        rawBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        siblingBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        capabilityReportRef: z.ZodString;
+        healthReportRef: z.ZodString;
+        usageSummary: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("../idempotency-ledger").JsonValue, unknown, z.core.$ZodTypeInternals<import("../idempotency-ledger").JsonValue, unknown>>>>;
+        linkedActionRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        linkedReceiptRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        linkedProofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        publicVerifyUrl: z.ZodString;
+        downstreamReceiptBoundary: z.ZodLiteral<"linked_receipts_are_not_endpoint_access_authorization">;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    objectType: z.ZodLiteral<"agentic_endpoint_access_capabilities">;
+    payload: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        tenantId: z.ZodString;
+        organizationId: z.ZodString;
+        createdAt: z.ZodString;
+        capabilityReportId: z.ZodString;
+        kernelVersion: z.ZodString;
+        middlewareVersion: z.ZodString;
+        cloudConfigRevision: z.ZodString;
+        runtimePostureStatus: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            unsupported: "unsupported";
+            supported: "supported";
+        }>;
+        rawBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        siblingBypassPosture: z.ZodEnum<{
+            unknown: "unknown";
+            stale: "stale";
+            blocked: "blocked";
+            unblocked: "unblocked";
+            inconclusive: "inconclusive";
+        }>;
+        supportedEndpointAccessSchemaVersions: z.ZodArray<z.ZodString>;
+        supportedDelegationEvidenceKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        supportedPolicyFeatures: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        supportedReadbackKinds: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        failClosedReasons: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        reportedAt: z.ZodString;
     }, z.core.$strict>;
 }, z.core.$strict>, z.ZodObject<{
     objectType: z.ZodLiteral<"gateway_credential_ref">;
@@ -744,9 +1079,9 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             failure_closed: "failure_closed";
         }>;
         probeOutcome: z.ZodEnum<{
+            inconclusive: "inconclusive";
             passed: "passed";
             failed: "failed";
-            inconclusive: "inconclusive";
         }>;
         sourceAuthority: z.ZodEnum<{
             unknown: "unknown";
@@ -892,9 +1227,9 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
                 failure_closed: "failure_closed";
             }>;
             probeOutcome: z.ZodEnum<{
+                inconclusive: "inconclusive";
                 passed: "passed";
                 failed: "failed";
-                inconclusive: "inconclusive";
             }>;
             sourceAuthority: z.ZodEnum<{
                 unknown: "unknown";
@@ -1546,10 +1881,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             policyDecisionStatus: z.ZodEnum<{
                 review_required: "review_required";
                 proof_gap: "proof_gap";
-                greenlight: "greenlight";
                 refuse: "refuse";
-                halt: "halt";
                 quarantine: "quarantine";
+                greenlight: "greenlight";
+                halt: "halt";
             }>;
             greenlightRef: z.ZodNullable<z.ZodString>;
             gateAttemptRef: z.ZodNullable<z.ZodString>;
@@ -1638,8 +1973,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             }>>;
             downstreamOutcomeStatus: z.ZodEnum<{
                 unknown: "unknown";
-                failed: "failed";
                 refused: "refused";
+                failed: "failed";
                 succeeded: "succeeded";
                 pending: "pending";
                 not_started: "not_started";
@@ -1782,10 +2117,10 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         decision: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         decisionReasonCode: z.ZodString;
         decisionReason: z.ZodString;
@@ -1951,9 +2286,9 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
             halted: "halted";
             state_suspect: "state_suspect";
         }>;
@@ -2011,9 +2346,9 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
             halted: "halted";
             state_suspect: "state_suspect";
         }>;
@@ -2069,8 +2404,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>>;
         gateDecision: z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>;
         gateDecisionReasonCode: z.ZodString;
         consumedGreenlight: z.ZodBoolean;
@@ -2160,8 +2495,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         observedDownstreamStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
         }>;
@@ -2277,15 +2612,15 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         policyDecisionStatus: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         gatewayAdmissionStatus: z.ZodEnum<{
             proof_gap: "proof_gap";
@@ -2310,16 +2645,16 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         downstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
         }>;
         downstreamOutcomeStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -2372,15 +2707,15 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         policyDecisionStatus: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         gatewayAdmissionStatus: z.ZodEnum<{
             proof_gap: "proof_gap";
@@ -2406,16 +2741,16 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         downstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
         }>;
         downstreamOutcomeStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -2505,8 +2840,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         sourceGatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         sourceMutationAttemptStatus: z.ZodEnum<{
             unknown: "unknown";
@@ -2518,8 +2853,8 @@ export declare const ProtocolRecordSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
         }>;
         sourceDownstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";

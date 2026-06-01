@@ -74,8 +74,8 @@ export declare const SurfaceOperationReconciliationSchema: z.ZodObject<{
     }>;
     observedDownstreamStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
     }>;

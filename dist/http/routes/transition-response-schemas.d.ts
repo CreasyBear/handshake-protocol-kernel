@@ -15,10 +15,10 @@ export declare const PolicyEvaluationResponseSchema: z.ZodObject<{
         decision: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         decisionReasonCode: z.ZodString;
         decisionReason: z.ZodString;
@@ -149,8 +149,8 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
         }>>;
         gateDecision: z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>;
         gateDecisionReasonCode: z.ZodString;
         consumedGreenlight: z.ZodBoolean;
@@ -197,15 +197,15 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
         policyDecisionStatus: z.ZodEnum<{
             review_required: "review_required";
             proof_gap: "proof_gap";
-            greenlight: "greenlight";
             refuse: "refuse";
-            halt: "halt";
             quarantine: "quarantine";
+            greenlight: "greenlight";
+            halt: "halt";
         }>;
         gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         gatewayAdmissionStatus: z.ZodEnum<{
             proof_gap: "proof_gap";
@@ -230,16 +230,16 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
         }>;
         downstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
         }>;
         downstreamOutcomeStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -327,8 +327,8 @@ export declare const SurfaceOperationReconciliationResponseSchema: z.ZodObject<{
         }>;
         observedDownstreamStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
         }>;
@@ -450,9 +450,9 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         observedWindowDigest: z.ZodString;
         decision: z.ZodEnum<{
             revoked: "revoked";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
             halted: "halted";
             state_suspect: "state_suspect";
         }>;
@@ -508,9 +508,9 @@ export declare const BreakerDecisionResponseSchema: z.ZodObject<{
         state: z.ZodEnum<{
             active: "active";
             revoked: "revoked";
+            quarantined: "quarantined";
             review_only: "review_only";
             rate_limited: "rate_limited";
-            quarantined: "quarantined";
             halted: "halted";
             state_suspect: "state_suspect";
         }>;
@@ -552,8 +552,8 @@ export declare const RecoveryRecommendationStatusResponseSchema: z.ZodObject<{
         }>;
         sourceGatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         sourceMutationAttemptStatus: z.ZodEnum<{
             unknown: "unknown";
@@ -565,8 +565,8 @@ export declare const RecoveryRecommendationStatusResponseSchema: z.ZodObject<{
         }>;
         sourceDownstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";
@@ -739,8 +739,8 @@ export declare const RecoveryTerminalConflictResolutionResponseSchema: z.ZodObje
         }>;
         sourceGatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
             proof_gap: "proof_gap";
-            passed: "passed";
             refused: "refused";
+            passed: "passed";
         }>>;
         sourceMutationAttemptStatus: z.ZodEnum<{
             unknown: "unknown";
@@ -752,8 +752,8 @@ export declare const RecoveryTerminalConflictResolutionResponseSchema: z.ZodObje
         }>;
         sourceDownstreamExecutionStatus: z.ZodEnum<{
             unknown: "unknown";
-            failed: "failed";
             refused: "refused";
+            failed: "failed";
             succeeded: "succeeded";
             pending: "pending";
             not_started: "not_started";

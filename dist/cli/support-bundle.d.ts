@@ -59,11 +59,11 @@ export declare function supportBundleCommand(value: unknown): import("./output")
         };
     };
     terminalPosture: {
-        policyDecisionStatus: "review_required" | "proof_gap" | "greenlight" | "refuse" | "halt" | "quarantine";
-        gatewayCheckStatus: "proof_gap" | "passed" | "refused" | null;
+        policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
+        gatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
         gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
         mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
-        downstreamOutcomeStatus: "unknown" | "failed" | "refused" | "succeeded" | "pending" | "not_started";
+        downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         finalityStatus: "unknown" | "pending" | "final" | "suspect";
         proofGapRefs: string[];
     } | null;

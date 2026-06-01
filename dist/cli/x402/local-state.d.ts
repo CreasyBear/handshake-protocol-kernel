@@ -61,9 +61,9 @@ export declare const LocalX402ProbeCoverageSchema: z.ZodObject<{
         failure_closed: "failure_closed";
     }>;
     probeOutcome: z.ZodEnum<{
+        inconclusive: "inconclusive";
         passed: "passed";
         failed: "failed";
-        inconclusive: "inconclusive";
     }>;
     sourceAuthority: z.ZodLiteral<"local_classification">;
     reasonCodes: z.ZodArray<z.ZodString>;
@@ -92,9 +92,9 @@ export declare const LocalX402ProbeReportSchema: z.ZodObject<{
             failure_closed: "failure_closed";
         }>;
         probeOutcome: z.ZodEnum<{
+            inconclusive: "inconclusive";
             passed: "passed";
             failed: "failed";
-            inconclusive: "inconclusive";
         }>;
         sourceAuthority: z.ZodLiteral<"local_classification">;
         reasonCodes: z.ZodArray<z.ZodString>;

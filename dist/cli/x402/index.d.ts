@@ -61,7 +61,7 @@ export declare function probesX402PaymentCommand(input: {
     reasonCodes: string[];
     probeCoverage: {
         probeKind: "credential_custody" | "raw_sibling_blocking" | "mcp_direct_call_blocking" | "token_passthrough_blocking" | "wrapper_drift" | "failure_closed";
-        probeOutcome: "passed" | "failed" | "inconclusive";
+        probeOutcome: "inconclusive" | "passed" | "failed";
         sourceAuthority: "local_classification";
         reasonCodes: string[];
         evidenceRefs: string[];

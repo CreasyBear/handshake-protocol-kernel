@@ -9,8 +9,8 @@ export declare const GatewayAdmissionStatusSchema: z.ZodEnum<{
 export type GatewayAdmissionStatus = z.infer<typeof GatewayAdmissionStatusSchema>;
 export declare const DownstreamOutcomeStatusSchema: z.ZodEnum<{
     unknown: "unknown";
-    failed: "failed";
     refused: "refused";
+    failed: "failed";
     succeeded: "succeeded";
     pending: "pending";
     not_started: "not_started";
@@ -45,15 +45,15 @@ export declare const ReceiptSchema: z.ZodObject<{
     policyDecisionStatus: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
         proof_gap: "proof_gap";
-        passed: "passed";
         refused: "refused";
+        passed: "passed";
     }>>;
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
@@ -78,16 +78,16 @@ export declare const ReceiptSchema: z.ZodObject<{
     }>;
     downstreamExecutionStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
     }>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
@@ -139,15 +139,15 @@ export declare const ReceiptExportSchema: z.ZodObject<{
     policyDecisionStatus: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     gatewayCheckStatus: z.ZodNullable<z.ZodEnum<{
         proof_gap: "proof_gap";
-        passed: "passed";
         refused: "refused";
+        passed: "passed";
     }>>;
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
@@ -173,16 +173,16 @@ export declare const ReceiptExportSchema: z.ZodObject<{
     }>;
     downstreamExecutionStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";
     }>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
-        failed: "failed";
         refused: "refused";
+        failed: "failed";
         succeeded: "succeeded";
         pending: "pending";
         not_started: "not_started";

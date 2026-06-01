@@ -7,6 +7,46 @@ public artifact repository. It does not claim hosted operation, provider
 custody, settlement finality, marketplace certification, MCP Registry
 discoverability, or Handshake authority from publication alone.
 
+## 0.3.0 - 2026-06-01
+
+### Added
+
+- Agentic endpoint-access kernel family for bounded endpoint entry:
+  clearance bindings, endpoint leases, usage events, capability/readiness
+  posture, and readback projection remain internal source-owned protocol
+  surfaces for this version refresh.
+- Atomic endpoint lease and usage store primitives across memory and D1 storage,
+  including a D1 `greenlightId -> leaseId` claim table and per-lease usage
+  counters.
+- Focused regression coverage for concurrent lease issuance, cross-scope
+  authority record rejection, readback scope mismatches, concurrent usage
+  exhaustion, bounded endpoint-access vocabulary, hosted endpoint ref
+  hardening, and memory/D1 store atomicity.
+
+### Changed
+
+- Endpoint lease issuance now claims one greenlight atomically before recording
+  bounded endpoint entry.
+- Endpoint usage accounting now uses bounded compare-and-swap retries and
+  records a proof gap when contention cannot be resolved.
+- Endpoint readback validates tenant, organization, binding, policy, lease,
+  usage, gateway, config, and capability scope before emitting reconstructable
+  evidence.
+- Lifecycle/navigation vocabulary distinguishes `bounded_endpoint_access` from
+  evidence-only readback and from downstream mutation authority.
+- Hosted endpoint-access config rejects bearer/key/password/private-key and
+  secret-like refs before readiness can echo them.
+
+### Boundary Notes
+
+- This release does not add downstream mutation authority to endpoint access.
+  Every downstream protected mutation still requires its own exact action
+  contract, policy decision, one-use greenlight, gateway check, and terminal
+  receipt/refusal/proof gap.
+- The new endpoint-access family remains an internal kernel primitive in
+  `0.3.0`; it is not a root export, hosted operation claim, MCP Registry
+  acceptance claim, or provider custody claim.
+
 ## 0.2.9 - 2026-05-30
 
 ### Added

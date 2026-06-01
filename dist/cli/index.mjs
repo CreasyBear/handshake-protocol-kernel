@@ -14481,6 +14481,11 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "gateway_proof_gap",
   "gateway_replayed",
   "gateway_conflict",
+  "endpoint_access_leased",
+  "endpoint_access_refused",
+  "endpoint_access_proof_gap",
+  "endpoint_access_usage_recorded",
+  "endpoint_access_exhausted",
   "operation_reconciled",
   "downstream_proof_gap",
   "downstream_recovery_available",
@@ -14501,6 +14506,7 @@ var ActionAttemptAuthorityEffectSchema = exports_external.enum([
   "proposed_commitment",
   "one_use_authority",
   "gateway_admission",
+  "bounded_endpoint_access",
   "downstream_evidence",
   "future_authority_reduction"
 ]);
@@ -19223,6 +19229,327 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
+// src/protocol/foundation/authority-safe-reference/index.ts
+var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "authority references must carry opaque refs or digests, not raw authority material"
+});
+function looksLikeEndpointAccessSecret(value) {
+  return endpointAccessStringVariants(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /PAYMENT-SIGNATURE\s*:/i,
+    /raw[_-]?payment[_-]?signature/i,
+    /private[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/.*\/secret/i,
+    /infisical:\/\/.*\/secret/i
+  ].some((pattern) => pattern.test(variant)));
+}
+function endpointAccessStringVariants(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like3(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like3(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/protocol/areas/agentic-endpoint-access/schemas.ts
+var agenticEndpointAccessSchemaVersion = "handshake.agentic-endpoint-access.v0.3.0";
+var AgenticEndpointAccessSafeReferenceSchema = AuthoritySafeReferenceSchema.describe("Rejects raw authority material such as PAYMENT-SIGNATURE, private keys, API keys, access tokens, and bearer tokens.");
+var AuthoritySafeStringSchema2 = AgenticEndpointAccessSafeReferenceSchema;
+var NonNegativeCounterSchema = exports_external.number().finite().nonnegative();
+var PositiveLimitSchema = exports_external.number().finite().positive();
+var BudgetSchema = exports_external.record(exports_external.string(), JsonValueSchema).default({});
+var EndpointAccessSurfaceBindingSourceSchema = exports_external.enum([
+  "protocol_config",
+  "cloud_config",
+  "ae_projection",
+  "operator_config",
+  "fixture"
+]);
+var EndpointAccessSurfaceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  actionClass: AuthoritySafeStringSchema2,
+  protectedSurfaceIntegrationRef: ResourceRefSchema.nullable().default(null),
+  bindingSource: EndpointAccessSurfaceBindingSourceSchema,
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  bindingDigest: DigestSchema
+});
+var AgenticEndpointAccessAuthorityBoundarySchema = exports_external.strictObject({
+  permitsEndpointAccess: exports_external.literal(true),
+  permitsMutation: exports_external.literal(false),
+  createsIndependentPolicyDecision: exports_external.literal(false),
+  createsIndependentGreenlight: exports_external.literal(false),
+  performsIndependentGatewayCheck: exports_external.literal(false),
+  exportsDownstreamReceipt: exports_external.literal(false),
+  mintsTerminalCertificate: exports_external.literal(false),
+  containsCredentialMaterial: exports_external.literal(false),
+  containsPaymentMaterial: exports_external.literal(false),
+  widensOperatingBounds: exports_external.literal(false),
+  freshActionContractRequiredForDownstreamAction: exports_external.literal(true)
+});
+var agenticEndpointAccessAuthorityBoundary = {
+  permitsEndpointAccess: true,
+  permitsMutation: false,
+  createsIndependentPolicyDecision: false,
+  createsIndependentGreenlight: false,
+  performsIndependentGatewayCheck: false,
+  exportsDownstreamReceipt: false,
+  mintsTerminalCertificate: false,
+  containsCredentialMaterial: false,
+  containsPaymentMaterial: false,
+  widensOperatingBounds: false,
+  freshActionContractRequiredForDownstreamAction: true
+};
+var AgenticEndpointAccessBypassPostureSchema = exports_external.enum([
+  "blocked",
+  "unblocked",
+  "unknown",
+  "stale",
+  "inconclusive"
+]);
+var AgenticEndpointAccessStateSchema = exports_external.enum([
+  "attempted",
+  "leased",
+  "refused",
+  "proof_gap",
+  "expired",
+  "exhausted",
+  "quarantined",
+  "revoked"
+]);
+var AgenticEndpointAccessClearanceStatusSchema = exports_external.enum(["leased", "refused", "proof_gap"]);
+var AgenticEndpointAccessFailClosedBehaviorSchema = exports_external.enum(["refuse", "proof_gap", "quarantine"]);
+var AgenticEndpointAccessUsageKindSchema = exports_external.enum(["request", "token", "tool_call", "cost_unit"]);
+var AgenticEndpointAccessCapabilityStatusSchema = exports_external.enum(["supported", "unsupported", "stale", "unknown"]);
+var AgenticEndpointAccessPolicySchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  policyId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  operatingBoundsId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  requiredDelegationEvidence: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  acceptedAgentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  principalBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  agentBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  runtimePostureRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  rawBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  siblingBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  leaseTtlSeconds: PositiveLimitSchema,
+  failClosedBehavior: AgenticEndpointAccessFailClosedBehaviorSchema,
+  capabilityRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema
+});
+var AgenticEndpointAccessAttemptSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  generatedCodeOrSpecRef: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  objectiveRef: AuthoritySafeStringSchema2,
+  delegationEvidenceRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  agentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  runtimePostureRefs: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  requestedLeaseTtlSeconds: PositiveLimitSchema,
+  requestedBudget: BudgetSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  capabilitiesPresented: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  attemptedAt: IsoDateSchema
+});
+var AgenticEndpointAccessClearanceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  clearanceBindingId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema.nullable(),
+  greenlightId: IdSchema.nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema.nullable(),
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  refusalRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  clearanceStatus: AgenticEndpointAccessClearanceStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evaluatedAt: IsoDateSchema
+});
+var AgenticEndpointAccessLeaseSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  leaseId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  operatingBoundsId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  allowedUse: exports_external.literal("bounded_endpoint_entry_only"),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  usageCounters: exports_external.record(exports_external.string(), NonNegativeCounterSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  revokedAt: IsoDateSchema.nullable().default(null),
+  authorityBoundary: AgenticEndpointAccessAuthorityBoundarySchema
+});
+var AgenticEndpointAccessUsageEventSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  usageEventId: IdSchema,
+  leaseId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  usageKind: AgenticEndpointAccessUsageKindSchema,
+  amount: PositiveLimitSchema,
+  counterAfter: NonNegativeCounterSchema,
+  occurredAt: IsoDateSchema,
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([])
+});
+var AgenticEndpointAccessReadbackSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  readbackId: IdSchema,
+  leaseId: IdSchema.nullable(),
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  attemptDigest: DigestSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  capabilityReportRef: AuthoritySafeStringSchema2,
+  healthReportRef: AuthoritySafeStringSchema2,
+  usageSummary: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  linkedActionRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedReceiptRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedProofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  publicVerifyUrl: exports_external.string().url(),
+  downstreamReceiptBoundary: exports_external.literal("linked_receipts_are_not_endpoint_access_authorization")
+});
+var AgenticEndpointAccessCapabilitiesSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  capabilityReportId: IdSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  cloudConfigRevision: AuthoritySafeStringSchema2,
+  runtimePostureStatus: AgenticEndpointAccessCapabilityStatusSchema,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  supportedEndpointAccessSchemaVersions: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  supportedDelegationEvidenceKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedPolicyFeatures: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedReadbackKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  failClosedReasons: exports_external.array(ReasonCodeSchema).default([]),
+  reportedAt: IsoDateSchema
+});
+
 // src/integrations/a1-evidence/delegation-evidence-record.ts
 var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
 var DelegationEvidenceRecordSchema = exports_external.object({
@@ -19483,6 +19810,14 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "action_type",
   "gateway_registry_entry",
   "operating_envelope",
+  "endpoint_access_surface_binding",
+  "agentic_endpoint_access_policy",
+  "agentic_endpoint_access_attempt",
+  "agentic_endpoint_access_clearance_binding",
+  "agentic_endpoint_access_lease",
+  "agentic_endpoint_access_usage_event",
+  "agentic_endpoint_access_readback",
+  "agentic_endpoint_access_capabilities",
   "gateway_credential_ref",
   "delegated_authority_ref",
   "delegated_authority_status_transition",
@@ -19528,6 +19863,38 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("action_type"), payload: ActionTypeSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("gateway_registry_entry"), payload: GatewayRegistryEntrySchema }),
   exports_external.strictObject({ objectType: exports_external.literal("operating_envelope"), payload: OperatingEnvelopeSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("endpoint_access_surface_binding"),
+    payload: EndpointAccessSurfaceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_policy"),
+    payload: AgenticEndpointAccessPolicySchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_attempt"),
+    payload: AgenticEndpointAccessAttemptSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_clearance_binding"),
+    payload: AgenticEndpointAccessClearanceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_lease"),
+    payload: AgenticEndpointAccessLeaseSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_usage_event"),
+    payload: AgenticEndpointAccessUsageEventSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_readback"),
+    payload: AgenticEndpointAccessReadbackSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_capabilities"),
+    payload: AgenticEndpointAccessCapabilitiesSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("gateway_credential_ref"), payload: GatewayCredentialRefSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("delegated_authority_ref"), payload: DelegatedAuthorityRefSchema }),
   exports_external.strictObject({
@@ -21397,6 +21764,63 @@ var protocolReasonCodes = [
   code2("npm_signature_not_verified", "proof_gap", "gateway"),
   code2("package_lifecycle_scripts_require_separate_contract", "proof_gap", "gateway"),
   code2("registry_integrity_not_verified", "proof_gap", "gateway"),
+  code2("agentic_endpoint_access_leased", "policy_decision", "agentic_endpoint_access", {
+    decisionPolarity: "pass"
+  }),
+  code2("agentic_endpoint_access_schema_version_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_delegation_evidence_kind_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_revision_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_kernel_sync_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_middleware_version_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_readiness_unknown", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_capability_report_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_policy_feature_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_readback_kind_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_policy_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_not_configured", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_scope_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_readback_scope_mismatch", "transition_error", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_commit_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("endpoint_access_surface_binding_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("action_contract_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("policy_decision_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("greenlight_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("gateway_check_attempt_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_surface_binding_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_surface_binding_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_policy_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_gateway_authority_holder_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_raw_bypass_posture_unknown", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_raw_bypass_posture_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_raw_bypass_probe_inconclusive", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_raw_bypass_posture_unblocked", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_sibling_bypass_posture_unknown", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_sibling_bypass_posture_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_sibling_bypass_probe_inconclusive", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_sibling_bypass_posture_unblocked", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_contract_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_candidate_canonicalization_failed", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_policy_decision_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_policy_not_greenlit", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_greenlight_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_greenlight_not_one_use", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_gateway_check_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_gateway_check_not_passed", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_operating_bounds_mismatch", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_greenlight_already_leased", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_isolation_state_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_subject_quarantined", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_missing_clearance_proof", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_budget_exhausted", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_usage_counter_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_usage_commit_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_lease_expired", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_lease_revoked", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_downstream_fresh_contract_missing", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_validator_transcript_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_dry_run_transcript_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_readback_evidence_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_transcript_binding_mismatch", "proof_gap", "agentic_endpoint_access"),
   code2("invalid_transition_unknown_reconciliation_cannot_resolve_proof_gap", "transition_error", "operation_lifecycle"),
   code2("orphan_mitigation_required", "proof_gap", "operation_lifecycle"),
   code2("unneeded_retry", "proof_gap", "operation_lifecycle"),
@@ -24303,6 +24727,8 @@ class InMemoryProtocolStore {
   currentProtectedPathPostures = new Map;
   currentProtectedSurfaceOperationClaims = new Map;
   receiptsByMutationAttempt = new Map;
+  endpointAccessLeaseClaims = new Map;
+  endpointAccessUsageCounters = new Map;
   async putRecord(record2) {
     this.records.set(recordKey(record2.objectType, record2.objectId), structuredClone(record2));
   }
@@ -24527,6 +24953,51 @@ class InMemoryProtocolStore {
     this.receiptsByMutationAttempt = nextReceiptsByMutationAttempt;
     return "committed";
   }
+  async commitEndpointAccessLease(commit) {
+    if (this.endpointAccessLeaseClaims.has(commit.leaseClaim.greenlightId)) {
+      return "greenlight_already_leased";
+    }
+    if (commit.events.some((event) => this.hasStreamOffset(event))) {
+      return "stream_conflict";
+    }
+    if (this.hasRecordDigestConflict(commit.records)) {
+      return "record_digest_conflict";
+    }
+    const nextRecords = new Map(this.records);
+    const nextEvents = [...this.events];
+    const nextEndpointAccessLeaseClaims = new Map(this.endpointAccessLeaseClaims);
+    nextEndpointAccessLeaseClaims.set(commit.leaseClaim.greenlightId, structuredClone(commit.leaseClaim));
+    this.stageRecordsAndEvents(nextRecords, nextEvents, commit.records, commit.events);
+    this.records = nextRecords;
+    this.events = nextEvents;
+    this.endpointAccessLeaseClaims = nextEndpointAccessLeaseClaims;
+    return "committed";
+  }
+  async getEndpointAccessUsageCounter(key) {
+    return this.endpointAccessUsageCounters.get(endpointAccessUsageCounterKey(key)) ?? 0;
+  }
+  async commitEndpointAccessUsage(commit) {
+    const key = endpointAccessUsageCounterKey(commit.usageCounterReservation);
+    const currentCounter = this.endpointAccessUsageCounters.get(key) ?? 0;
+    if (currentCounter !== commit.usageCounterReservation.expectedCounter) {
+      return "counter_conflict";
+    }
+    if (commit.events.some((event) => this.hasStreamOffset(event))) {
+      return "stream_conflict";
+    }
+    if (this.hasRecordDigestConflict(commit.records)) {
+      return "record_digest_conflict";
+    }
+    const nextRecords = new Map(this.records);
+    const nextEvents = [...this.events];
+    const nextEndpointAccessUsageCounters = new Map(this.endpointAccessUsageCounters);
+    nextEndpointAccessUsageCounters.set(key, commit.usageCounterReservation.counterAfter);
+    this.stageRecordsAndEvents(nextRecords, nextEvents, commit.records, commit.events);
+    this.records = nextRecords;
+    this.events = nextEvents;
+    this.endpointAccessUsageCounters = nextEndpointAccessUsageCounters;
+    return "committed";
+  }
   countRecordsOfType(objectType) {
     let count = 0;
     for (const record2 of this.records.values()) {
@@ -24540,6 +25011,12 @@ class InMemoryProtocolStore {
   }
   hasStreamOffset(event) {
     return this.events.some((existing) => existing.streamId === event.streamId && existing.partitionKey === event.partitionKey && existing.offset === event.offset);
+  }
+  hasRecordDigestConflict(records2) {
+    return records2.some((record2) => {
+      const existing = this.records.get(recordKey(record2.objectType, record2.objectId));
+      return Boolean(existing && existing.canonicalDigest !== record2.canonicalDigest);
+    });
   }
   stageRecordsAndEvents(records2, events, commitRecords, commitEvents) {
     for (const record2 of commitRecords) {
@@ -24566,6 +25043,9 @@ function recordKey(type, id) {
 }
 function isolationScopeKey(scopeRef) {
   return `${scopeRef.tenantId}:${scopeRef.organizationId}:${scopeRef.scopeType}:${scopeRef.scopeId}`;
+}
+function endpointAccessUsageCounterKey(key) {
+  return `${key.tenantId}:${key.organizationId}:${key.leaseId}:${key.usageKind}`;
 }
 
 // src/http/admission/caller-auth.ts
@@ -24682,6 +25162,90 @@ var HostedReadinessStateSchema = exports_external.enum([
   "read_only",
   "not_promoted"
 ]);
+var HostedDigestSchema = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var HostedEndpointAccessReferenceSchema = exports_external.string().min(1).max(500).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "hosted endpoint access references must be opaque refs or digests, not raw authority material"
+});
+var HostedAgenticEndpointAccessBypassPostureSchema = exports_external.enum([
+  "blocked",
+  "unblocked",
+  "unknown",
+  "stale",
+  "inconclusive"
+]);
+var HostedAgenticEndpointAccessCapabilityStatusSchema = exports_external.enum([
+  "supported",
+  "unsupported",
+  "stale",
+  "unknown"
+]);
+var HostedAgenticEndpointAccessConfigSchema = exports_external.strictObject({
+  enabled: exports_external.boolean(),
+  protectedSurfaceBindingRef: HostedEndpointAccessReferenceSchema,
+  protectedSurfaceBindingDigest: HostedDigestSchema,
+  gatewayAuthorityHolderRef: HostedEndpointAccessReferenceSchema,
+  capabilityReportRef: HostedEndpointAccessReferenceSchema,
+  kernelVersion: exports_external.string().min(1).max(100),
+  middlewareVersion: exports_external.string().min(1).max(100),
+  cloudConfigRevision: exports_external.string().min(1).max(200),
+  runtimePostureStatus: HostedAgenticEndpointAccessCapabilityStatusSchema,
+  rawBypassPosture: HostedAgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: HostedAgenticEndpointAccessBypassPostureSchema,
+  supportedEndpointAccessSchemaVersions: exports_external.array(exports_external.string().min(1).max(200)).min(1),
+  supportedDelegationEvidenceKinds: exports_external.array(exports_external.string().min(1).max(200)).default([]),
+  supportedPolicyFeatures: exports_external.array(exports_external.string().min(1).max(200)).default([]),
+  supportedReadbackKinds: exports_external.array(exports_external.string().min(1).max(200)).default([]),
+  delegatedRequestTranscriptRef: HostedEndpointAccessReferenceSchema.nullable().default(null),
+  delegatedRequestTranscriptDigest: HostedDigestSchema.nullable().default(null),
+  delegatedRequestTranscriptBindingDigest: HostedDigestSchema.nullable().default(null),
+  dryRunTranscriptRef: HostedEndpointAccessReferenceSchema.nullable().default(null),
+  dryRunTranscriptDigest: HostedDigestSchema.nullable().default(null),
+  dryRunTranscriptBindingDigest: HostedDigestSchema.nullable().default(null),
+  readbackRef: HostedEndpointAccessReferenceSchema.nullable().default(null),
+  readbackDigest: HostedDigestSchema.nullable().default(null)
+});
+var HostedAgenticEndpointAccessReadinessReportSchema = exports_external.strictObject({
+  configured: exports_external.boolean(),
+  readinessState: HostedReadinessStateSchema,
+  supported: exports_external.boolean(),
+  protectedSurfaceBindingRef: exports_external.string().nullable(),
+  protectedSurfaceBindingDigest: HostedDigestSchema.nullable(),
+  gatewayAuthorityHolderRef: exports_external.string().nullable(),
+  capabilityReportRef: exports_external.string().nullable(),
+  kernelVersion: exports_external.string().nullable(),
+  middlewareVersion: exports_external.string().nullable(),
+  cloudConfigRevision: exports_external.string().nullable(),
+  runtimePostureStatus: HostedAgenticEndpointAccessCapabilityStatusSchema.nullable(),
+  rawBypassPosture: HostedAgenticEndpointAccessBypassPostureSchema.nullable(),
+  siblingBypassPosture: HostedAgenticEndpointAccessBypassPostureSchema.nullable(),
+  supportedEndpointAccessSchemaVersions: exports_external.array(exports_external.string()),
+  supportedDelegationEvidenceKinds: exports_external.array(exports_external.string()),
+  supportedPolicyFeatures: exports_external.array(exports_external.string()),
+  supportedReadbackKinds: exports_external.array(exports_external.string()),
+  delegatedRequestTranscriptRef: exports_external.string().nullable(),
+  delegatedRequestTranscriptDigest: HostedDigestSchema.nullable(),
+  delegatedRequestTranscriptBindingDigest: HostedDigestSchema.nullable(),
+  dryRunTranscriptRef: exports_external.string().nullable(),
+  dryRunTranscriptDigest: HostedDigestSchema.nullable(),
+  dryRunTranscriptBindingDigest: HostedDigestSchema.nullable(),
+  readbackRef: exports_external.string().nullable(),
+  readbackDigest: HostedDigestSchema.nullable(),
+  storagePosture: exports_external.strictObject({
+    d1Authority: exports_external.enum(["structured_evidence", "missing"]),
+    kvAuthority: exports_external.literal("non_authoritative_cache")
+  }),
+  authorityBoundary: exports_external.strictObject({
+    createsPolicyDecision: exports_external.literal(false),
+    createsGreenlight: exports_external.literal(false),
+    performsGatewayCheck: exports_external.literal(false),
+    createsMutationAuthority: exports_external.literal(false),
+    storesCredentialMaterial: exports_external.literal(false),
+    storesPaymentMaterial: exports_external.literal(false),
+    exportsDownstreamReceipt: exports_external.literal(false),
+    mintsTerminalCertificate: exports_external.literal(false)
+  }),
+  unsupportedReasonCodes: exports_external.array(exports_external.string())
+});
 var HostedRolePolicySchema = exports_external.strictObject({
   admittedTransitionRoles: exports_external.array(exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"])).min(1)
 });
@@ -24715,7 +25279,8 @@ var HostedAdmissionConfigSchema = exports_external.strictObject({
   redactionProfileRefs: exports_external.array(exports_external.string().min(1).max(200)).min(1),
   retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]),
   exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]),
-  readinessExpectations: exports_external.array(exports_external.string().min(1).max(500)).min(1)
+  readinessExpectations: exports_external.array(exports_external.string().min(1).max(500)).min(1),
+  agenticEndpointAccess: HostedAgenticEndpointAccessConfigSchema.optional()
 }).superRefine((config2, ctx) => {
   if (!config2.readPolicy.redactedEvidence.requiredScopes.includes("evidence:redacted:read")) {
     ctx.addIssue({
@@ -24832,6 +25397,7 @@ var HostedReadinessReportSchema = exports_external.strictObject({
   retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]).nullable(),
   exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]).nullable(),
   readinessExpectations: exports_external.array(exports_external.string()),
+  agenticEndpointAccess: HostedAgenticEndpointAccessReadinessReportSchema,
   unsupportedCapabilities: exports_external.array(exports_external.string())
 });
 function requireHostedAdmissionConfig(config2) {
@@ -26538,6 +27104,14 @@ var protocolObjectRegistry = {
   action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
   gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
   operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
+  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read"),
+  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read"),
   gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
   delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
   delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
@@ -28393,6 +28967,643 @@ function assertTransition(result) {
 function isRecoveryTerminalConflict2(error51) {
   return error51 instanceof HandshakeProtocolError && error51.code === "recovery_terminal_conflict";
 }
+// src/protocol/areas/agentic-endpoint-access/inputs.ts
+var IssueAgenticEndpointAccessLeaseInputSchema = exports_external.strictObject({
+  attemptId: IdSchema,
+  policyId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayCheckAttemptId: IdSchema,
+  leaseId: IdSchema.optional(),
+  evaluatedAt: IsoDateSchema.optional()
+});
+var RecordAgenticEndpointAccessUsageEventInputSchema = exports_external.strictObject({
+  leaseId: IdSchema,
+  usageKind: AgenticEndpointAccessUsageKindSchema,
+  amount: exports_external.number().finite().positive(),
+  usageEventId: IdSchema.optional(),
+  occurredAt: IsoDateSchema.optional()
+});
+// src/protocol/areas/agentic-endpoint-access/transitions.ts
+var MAX_ENDPOINT_ACCESS_USAGE_COMMIT_RETRIES = 3;
+async function issueAgenticEndpointAccessLease(store, recorder, inputValue) {
+  const input = IssueAgenticEndpointAccessLeaseInputSchema.parse(inputValue);
+  const evaluatedAt = input.evaluatedAt ?? nowIso();
+  const attemptRecord = await recorder.requiredRecord("agentic_endpoint_access_attempt", input.attemptId, "agentic_endpoint_access_attempt_missing");
+  const attempt = AgenticEndpointAccessAttemptSchema.parse(attemptRecord.payload);
+  const policyRecord = await store.getRecord("agentic_endpoint_access_policy", input.policyId);
+  const bindingRecord = await store.getRecord("endpoint_access_surface_binding", attempt.protectedSurfaceBindingId);
+  const contractRecord = await store.getRecord("action_contract", input.actionContractId);
+  const decisionRecord = await store.getRecord("policy_decision", input.policyDecisionId);
+  const greenlightRecord = await store.getRecord("greenlight", input.greenlightId);
+  const gateRecord = await store.getRecord("gateway_check_attempt", input.gatewayCheckAttemptId);
+  const missing = firstMissingRecord([
+    ["agentic_endpoint_access_policy", policyRecord],
+    ["endpoint_access_surface_binding", bindingRecord],
+    ["action_contract", contractRecord],
+    ["policy_decision", decisionRecord],
+    ["greenlight", greenlightRecord],
+    ["gateway_check_attempt", gateRecord]
+  ]);
+  if (missing) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      status: "proof_gap",
+      reasonCode: `${missing}_missing`,
+      reason: `Required ${missing} evidence is missing before endpoint access lease issuance.`,
+      contract: contractRecord?.payload ?? null
+    });
+  }
+  if (!policyRecord || !bindingRecord || !contractRecord || !decisionRecord || !greenlightRecord || !gateRecord) {
+    throw new Error("endpoint access missing-record guard failed to return a proof gap");
+  }
+  const policy = policyRecord.payload;
+  const binding = EndpointAccessSurfaceBindingSchema.parse(bindingRecord.payload);
+  const contract = contractRecord.payload;
+  const decision = decisionRecord.payload;
+  const greenlight = greenlightRecord.payload;
+  const gate = gateRecord.payload;
+  const scopeFailure = endpointAccessScopeFailure(attempt, [
+    ["agentic_endpoint_access_policy", policyRecord],
+    ["endpoint_access_surface_binding", bindingRecord],
+    ["action_contract", contractRecord],
+    ["policy_decision", decisionRecord],
+    ["greenlight", greenlightRecord],
+    ["gateway_check_attempt", gateRecord]
+  ]);
+  if (scopeFailure) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      ...scopeFailure,
+      contract
+    });
+  }
+  const bindingFailure = endpointAccessBindingFailure({ attempt, policy, binding, contract, evaluatedAt });
+  if (bindingFailure) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      ...bindingFailure,
+      contract
+    });
+  }
+  const bypassFailure = endpointAccessBypassPostureFailure(attempt, policy);
+  if (bypassFailure) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      ...bypassFailure,
+      contract
+    });
+  }
+  const authorityFailure = endpointAccessAuthorityFailure({
+    input,
+    attempt,
+    policy,
+    contract,
+    decision,
+    greenlight,
+    gate
+  });
+  if (authorityFailure) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      ...authorityFailure,
+      contract
+    });
+  }
+  const isolationFailure = await endpointAccessIsolationFailure(store, contract, greenlight, evaluatedAt);
+  if (isolationFailure) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      ...isolationFailure,
+      contract
+    });
+  }
+  const posture = await loadCurrentPostureForContract(store, contract);
+  const postureEvaluation = evaluateRequiredProtectedPathPosture({
+    contract,
+    gateway: contract,
+    posture,
+    now: evaluatedAt
+  });
+  if (!postureEvaluation.ok) {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      status: "proof_gap",
+      reasonCode: postureEvaluation.reasonCode,
+      reason: postureEvaluation.reason,
+      contract
+    });
+  }
+  const leaseExpiresAt = minIso(policy.expiresAt, secondsAfter(evaluatedAt, Math.min(policy.leaseTtlSeconds, attempt.requestedLeaseTtlSeconds)), greenlight.expiresAt);
+  const clearanceBinding = AgenticEndpointAccessClearanceBindingSchema.parse({
+    schemaVersion: agenticEndpointAccessSchemaVersion,
+    tenantId: attempt.tenantId,
+    organizationId: attempt.organizationId,
+    createdAt: evaluatedAt,
+    clearanceBindingId: createId("aec"),
+    attemptId: attempt.attemptId,
+    candidateActionId: attempt.candidateActionId,
+    actionContractId: contract.actionContractId,
+    policyDecisionId: decision.policyDecisionId,
+    greenlightId: greenlight.greenlightId,
+    gatewayRegistryEntryId: contract.gatewayRegistryEntryId,
+    gatewayId: contract.gatewayId,
+    gatewayAuthorityHolderRef: contract.gatewayAuthorityHolderRef,
+    gatewayCheckAttemptId: gate.gateAttemptId,
+    protectedSurfaceBindingId: binding.protectedSurfaceBindingId,
+    protectedSurfaceBindingDigest: binding.bindingDigest,
+    refusalRefs: [],
+    proofGapRefs: [],
+    clearanceStatus: "leased",
+    reasonCodes: ["agentic_endpoint_access_leased"],
+    evaluatedAt
+  });
+  const lease = AgenticEndpointAccessLeaseSchema.parse({
+    schemaVersion: agenticEndpointAccessSchemaVersion,
+    tenantId: attempt.tenantId,
+    organizationId: attempt.organizationId,
+    createdAt: evaluatedAt,
+    leaseId: input.leaseId ?? createId("ael"),
+    attemptId: attempt.attemptId,
+    candidateActionId: attempt.candidateActionId,
+    actionContractId: contract.actionContractId,
+    policyDecisionId: decision.policyDecisionId,
+    greenlightId: greenlight.greenlightId,
+    gatewayRegistryEntryId: contract.gatewayRegistryEntryId,
+    gatewayId: contract.gatewayId,
+    gatewayAuthorityHolderRef: contract.gatewayAuthorityHolderRef,
+    gatewayCheckAttemptId: gate.gateAttemptId,
+    protectedSurfaceBindingId: binding.protectedSurfaceBindingId,
+    protectedSurfaceBindingDigest: binding.bindingDigest,
+    protectedSurfaceRef: binding.protectedSurfaceRef,
+    protectedSurfaceKind: binding.protectedSurfaceKind,
+    resourceRef: binding.resourceRef,
+    principalRef: attempt.principalRef,
+    agentRef: attempt.agentRef,
+    operatingBoundsId: policy.operatingBoundsId,
+    policyVersionId: policy.policyVersionId,
+    configRevision: policy.configRevision,
+    runtimePostureRef: attempt.runtimePostureRefs[0],
+    rawBypassPosture: attempt.rawBypassPosture,
+    siblingBypassPosture: attempt.siblingBypassPosture,
+    allowedUse: "bounded_endpoint_entry_only",
+    rateLimit: policy.rateLimit,
+    tokenBudget: policy.tokenBudget,
+    toolBudget: policy.toolBudget,
+    costBudget: policy.costBudget,
+    usageCounters: {},
+    issuedAt: evaluatedAt,
+    expiresAt: leaseExpiresAt,
+    revokedAt: null,
+    authorityBoundary: agenticEndpointAccessAuthorityBoundary
+  });
+  const commitResult = await store.commitEndpointAccessLease({
+    leaseClaim: {
+      greenlightId: greenlight.greenlightId,
+      leaseId: lease.leaseId,
+      tenantId: attempt.tenantId,
+      organizationId: attempt.organizationId,
+      claimedAt: evaluatedAt
+    },
+    records: await buildTransitionRecords(recorder, [
+      { objectType: "agentic_endpoint_access_clearance_binding", payload: clearanceBinding },
+      { objectType: "agentic_endpoint_access_lease", payload: lease }
+    ], attempt),
+    events: []
+  });
+  if (commitResult === "greenlight_already_leased") {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      status: "refused",
+      reasonCode: "agentic_endpoint_access_greenlight_already_leased",
+      reason: "One endpoint access greenlight cannot create more than one endpoint access lease.",
+      contract
+    });
+  }
+  if (commitResult !== "committed") {
+    return persistEndpointAccessFailure(recorder, {
+      attempt,
+      input,
+      evaluatedAt,
+      status: "proof_gap",
+      reasonCode: "agentic_endpoint_access_commit_conflict",
+      reason: `Endpoint access lease commit failed with ${commitResult}; replay evidence is required before treating the lease as active.`,
+      contract
+    });
+  }
+  return { status: "leased", lease, clearanceBinding, reasonCode: null, refusalRef: null, proofGapRef: null };
+}
+async function recordAgenticEndpointAccessUsageEvent(store, recorder, inputValue) {
+  const input = RecordAgenticEndpointAccessUsageEventInputSchema.parse(inputValue);
+  const occurredAt = input.occurredAt ?? nowIso();
+  const leaseRecord = await recorder.requiredRecord("agentic_endpoint_access_lease", input.leaseId, "agentic_endpoint_access_lease_missing");
+  const lease = AgenticEndpointAccessLeaseSchema.parse(leaseRecord.payload);
+  const contractRecord = await store.getRecord("action_contract", lease.actionContractId);
+  const isolationStates = contractRecord ? await store.listIsolationStates(isolationScopeRefsForContract(contractRecord.payload)) : [];
+  const isolationFailure = blockingIsolationFailure(isolationStates, occurredAt);
+  const useCheck = classifyAgenticEndpointAccessLeaseUse(lease, occurredAt, {
+    quarantined: Boolean(isolationFailure)
+  });
+  if (!useCheck.ok) {
+    return persistEndpointAccessUsageRefusal(recorder, lease, input, occurredAt, useCheck.reasonCode, useCheck.state);
+  }
+  for (let attempt = 0;attempt <= MAX_ENDPOINT_ACCESS_USAGE_COMMIT_RETRIES; attempt += 1) {
+    const currentCounter = await store.getEndpointAccessUsageCounter({
+      tenantId: lease.tenantId,
+      organizationId: lease.organizationId,
+      leaseId: lease.leaseId,
+      usageKind: input.usageKind
+    });
+    const counterAfter = currentCounter + input.amount;
+    const limit = usageLimit(lease, input.usageKind);
+    if (typeof limit === "number" && counterAfter > limit) {
+      return persistEndpointAccessUsageRefusal(recorder, lease, input, occurredAt, "agentic_endpoint_access_budget_exhausted", "exhausted", counterAfter);
+    }
+    const usageEvent = AgenticEndpointAccessUsageEventSchema.parse({
+      schemaVersion: agenticEndpointAccessSchemaVersion,
+      tenantId: lease.tenantId,
+      organizationId: lease.organizationId,
+      createdAt: occurredAt,
+      usageEventId: input.usageEventId ?? createId("aeu"),
+      leaseId: lease.leaseId,
+      protectedSurfaceBindingId: lease.protectedSurfaceBindingId,
+      protectedSurfaceRef: lease.protectedSurfaceRef,
+      protectedSurfaceKind: lease.protectedSurfaceKind,
+      resourceRef: lease.resourceRef,
+      usageKind: input.usageKind,
+      amount: input.amount,
+      counterAfter,
+      occurredAt,
+      proofGapRefs: []
+    });
+    const commitResult = await store.commitEndpointAccessUsage({
+      usageCounterReservation: {
+        tenantId: lease.tenantId,
+        organizationId: lease.organizationId,
+        leaseId: lease.leaseId,
+        usageKind: input.usageKind,
+        expectedCounter: currentCounter,
+        counterAfter,
+        updatedAt: occurredAt
+      },
+      records: await buildTransitionRecords(recorder, [{ objectType: "agentic_endpoint_access_usage_event", payload: usageEvent }], lease),
+      events: []
+    });
+    if (commitResult === "committed") {
+      return { status: "recorded", usageEvent, counterAfter, reasonCode: null, refusalRef: null };
+    }
+    if (commitResult === "counter_conflict")
+      continue;
+    return persistEndpointAccessUsageProofGap(recorder, lease, input, occurredAt, "agentic_endpoint_access_usage_commit_conflict", `Endpoint access usage commit failed with ${commitResult}; replay evidence is required before treating usage as recorded.`, counterAfter, contractRecord?.payload ?? null);
+  }
+  return persistEndpointAccessUsageProofGap(recorder, lease, input, occurredAt, "agentic_endpoint_access_usage_counter_conflict", "Endpoint access usage counter changed repeatedly during bounded commit retries.", null, contractRecord?.payload ?? null);
+}
+function classifyAgenticEndpointAccessLeaseUse(lease, now, options = {}) {
+  if (options.quarantined) {
+    return {
+      ok: false,
+      state: "quarantined",
+      reasonCode: "agentic_endpoint_access_subject_quarantined"
+    };
+  }
+  if (lease.revokedAt) {
+    return { ok: false, state: "revoked", reasonCode: "agentic_endpoint_access_lease_revoked" };
+  }
+  if (Date.parse(lease.expiresAt) <= Date.parse(now)) {
+    return { ok: false, state: "expired", reasonCode: "agentic_endpoint_access_lease_expired" };
+  }
+  return { ok: true, state: "leased" };
+}
+function firstMissingRecord(entries2) {
+  return entries2.find(([, record2]) => !record2)?.[0] ?? null;
+}
+async function buildTransitionRecords(recorder, records2, scope2) {
+  const contextRecord = await recorder.transitionRequestContextRecordFor(scope2);
+  return Promise.all([...contextRecord ? [contextRecord] : [], ...records2].map((record2) => recorder.buildRecord(record2)));
+}
+function endpointAccessScopeFailure(attempt, records2) {
+  for (const [label, record2] of records2) {
+    const payload = record2.payload;
+    if (record2.tenantId !== attempt.tenantId || record2.organizationId !== attempt.organizationId || payload.tenantId !== attempt.tenantId || payload.organizationId !== attempt.organizationId) {
+      return endpointRefusal("agentic_endpoint_access_scope_mismatch", `${label} is outside the endpoint access attempt tenant or organization scope.`);
+    }
+  }
+  return null;
+}
+function endpointAccessBindingFailure(input) {
+  const { attempt, policy, binding, contract, evaluatedAt } = input;
+  const expected = {
+    protectedSurfaceBindingId: binding.protectedSurfaceBindingId,
+    protectedSurfaceBindingDigest: binding.bindingDigest,
+    protectedSurfaceRef: binding.protectedSurfaceRef,
+    protectedSurfaceKind: binding.protectedSurfaceKind,
+    resourceRef: binding.resourceRef,
+    gatewayRegistryEntryId: binding.gatewayRegistryEntryId,
+    gatewayId: binding.gatewayId
+  };
+  for (const source of [attempt, policy]) {
+    for (const [key, value] of Object.entries(expected)) {
+      if (source[key] !== value) {
+        return endpointProofGap("agentic_endpoint_access_surface_binding_mismatch", "Endpoint access surface binding does not match the attempt and policy tuple.");
+      }
+    }
+  }
+  if (contract.protectedSurfaceKind !== binding.protectedSurfaceKind || contract.resourceRef !== binding.resourceRef || contract.gatewayRegistryEntryId !== binding.gatewayRegistryEntryId || contract.gatewayId !== binding.gatewayId || contract.actionClass !== binding.actionClass) {
+    return endpointProofGap("agentic_endpoint_access_surface_binding_mismatch", "Endpoint access surface binding does not match the protected action contract tuple.");
+  }
+  if (policy.gatewayAuthorityHolderRef !== contract.gatewayAuthorityHolderRef) {
+    return endpointRefusal("agentic_endpoint_access_gateway_authority_holder_mismatch", "Endpoint access policy and action contract disagree on the gateway authority holder.");
+  }
+  if (Date.parse(binding.expiresAt) <= Date.parse(evaluatedAt)) {
+    return endpointProofGap("agentic_endpoint_access_surface_binding_stale", "Endpoint access surface binding is stale before lease issuance.");
+  }
+  if (Date.parse(policy.expiresAt) <= Date.parse(evaluatedAt)) {
+    return endpointProofGap("agentic_endpoint_access_policy_stale", "Endpoint access policy is stale before lease issuance.");
+  }
+  return null;
+}
+function endpointAccessBypassPostureFailure(attempt, policy) {
+  const rawFailure = endpointAccessBypassPostureReason("raw", attempt.rawBypassPosture);
+  if (rawFailure)
+    return rawFailure;
+  const siblingFailure = endpointAccessBypassPostureReason("sibling", attempt.siblingBypassPosture);
+  if (siblingFailure)
+    return siblingFailure;
+  if (!policy.rawBypassPostureRequirements.includes(attempt.rawBypassPosture)) {
+    return endpointRefusal("agentic_endpoint_access_raw_bypass_posture_unblocked", "Endpoint access policy does not allow the runtime raw bypass posture.");
+  }
+  if (!policy.siblingBypassPostureRequirements.includes(attempt.siblingBypassPosture)) {
+    return endpointRefusal("agentic_endpoint_access_sibling_bypass_posture_unblocked", "Endpoint access policy does not allow the runtime sibling bypass posture.");
+  }
+  return null;
+}
+function endpointAccessBypassPostureReason(prefix2, posture) {
+  if (posture === "blocked")
+    return null;
+  const label = prefix2 === "raw" ? "raw" : "sibling";
+  if (posture === "unknown") {
+    return endpointProofGap(`agentic_endpoint_access_${label}_bypass_posture_unknown`, `Endpoint access cannot lease while ${label} bypass posture is unknown.`);
+  }
+  if (posture === "stale") {
+    return endpointProofGap(`agentic_endpoint_access_${label}_bypass_posture_stale`, `Endpoint access cannot lease while ${label} bypass posture evidence is stale.`);
+  }
+  if (posture === "inconclusive") {
+    return endpointProofGap(`agentic_endpoint_access_${label}_bypass_probe_inconclusive`, `Endpoint access cannot lease while ${label} bypass probe evidence is inconclusive.`);
+  }
+  return endpointRefusal(`agentic_endpoint_access_${label}_bypass_posture_unblocked`, `Endpoint access cannot lease while ${label} bypass posture is unblocked.`);
+}
+function endpointAccessAuthorityFailure(input) {
+  const { input: request, attempt, policy, contract, decision, greenlight, gate } = input;
+  if (contract.actionContractId !== request.actionContractId) {
+    return endpointRefusal("agentic_endpoint_access_contract_mismatch", "Endpoint access request used the wrong action contract.");
+  }
+  if (contract.candidateActionId !== attempt.candidateActionId) {
+    return endpointRefusal("agentic_endpoint_access_candidate_canonicalization_failed", "Endpoint access attempt did not canonicalize to the provided action contract.");
+  }
+  if (decision.policyDecisionId !== request.policyDecisionId || decision.actionContractId !== contract.actionContractId) {
+    return endpointRefusal("agentic_endpoint_access_policy_decision_mismatch", "Endpoint access request used a policy decision that is not bound to the action contract.");
+  }
+  if (decision.decision !== "greenlight") {
+    return endpointRefusal("agentic_endpoint_access_policy_not_greenlit", "Endpoint access lease issuance requires a greenlit policy decision.");
+  }
+  if (greenlight.greenlightId !== request.greenlightId || greenlight.actionContractId !== contract.actionContractId || greenlight.policyDecisionId !== decision.policyDecisionId || greenlight.gatewayRegistryEntryId !== contract.gatewayRegistryEntryId || greenlight.gatewayId !== contract.gatewayId || greenlight.actionClass !== contract.actionClass || greenlight.resourceRef !== contract.resourceRef || greenlight.requiredProtectedPathState !== contract.requiredProtectedPathState) {
+    return endpointRefusal("agentic_endpoint_access_greenlight_mismatch", "Endpoint access request used a greenlight that is not bound to the same exact action contract.");
+  }
+  if (greenlight.maxUses !== 1) {
+    return endpointRefusal("agentic_endpoint_access_greenlight_not_one_use", "Endpoint access greenlight must be one-use authority.");
+  }
+  if (gate.gateAttemptId !== request.gatewayCheckAttemptId || gate.actionContractId !== contract.actionContractId || gate.greenlightId !== greenlight.greenlightId || gate.gatewayId !== contract.gatewayId) {
+    return endpointRefusal("agentic_endpoint_access_gateway_check_mismatch", "Endpoint access request used a gateway check that is not bound to the same exact greenlight and contract.");
+  }
+  if (gate.gateDecision !== "passed" || !gate.consumedGreenlight) {
+    return endpointRefusal("agentic_endpoint_access_gateway_check_not_passed", "Endpoint access lease issuance requires a passed gateway check with consumed greenlight.");
+  }
+  if (policy.operatingBoundsId !== contract.envelopeId) {
+    return endpointRefusal("agentic_endpoint_access_operating_bounds_mismatch", "Endpoint access policy must bind to the operating bounds used by the action contract.");
+  }
+  return null;
+}
+async function endpointAccessIsolationFailure(store, contract, greenlight, now) {
+  const states = await store.listIsolationStates([
+    ...isolationScopeRefsForContract(contract),
+    ...isolationScopeRefsForGreenlight(greenlight)
+  ]);
+  return blockingIsolationFailure(states, now);
+}
+function blockingIsolationFailure(states, now) {
+  for (const state of states) {
+    if (state.expiresAt && Date.parse(state.expiresAt) <= Date.parse(now)) {
+      return endpointProofGap("agentic_endpoint_access_isolation_state_stale", "Endpoint access observed an uncleared but expired isolation state; operator clearance evidence is required.");
+    }
+    if (["quarantined", "halted", "revoked", "state_suspect"].includes(state.state)) {
+      return endpointRefusal("agentic_endpoint_access_subject_quarantined", "Endpoint access is blocked by current isolation state.");
+    }
+  }
+  return null;
+}
+async function persistEndpointAccessFailure(recorder, input) {
+  const evidenceRef = input.status === "refused" ? await persistEndpointAccessRefusal(recorder, input) : await persistEndpointAccessProofGap(recorder, input);
+  const clearanceBinding = AgenticEndpointAccessClearanceBindingSchema.parse({
+    schemaVersion: agenticEndpointAccessSchemaVersion,
+    tenantId: input.attempt.tenantId,
+    organizationId: input.attempt.organizationId,
+    createdAt: input.evaluatedAt,
+    clearanceBindingId: createId("aec"),
+    attemptId: input.attempt.attemptId,
+    candidateActionId: input.attempt.candidateActionId,
+    actionContractId: input.input.actionContractId,
+    policyDecisionId: input.input.policyDecisionId,
+    greenlightId: input.input.greenlightId,
+    gatewayRegistryEntryId: input.attempt.gatewayRegistryEntryId,
+    gatewayId: input.attempt.gatewayId,
+    gatewayAuthorityHolderRef: input.contract?.gatewayAuthorityHolderRef ?? "gateway-authority:unknown",
+    gatewayCheckAttemptId: input.input.gatewayCheckAttemptId,
+    protectedSurfaceBindingId: input.attempt.protectedSurfaceBindingId,
+    protectedSurfaceBindingDigest: input.attempt.protectedSurfaceBindingDigest,
+    refusalRefs: input.status === "refused" ? [evidenceRef] : [],
+    proofGapRefs: input.status === "proof_gap" ? [evidenceRef] : [],
+    clearanceStatus: input.status,
+    reasonCodes: [input.reasonCode],
+    evaluatedAt: input.evaluatedAt
+  });
+  await recorder.persistRecord({ objectType: "agentic_endpoint_access_clearance_binding", payload: clearanceBinding });
+  if (input.status === "refused") {
+    return {
+      status: "refused",
+      lease: null,
+      clearanceBinding,
+      reasonCode: input.reasonCode,
+      refusalRef: evidenceRef,
+      proofGapRef: null
+    };
+  }
+  return {
+    status: "proof_gap",
+    lease: null,
+    clearanceBinding,
+    reasonCode: input.reasonCode,
+    refusalRef: null,
+    proofGapRef: evidenceRef
+  };
+}
+async function persistEndpointAccessRefusal(recorder, input) {
+  const refusal = await buildRefusal({
+    tenantId: input.attempt.tenantId,
+    organizationId: input.attempt.organizationId,
+    createdAt: input.evaluatedAt,
+    phase: "transition",
+    actionContractId: input.contract?.actionContractId ?? input.input.actionContractId,
+    policyDecisionId: input.input.policyDecisionId,
+    greenlightId: input.input.greenlightId,
+    gateAttemptId: input.input.gatewayCheckAttemptId,
+    refusedObjectRef: `agentic_endpoint_access_attempt:${input.attempt.attemptId}`,
+    reasonCode: input.reasonCode,
+    reason: input.reason,
+    evidenceRefs: [input.attempt.attemptId],
+    refusedAt: input.evaluatedAt
+  });
+  await recorder.persistRecord({ objectType: "refusal", payload: refusal });
+  return `refusal:${refusal.refusalId}`;
+}
+async function persistEndpointAccessProofGap(recorder, input) {
+  const proofGap = input.contract ? buildProofGap(input.contract, "gate", input.reasonCode, input.reasonCode, {
+    gateAttemptId: input.input.gatewayCheckAttemptId,
+    mutationAttemptId: null,
+    receiptId: null
+  }) : buildEndpointAccessProofGap(input);
+  await recorder.persistRecord({ objectType: "proof_gap", payload: proofGap });
+  return `proof_gap:${proofGap.proofGapId}`;
+}
+function buildEndpointAccessProofGap(input) {
+  return ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.attempt.tenantId,
+    organizationId: input.attempt.organizationId,
+    createdAt: input.evaluatedAt,
+    proofGapId: createId("gap"),
+    gapPhase: "gate",
+    expectedEvidenceType: input.reasonCode,
+    missingOrInvalidEvidenceRef: input.reasonCode,
+    affectedObjectRefs: [
+      `agentic_endpoint_access_attempt:${input.attempt.attemptId}`,
+      `action_contract:${input.input.actionContractId}`,
+      `policy_decision:${input.input.policyDecisionId}`,
+      `greenlight:${input.input.greenlightId}`,
+      `gateway_check_attempt:${input.input.gatewayCheckAttemptId}`
+    ],
+    gateAttemptId: input.input.gatewayCheckAttemptId,
+    mutationAttemptId: null,
+    receiptId: null,
+    reasonCode: input.reasonCode,
+    finalityImpact: "unknown",
+    recoveryRequirement: "Supply exact protected-action clearance evidence before treating endpoint access as leased.",
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+}
+async function persistEndpointAccessUsageRefusal(recorder, lease, input, occurredAt, reasonCode, state, counterAfter = null) {
+  const refusal = await buildRefusal({
+    tenantId: lease.tenantId,
+    organizationId: lease.organizationId,
+    createdAt: occurredAt,
+    phase: "transition",
+    actionContractId: lease.actionContractId,
+    policyDecisionId: lease.policyDecisionId,
+    greenlightId: lease.greenlightId,
+    gateAttemptId: lease.gatewayCheckAttemptId,
+    refusedObjectRef: `agentic_endpoint_access_lease:${lease.leaseId}`,
+    reasonCode,
+    reason: `Endpoint access usage is ${state} and cannot be recorded as active use.`,
+    evidenceRefs: [lease.leaseId],
+    refusedAt: occurredAt
+  });
+  await recorder.persistRecord({ objectType: "refusal", payload: refusal });
+  return {
+    status: state === "exhausted" ? "exhausted" : "refused",
+    usageEvent: null,
+    counterAfter,
+    reasonCode,
+    refusalRef: `refusal:${refusal.refusalId}`,
+    proofGapRef: null
+  };
+}
+async function persistEndpointAccessUsageProofGap(recorder, lease, input, occurredAt, reasonCode, reason, counterAfter, contract) {
+  const proofGap = contract ? buildProofGap(contract, "stream", reasonCode, reasonCode, {
+    gateAttemptId: lease.gatewayCheckAttemptId,
+    mutationAttemptId: null,
+    receiptId: null
+  }) : ProofGapSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: lease.tenantId,
+    organizationId: lease.organizationId,
+    createdAt: occurredAt,
+    proofGapId: createId("gap"),
+    gapPhase: "stream",
+    expectedEvidenceType: reasonCode,
+    missingOrInvalidEvidenceRef: reasonCode,
+    affectedObjectRefs: [
+      `agentic_endpoint_access_lease:${lease.leaseId}`,
+      `agentic_endpoint_access_usage_kind:${input.usageKind}`
+    ],
+    gateAttemptId: lease.gatewayCheckAttemptId,
+    mutationAttemptId: null,
+    receiptId: null,
+    reasonCode,
+    finalityImpact: "unknown",
+    recoveryRequirement: reason,
+    resolvedAt: null,
+    resolvedByRef: null
+  });
+  await recorder.persistRecord({ objectType: "proof_gap", payload: proofGap });
+  return {
+    status: "proof_gap",
+    usageEvent: null,
+    counterAfter,
+    reasonCode,
+    refusalRef: null,
+    proofGapRef: `proof_gap:${proofGap.proofGapId}`
+  };
+}
+function endpointRefusal(reasonCode, reason) {
+  return { status: "refused", reasonCode, reason };
+}
+function endpointProofGap(reasonCode, reason) {
+  return { status: "proof_gap", reasonCode, reason };
+}
+function usageLimit(lease, usageKind) {
+  const limits = {
+    request: [lease.rateLimit, "maxRequests"],
+    token: [lease.tokenBudget, "maxTokens"],
+    tool_call: [lease.toolBudget, "maxToolCalls"],
+    cost_unit: [lease.costBudget, "maxCostUnits"]
+  };
+  const [budget, key] = limits[usageKind];
+  const value = budget[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function secondsAfter(iso, seconds) {
+  return new Date(Date.parse(iso) + seconds * 1000).toISOString();
+}
+function minIso(...values) {
+  return values.reduce((earliest, value) => Date.parse(value) < Date.parse(earliest) ? value : earliest);
+}
 // src/protocol/areas/authority-certificate/transitions.ts
 async function createAuthorityCertificate(store, recorder, inputValue) {
   const input = CreateAuthorityCertificateInputSchema.parse(inputValue);
@@ -29048,11 +30259,11 @@ async function transitionAgreementStatus(store, recorder, inputValue) {
   return transition;
 }
 async function currentAgreementStatus(store, agreement) {
-  const transitions11 = await store.listRecordsByType("agreement_status_transition", {
+  const transitions12 = await store.listRecordsByType("agreement_status_transition", {
     tenantId: agreement.tenantId,
     organizationId: agreement.organizationId
   });
-  const ordered = transitions11.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
+  const ordered = transitions12.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
   return ordered.at(-1)?.transition.toStatus ?? "active";
 }
 async function commitNegotiationRecord(recorder, record2, descriptor) {
@@ -32199,6 +33410,12 @@ class HandshakeKernel {
   gatewayCheck(input) {
     return gatewayCheck(this.store, this.recorder, input);
   }
+  issueAgenticEndpointAccessLease(input) {
+    return issueAgenticEndpointAccessLease(this.store, this.recorder, input);
+  }
+  recordAgenticEndpointAccessUsageEvent(input) {
+    return recordAgenticEndpointAccessUsageEvent(this.store, this.recorder, input);
+  }
   createReviewDecision(input) {
     return createReviewDecision(this.recorder, input);
   }
@@ -32318,6 +33535,25 @@ class D1ProtocolStatements {
     return this.db.prepare(`INSERT INTO receipt_by_mutation_attempt
           (mutation_attempt_id, receipt_id, tenant_id, organization_id, created_at)
          VALUES (?, ?, ?, ?, ?)`).bind(entry2.mutationAttemptId, entry2.receiptId, entry2.tenantId, entry2.organizationId, entry2.createdAt);
+  }
+  endpointAccessLeaseClaimStatement(claim) {
+    return this.db.prepare(`INSERT INTO agentic_endpoint_access_lease_claims
+          (greenlight_id, lease_id, tenant_id, organization_id, claimed_at)
+         VALUES (?, ?, ?, ?, ?)`).bind(claim.greenlightId, claim.leaseId, claim.tenantId, claim.organizationId, claim.claimedAt);
+  }
+  endpointAccessUsageCounterCasStatement(reservation) {
+    return this.db.prepare(`INSERT INTO agentic_endpoint_access_usage_counters
+          (tenant_id, organization_id, lease_id, usage_kind, counter_after, updated_at)
+         VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 0 THEN ? ELSE NULL END)
+         ON CONFLICT(tenant_id, organization_id, lease_id, usage_kind) DO UPDATE SET
+           counter_after = CASE
+             WHEN agentic_endpoint_access_usage_counters.counter_after = ? THEN excluded.counter_after
+             ELSE NULL
+           END,
+           updated_at = CASE
+             WHEN agentic_endpoint_access_usage_counters.counter_after = ? THEN ?
+             ELSE agentic_endpoint_access_usage_counters.updated_at
+           END`).bind(reservation.tenantId, reservation.organizationId, reservation.leaseId, reservation.usageKind, reservation.counterAfter, reservation.expectedCounter, reservation.updatedAt, reservation.expectedCounter, reservation.expectedCounter, reservation.updatedAt);
   }
   recordStatement(record2, conflictMode = "replace") {
     if (conflictMode === "absent_or_same")
@@ -32616,8 +33852,68 @@ class D1ProtocolStore {
       throw error51;
     }
   }
+  async commitEndpointAccessLease(commit) {
+    const statements = [
+      this.statements.endpointAccessLeaseClaimStatement(commit.leaseClaim),
+      ...this.statements.protocolCommitStatements(commit.records, commit.events, {
+        recordConflictMode: "absent_or_same"
+      })
+    ];
+    try {
+      await this.db.batch(statements);
+      return "committed";
+    } catch (error51) {
+      if (isEndpointAccessLeaseClaimConflict(error51) || await this.hasEndpointAccessLeaseClaim(commit.leaseClaim.greenlightId)) {
+        return "greenlight_already_leased";
+      }
+      if (isRecordDigestConflict(error51)) {
+        return "record_digest_conflict";
+      }
+      if (isStreamConflict(error51)) {
+        return "stream_conflict";
+      }
+      throw error51;
+    }
+  }
+  async getEndpointAccessUsageCounter(key) {
+    const row = await this.db.prepare(`SELECT counter_after
+         FROM agentic_endpoint_access_usage_counters
+         WHERE tenant_id = ?
+           AND organization_id = ?
+           AND lease_id = ?
+           AND usage_kind = ?
+         LIMIT 1`).bind(key.tenantId, key.organizationId, key.leaseId, key.usageKind).first();
+    return row?.counter_after ?? 0;
+  }
+  async commitEndpointAccessUsage(commit) {
+    const statements = [
+      this.statements.endpointAccessUsageCounterCasStatement(commit.usageCounterReservation),
+      ...this.statements.protocolCommitStatements(commit.records, commit.events, {
+        recordConflictMode: "absent_or_same"
+      })
+    ];
+    try {
+      await this.db.batch(statements);
+      return "committed";
+    } catch (error51) {
+      if (isEndpointAccessUsageCounterConflict(error51)) {
+        return "counter_conflict";
+      }
+      if (isRecordDigestConflict(error51)) {
+        return "record_digest_conflict";
+      }
+      if (isStreamConflict(error51)) {
+        return "stream_conflict";
+      }
+      throw error51;
+    }
+  }
   async hasGreenlightConsumption(greenlightId) {
     const row = await this.db.prepare("SELECT greenlight_id FROM greenlight_consumptions WHERE greenlight_id = ?").bind(greenlightId).first();
+    return row !== null;
+  }
+  async hasEndpointAccessLeaseClaim(greenlightId) {
+    const row = await this.db.prepare("SELECT greenlight_id FROM agentic_endpoint_access_lease_claims WHERE greenlight_id = ?").bind(greenlightId).first();
     return row !== null;
   }
 }
@@ -32673,6 +33969,14 @@ function isProtectedSurfaceOperationClaimConflict(error51) {
 function isReceiptMutationAttemptIndexConflict(error51) {
   const message = error51 instanceof Error ? error51.message : String(error51);
   return message.includes("receipt_by_mutation_attempt") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isEndpointAccessLeaseClaimConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("agentic_endpoint_access_lease_claims") && (message.includes("UNIQUE") || message.includes("unique") || message.includes("constraint"));
+}
+function isEndpointAccessUsageCounterConflict(error51) {
+  const message = error51 instanceof Error ? error51.message : String(error51);
+  return message.includes("agentic_endpoint_access_usage_counters") && (message.includes("NOT NULL") || message.includes("constraint"));
 }
 
 // src/http/store/resolution.ts
@@ -32933,6 +34237,7 @@ async function buildHostedReadinessReportAsync(env, options, fallbackStore) {
     retentionPosture: config2.retentionPosture,
     exportPosture: config2.exportPosture,
     readinessExpectations: [...config2.readinessExpectations],
+    agenticEndpointAccess: agenticEndpointAccessReadinessFor(config2, d1Present || Boolean(fallbackStore)),
     unsupportedCapabilities: unsupportedCapabilitiesFor(config2, d1Present, kvPresent, fallbackStore)
   };
   return HostedReadinessReportSchema.parse(report);
@@ -32990,6 +34295,7 @@ function missingReadinessReport(serverVerifierConfigured) {
     retentionPosture: null,
     exportPosture: null,
     readinessExpectations: [],
+    agenticEndpointAccess: missingAgenticEndpointAccessReadiness("missing"),
     unsupportedCapabilities: ["hosted_admission_config_missing", "hosted_mutation_authority_not_provided"]
   };
 }
@@ -33025,6 +34331,128 @@ function unsupportedCapabilitiesFor(config2, d1Present, kvPresent, fallbackStore
   if (config2.rawReadPosture !== "allowed")
     unsupported.push(`raw_evidence_${config2.rawReadPosture}`);
   return unsupported;
+}
+function agenticEndpointAccessReadinessFor(config2, structuredEvidencePresent) {
+  const endpointAccess = config2.agenticEndpointAccess;
+  if (!endpointAccess || !endpointAccess.enabled) {
+    return missingAgenticEndpointAccessReadiness("configured_but_unverified");
+  }
+  const unsupportedReasonCodes = agenticEndpointAccessUnsupportedReasonCodes(endpointAccess, structuredEvidencePresent);
+  const endpointAccessSupported = unsupportedReasonCodes.length === 0;
+  const readinessState = endpointAccessSupported ? "active" : "configured_but_unverified";
+  return {
+    configured: true,
+    readinessState,
+    supported: endpointAccessSupported,
+    protectedSurfaceBindingRef: endpointAccess.protectedSurfaceBindingRef,
+    protectedSurfaceBindingDigest: endpointAccess.protectedSurfaceBindingDigest,
+    gatewayAuthorityHolderRef: endpointAccess.gatewayAuthorityHolderRef,
+    capabilityReportRef: endpointAccess.capabilityReportRef,
+    kernelVersion: endpointAccess.kernelVersion,
+    middlewareVersion: endpointAccess.middlewareVersion,
+    cloudConfigRevision: endpointAccess.cloudConfigRevision,
+    runtimePostureStatus: endpointAccess.runtimePostureStatus,
+    rawBypassPosture: endpointAccess.rawBypassPosture,
+    siblingBypassPosture: endpointAccess.siblingBypassPosture,
+    supportedEndpointAccessSchemaVersions: [...endpointAccess.supportedEndpointAccessSchemaVersions],
+    supportedDelegationEvidenceKinds: [...endpointAccess.supportedDelegationEvidenceKinds],
+    supportedPolicyFeatures: [...endpointAccess.supportedPolicyFeatures],
+    supportedReadbackKinds: [...endpointAccess.supportedReadbackKinds],
+    delegatedRequestTranscriptRef: endpointAccess.delegatedRequestTranscriptRef,
+    delegatedRequestTranscriptDigest: endpointAccess.delegatedRequestTranscriptDigest,
+    delegatedRequestTranscriptBindingDigest: endpointAccess.delegatedRequestTranscriptBindingDigest,
+    dryRunTranscriptRef: endpointAccess.dryRunTranscriptRef,
+    dryRunTranscriptDigest: endpointAccess.dryRunTranscriptDigest,
+    dryRunTranscriptBindingDigest: endpointAccess.dryRunTranscriptBindingDigest,
+    readbackRef: endpointAccess.readbackRef,
+    readbackDigest: endpointAccess.readbackDigest,
+    storagePosture: {
+      d1Authority: structuredEvidencePresent ? "structured_evidence" : "missing",
+      kvAuthority: "non_authoritative_cache"
+    },
+    authorityBoundary: agenticEndpointAccessHostedAuthorityBoundary(),
+    unsupportedReasonCodes
+  };
+}
+function missingAgenticEndpointAccessReadiness(readinessState) {
+  return {
+    configured: false,
+    readinessState,
+    supported: false,
+    protectedSurfaceBindingRef: null,
+    protectedSurfaceBindingDigest: null,
+    gatewayAuthorityHolderRef: null,
+    capabilityReportRef: null,
+    kernelVersion: null,
+    middlewareVersion: null,
+    cloudConfigRevision: null,
+    runtimePostureStatus: null,
+    rawBypassPosture: null,
+    siblingBypassPosture: null,
+    supportedEndpointAccessSchemaVersions: [],
+    supportedDelegationEvidenceKinds: [],
+    supportedPolicyFeatures: [],
+    supportedReadbackKinds: [],
+    delegatedRequestTranscriptRef: null,
+    delegatedRequestTranscriptDigest: null,
+    delegatedRequestTranscriptBindingDigest: null,
+    dryRunTranscriptRef: null,
+    dryRunTranscriptDigest: null,
+    dryRunTranscriptBindingDigest: null,
+    readbackRef: null,
+    readbackDigest: null,
+    storagePosture: {
+      d1Authority: "missing",
+      kvAuthority: "non_authoritative_cache"
+    },
+    authorityBoundary: agenticEndpointAccessHostedAuthorityBoundary(),
+    unsupportedReasonCodes: ["agentic_endpoint_access_not_configured"]
+  };
+}
+function agenticEndpointAccessUnsupportedReasonCodes(config2, structuredEvidencePresent) {
+  const reasonCodes = [];
+  if (!structuredEvidencePresent) {
+    reasonCodes.push("agentic_endpoint_access_readiness_unknown");
+  }
+  if (!config2.delegatedRequestTranscriptRef || !config2.delegatedRequestTranscriptDigest) {
+    reasonCodes.push("agentic_endpoint_access_validator_transcript_missing");
+  }
+  if (!config2.dryRunTranscriptRef || !config2.dryRunTranscriptDigest) {
+    reasonCodes.push("agentic_endpoint_access_dry_run_transcript_missing");
+  }
+  if (!config2.readbackRef || !config2.readbackDigest) {
+    reasonCodes.push("agentic_endpoint_access_readback_evidence_missing");
+  }
+  if (config2.delegatedRequestTranscriptBindingDigest !== config2.protectedSurfaceBindingDigest || config2.dryRunTranscriptBindingDigest !== config2.protectedSurfaceBindingDigest) {
+    reasonCodes.push("agentic_endpoint_access_transcript_binding_mismatch");
+  }
+  if (config2.runtimePostureStatus !== "supported") {
+    reasonCodes.push("agentic_endpoint_access_readiness_unknown");
+  }
+  if (config2.rawBypassPosture !== "blocked") {
+    reasonCodes.push(hostedBypassReasonCode("raw", config2.rawBypassPosture));
+  }
+  if (config2.siblingBypassPosture !== "blocked") {
+    reasonCodes.push(hostedBypassReasonCode("sibling", config2.siblingBypassPosture));
+  }
+  return [...new Set(reasonCodes)];
+}
+function hostedBypassReasonCode(prefix2, posture) {
+  if (posture === "inconclusive")
+    return `agentic_endpoint_access_${prefix2}_bypass_probe_inconclusive`;
+  return `agentic_endpoint_access_${prefix2}_bypass_posture_${posture}`;
+}
+function agenticEndpointAccessHostedAuthorityBoundary() {
+  return {
+    createsPolicyDecision: false,
+    createsGreenlight: false,
+    performsGatewayCheck: false,
+    createsMutationAuthority: false,
+    storesCredentialMaterial: false,
+    storesPaymentMaterial: false,
+    exportsDownstreamReceipt: false,
+    mintsTerminalCertificate: false
+  };
 }
 async function inspectD1Schema(value) {
   if (!isD1Database(value)) {
@@ -33575,13 +35003,13 @@ function credentialMaterialVariants2(value) {
     variants.add(decodeURIComponent(value));
   } catch {}
   for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
-    const decoded = decodeBase64Like3(token);
+    const decoded = decodeBase64Like4(token);
     if (decoded)
       variants.add(decoded);
   }
   return [...variants];
 }
-function decodeBase64Like3(token) {
+function decodeBase64Like4(token) {
   const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
     return null;

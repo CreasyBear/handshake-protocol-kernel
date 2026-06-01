@@ -1,5 +1,6 @@
 export * from "./action-contract";
 export * from "./action-attempt-lifecycle";
+export * from "./agentic-endpoint-access";
 export * from "./authority-certificate";
 export * from "./catalog-envelope";
 export * from "./credential-custody";

@@ -1,4 +1,5 @@
 export * from "./activation-gate";
+export * from "./agentic-endpoint-access-readback";
 export * from "./boundary-manifest";
 export * from "./outcome";
 export * from "./product-launch-gate-resolution";

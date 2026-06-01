@@ -2,10 +2,10 @@ import { z } from "zod";
 export declare const PolicyDecisionValueSchema: z.ZodEnum<{
     review_required: "review_required";
     proof_gap: "proof_gap";
-    greenlight: "greenlight";
     refuse: "refuse";
-    halt: "halt";
     quarantine: "quarantine";
+    greenlight: "greenlight";
+    halt: "halt";
 }>;
 export type PolicyDecisionValue = z.infer<typeof PolicyDecisionValueSchema>;
 export declare const PolicyDecisionSchema: z.ZodObject<{
@@ -23,10 +23,10 @@ export declare const PolicyDecisionSchema: z.ZodObject<{
     decision: z.ZodEnum<{
         review_required: "review_required";
         proof_gap: "proof_gap";
-        greenlight: "greenlight";
         refuse: "refuse";
-        halt: "halt";
         quarantine: "quarantine";
+        greenlight: "greenlight";
+        halt: "halt";
     }>;
     decisionReasonCode: z.ZodString;
     decisionReason: z.ZodString;
