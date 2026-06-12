@@ -1,6 +1,6 @@
 {
   "name": "handshake-protocol-kernel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Protected action infrastructure for automated decision making: protocol kernel, CLI evidence views, and local MCP proposal/evidence server.",
   "license": "Apache-2.0",
   "mcpName": "io.github.CreasyBear/handshake-protocol-kernel",
@@ -68,6 +68,11 @@
       "types": "./dist/x402-protected-tool/index.d.ts",
       "import": "./dist/x402-protected-tool/index.mjs",
       "default": "./dist/x402-protected-tool/index.mjs"
+    },
+    "./agentic-endpoint-middleware": {
+      "types": "./dist/customer-edge/agentic-endpoint-access/index.d.ts",
+      "import": "./dist/agentic-endpoint-middleware/index.mjs",
+      "default": "./dist/agentic-endpoint-middleware/index.mjs"
     },
     "./experimental": {
       "types": "./dist/experimental.d.ts",

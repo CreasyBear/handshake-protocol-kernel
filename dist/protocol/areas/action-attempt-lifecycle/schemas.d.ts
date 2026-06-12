@@ -22,6 +22,7 @@ export declare const ActionAttemptLifecycleStateSchema: z.ZodEnum<{
     generated_graph_recorded: "generated_graph_recorded";
     bypass_risk_recorded: "bypass_risk_recorded";
     credential_custody_recorded: "credential_custody_recorded";
+    typed_commitment_recorded: "typed_commitment_recorded";
     authority_scope_recorded: "authority_scope_recorded";
     authority_status_recorded: "authority_status_recorded";
     draft_recorded: "draft_recorded";
@@ -114,6 +115,7 @@ export declare const ActionAttemptLifecycleEntrySchema: z.ZodObject<{
         generated_graph_recorded: "generated_graph_recorded";
         bypass_risk_recorded: "bypass_risk_recorded";
         credential_custody_recorded: "credential_custody_recorded";
+        typed_commitment_recorded: "typed_commitment_recorded";
         authority_scope_recorded: "authority_scope_recorded";
         authority_status_recorded: "authority_status_recorded";
         draft_recorded: "draft_recorded";

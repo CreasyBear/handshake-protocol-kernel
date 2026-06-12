@@ -56,8 +56,8 @@ export declare const McpX402PaymentProposalInputSchema: z.ZodObject<{
     intendedRequestUrl: z.ZodString;
     intendedRequestBodyPosture: z.ZodEnum<{
         unsupported: "unsupported";
-        no_body: "no_body";
         digest_bound: "digest_bound";
+        no_body: "no_body";
         omitted: "omitted";
     }>;
     intendedRequestBodyDigest: z.ZodNullable<z.ZodString>;

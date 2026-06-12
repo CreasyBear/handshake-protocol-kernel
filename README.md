@@ -41,7 +41,7 @@ action contract, policy decision, one-use greenlight or refusal, and gateway
 check before mutation. Presentation bundles are evidence for readback — they do
 not grant clearance by themselves.
 
-Package: `handshake-protocol-kernel@0.3.0`. MCP name:
+Package: `handshake-protocol-kernel@0.4.0`. MCP name:
 `io.github.CreasyBear/handshake-protocol-kernel`. Runtime: Node.js `>=20`.
 License: Apache-2.0. Published package repository form: package artifact repository, not source mirror.
 The published package repo contains package artifacts and trusted-publish
@@ -110,6 +110,29 @@ install-proposal shape review. It is definition-only: not an install client, not
 a gateway client, not a policy evaluator, not certification, and not a mutation
 runner.
 
+Current package subpaths:
+
+| Subpath                         | Use                                                                                | Boundary                                                                                                                           |
+| ------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `./sdk/role-clients`            | Role-scoped install, runtime, policy, gateway, evidence, and control-plane clients | Transition transport under custody; not a product authority surface                                                                |
+| `./runtime`                     | Runtime ingress proposal helpers                                                   | Proposal evidence only                                                                                                             |
+| `./mcp`                         | Model-facing proposal and read-only evidence resources                             | No policy, gateway, signer, mutation, receipt export, or certificate minting                                                       |
+| `./adapter-sdk`                 | Adapter-pack definition and install-proposal reports                               | Definition-only; no gateway binding or mutation runner                                                                             |
+| `./conformance`                 | Reference posture checks                                                           | No provider certification                                                                                                          |
+| `./x402-protected-tool`         | Protected x402 proposal facade and host profile artifacts                          | Pre-contract readiness/profile distribution only                                                                                   |
+| `./agentic-endpoint-middleware` | Narrow customer-edge endpoint-entry middleware                                     | Withholds handlers from local endpoint-entry evidence; no Cloud, AE, downstream mutation, credential, signer, or payment authority |
+
+`TypedActionCommitment` is public-schema-only in this package posture.
+`TypedActionCommitment*Schema`, projection schemas, and
+`RecordTypedActionCommitmentInputSchema` are available through the existing
+package root/public schema and input exports. There is no
+`./typed-action-commitment` package subpath. Profile normalizers, transition
+helpers, projectors, store readback, and adapter wiring remain source-owned
+until explicit package-surface proof promotes them. A typed commitment is
+evidence only: not permission, principal consent, delegated authority, identity,
+signer custody, payment custody, greenlight, gateway check, receipt finality,
+settlement, endpoint lease, or downstream success.
+
 Current wedge: the first official wedge is a narrow official x402 exact buyer-side proof path:
 one official buyer-side `exact` per-call path for `x402_payment.exact`. Gateway
 payment material stays behind `VerifiedGatewayCheck`; consumed greenlights
@@ -152,15 +175,16 @@ revocation authority, facilitator operation, seller middleware, unsupported x402
 schemes, marketplace certification, or compliance-grade audit. Aggregate
 payment-budget management is intentionally outside the current remit.
 
-Trusted Publishing: MCP Registry discoverability is now the remaining
+Trusted Publishing: `0.4.0` is the current package release target. Its npm
+availability is not claimed until `npm run release:npm:posture:remote -- --json`
+confirms registry latest, npm signature metadata, provenance metadata, and
+installed-artifact posture for the exact version. Public npm availability still
+does not create authority. MCP Registry discoverability remains a separate
 distribution launch blocker.
-`0.2.8` npm availability is verified by registry readback, npm signature
-metadata, GitHub Actions provenance publication, and clean installed-artifact
-smoke. Public npm availability still does not create authority.
 
-Next Trusted Publishing workflow input: `expected_version = 0.3.0`. The
-previous `0.2.8` npm provenance remains historical publication evidence until a
-new exact-version publish and readback complete. Release proof states:
+Next Trusted Publishing workflow input: `expected_version = 0.4.0`. Older
+`0.2.x` and `0.3.0` npm and host-activation evidence remains historical only,
+not current package proof. Release proof states:
 `ready_to_publish` means package shape and local gates passed;
 `actually_published` means npm publish and installed-artifact readback passed
 for the exact version; `registry_discoverable` means MCP Registry acceptance and
@@ -171,3 +195,20 @@ input, amount overrun, dynamic argument, changed observed parameters, or
 consumed greenlight replay -> create new contract. Raw sibling path reachable ->
 stop and record bypass proof. Credential or delegated authority isolated -> keep
 future attempts blocked. Downstream finality unknown -> proof gap, not success.
+
+## Where to go next
+
+- [Developer experience index](./docs/internal/developer-experience-index.md) —
+  choose an operator, agent, auditor, or maintainer path.
+- [Source proof ledger](./docs/internal/source-proof-ledger.md) — see what the
+  current source tree proves, what is public, and what remains a proof gap.
+- [Product surfaces](./docs/internal/product-surfaces.md) — pick the right CLI,
+  MCP, SDK, runtime, protected-tool, middleware, or readback surface.
+- [Recover from blocked protected actions](./docs/internal/agent-recovery-playbook.md) —
+  route stale, refused, replayed, proof-gap, bypass, and isolation outcomes
+  without creating retry permission.
+- [Gate customer-edge endpoints](./docs/internal/edge-integration-playbook.md) —
+  use the narrow endpoint middleware subpath without turning Cloud or AE into
+  authority.
+- [Expansion admission](./docs/internal/expansion-admission.md) — prove another
+  action family or package surface before claiming it is execution-ready.

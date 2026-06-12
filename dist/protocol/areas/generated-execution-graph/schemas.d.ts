@@ -20,10 +20,10 @@ export type GeneratedExecutionNodeKind = z.infer<typeof GeneratedExecutionNodeKi
 export declare const GeneratedExecutionNodeClassificationSchema: z.ZodEnum<{
     read_only: "read_only";
     ambiguous: "ambiguous";
+    unsupported: "unsupported";
     hidden_trigger: "hidden_trigger";
     candidate_action_eligible: "candidate_action_eligible";
     nonconsequential: "nonconsequential";
-    unsupported: "unsupported";
     bypass_risk: "bypass_risk";
     observer_only: "observer_only";
 }>;
@@ -88,10 +88,10 @@ export declare const GeneratedExecutionNodeSchema: z.ZodObject<{
     classification: z.ZodEnum<{
         read_only: "read_only";
         ambiguous: "ambiguous";
+        unsupported: "unsupported";
         hidden_trigger: "hidden_trigger";
         candidate_action_eligible: "candidate_action_eligible";
         nonconsequential: "nonconsequential";
-        unsupported: "unsupported";
         bypass_risk: "bypass_risk";
         observer_only: "observer_only";
     }>;
@@ -158,10 +158,10 @@ export declare const GeneratedExecutionNodeInputSchema: z.ZodObject<{
     classification: z.ZodEnum<{
         read_only: "read_only";
         ambiguous: "ambiguous";
+        unsupported: "unsupported";
         hidden_trigger: "hidden_trigger";
         candidate_action_eligible: "candidate_action_eligible";
         nonconsequential: "nonconsequential";
-        unsupported: "unsupported";
         bypass_risk: "bypass_risk";
         observer_only: "observer_only";
     }>;
@@ -281,10 +281,10 @@ export declare const GeneratedExecutionGraphSchema: z.ZodObject<{
         classification: z.ZodEnum<{
             read_only: "read_only";
             ambiguous: "ambiguous";
+            unsupported: "unsupported";
             hidden_trigger: "hidden_trigger";
             candidate_action_eligible: "candidate_action_eligible";
             nonconsequential: "nonconsequential";
-            unsupported: "unsupported";
             bypass_risk: "bypass_risk";
             observer_only: "observer_only";
         }>;
@@ -342,10 +342,10 @@ export declare const GeneratedGraphNodeProjectionRefSchema: z.ZodObject<{
     classification: z.ZodEnum<{
         read_only: "read_only";
         ambiguous: "ambiguous";
+        unsupported: "unsupported";
         hidden_trigger: "hidden_trigger";
         candidate_action_eligible: "candidate_action_eligible";
         nonconsequential: "nonconsequential";
-        unsupported: "unsupported";
         bypass_risk: "bypass_risk";
         observer_only: "observer_only";
     }>;
@@ -375,10 +375,10 @@ export declare const GeneratedGraphEvidenceProjectionSchema: z.ZodObject<{
         classification: z.ZodEnum<{
             read_only: "read_only";
             ambiguous: "ambiguous";
+            unsupported: "unsupported";
             hidden_trigger: "hidden_trigger";
             candidate_action_eligible: "candidate_action_eligible";
             nonconsequential: "nonconsequential";
-            unsupported: "unsupported";
             bypass_risk: "bypass_risk";
             observer_only: "observer_only";
         }>;
@@ -393,10 +393,10 @@ export declare const GeneratedGraphEvidenceProjectionSchema: z.ZodObject<{
         classification: z.ZodEnum<{
             read_only: "read_only";
             ambiguous: "ambiguous";
+            unsupported: "unsupported";
             hidden_trigger: "hidden_trigger";
             candidate_action_eligible: "candidate_action_eligible";
             nonconsequential: "nonconsequential";
-            unsupported: "unsupported";
             bypass_risk: "bypass_risk";
             observer_only: "observer_only";
         }>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+export { TypedActionCommitmentProjectionRedactionPostureSchema, TypedActionCommitmentProjectionSchema, TypedActionCommitmentRawReadAuditLinkSchema, TypedActionCommitmentSignatureEvidenceProjectionSchema, type TypedActionCommitmentProjection, type TypedActionCommitmentProjectionRedactionPosture, type TypedActionCommitmentRawReadAuditLink, type TypedActionCommitmentSignatureEvidenceProjection, } from "../areas/typed-action-commitment";
 export declare const ContractEvidenceProjectionSchema: z.ZodObject<{
     actionContractRef: z.ZodString;
     contractDigest: z.ZodString;
@@ -164,6 +165,7 @@ export declare const ReceiptTimelineEventProjectionSchema: z.ZodObject<{
         delegated_authority_status_changed: "delegated_authority_status_changed";
         gateway_custody_proof_packet_recorded: "gateway_custody_proof_packet_recorded";
         credential_resolution_recorded: "credential_resolution_recorded";
+        typed_action_commitment_recorded: "typed_action_commitment_recorded";
         idempotency_ledger_recorded: "idempotency_ledger_recorded";
         bypass_probe_recorded: "bypass_probe_recorded";
         tool_call_draft_recorded: "tool_call_draft_recorded";
@@ -185,6 +187,7 @@ export declare const ReceiptTimelineEventProjectionSchema: z.ZodObject<{
         breaker_decision_recorded: "breaker_decision_recorded";
         receipt_emitted: "receipt_emitted";
         authority_certificate_emitted: "authority_certificate_emitted";
+        raw_evidence_read_audited: "raw_evidence_read_audited";
         recovery_status_changed: "recovery_status_changed";
         proof_gap_recorded: "proof_gap_recorded";
         isolation_changed: "isolation_changed";
@@ -237,13 +240,13 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        not_applicable: "not_applicable";
         replayed: "replayed";
+        not_applicable: "not_applicable";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;
@@ -322,6 +325,7 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
             delegated_authority_status_changed: "delegated_authority_status_changed";
             gateway_custody_proof_packet_recorded: "gateway_custody_proof_packet_recorded";
             credential_resolution_recorded: "credential_resolution_recorded";
+            typed_action_commitment_recorded: "typed_action_commitment_recorded";
             idempotency_ledger_recorded: "idempotency_ledger_recorded";
             bypass_probe_recorded: "bypass_probe_recorded";
             tool_call_draft_recorded: "tool_call_draft_recorded";
@@ -343,6 +347,7 @@ export declare const ReceiptTimelineProjectionSchema: z.ZodObject<{
             breaker_decision_recorded: "breaker_decision_recorded";
             receipt_emitted: "receipt_emitted";
             authority_certificate_emitted: "authority_certificate_emitted";
+            raw_evidence_read_audited: "raw_evidence_read_audited";
             recovery_status_changed: "recovery_status_changed";
             proof_gap_recorded: "proof_gap_recorded";
             isolation_changed: "isolation_changed";
@@ -458,6 +463,172 @@ export declare const AgentTransactionEnvelopeProjectionSchema: z.ZodObject<{
     gatewayCredentialEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     delegatedAuthorityEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     credentialResolutionEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    typedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    typedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    typedCommitmentProjectionClass: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+        public_redacted: "public_redacted";
+        operator_redacted: "operator_redacted";
+        auditor_export: "auditor_export";
+    }>>>;
+    typedCommitmentSummaries: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        typedActionCommitmentId: z.ZodString;
+        commitmentDigest: z.ZodString;
+        subjectDigest: z.ZodString;
+        purpose: z.ZodEnum<{
+            external_commitment_evidence: "external_commitment_evidence";
+            policy_required_evidence: "policy_required_evidence";
+            service_workflow_readback: "service_workflow_readback";
+            post_gateway_payment_evidence: "post_gateway_payment_evidence";
+            display_binding_evidence: "display_binding_evidence";
+        }>;
+        profile: z.ZodEnum<{
+            handshake_jcs_typed: "handshake_jcs_typed";
+            eip712: "eip712";
+        }>;
+        verificationStatus: z.ZodEnum<{
+            unverified: "unverified";
+            proof_gap: "proof_gap";
+            verified: "verified";
+            refused: "refused";
+            unsupported: "unsupported";
+        }>;
+        replayStatus: z.ZodEnum<{
+            stale: "stale";
+            fresh: "fresh";
+            replayed: "replayed";
+            missing: "missing";
+            not_applicable: "not_applicable";
+        }>;
+        verifierContextDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        safetyPosture: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+    }, z.core.$strict>>>;
+    typedCommitmentProjections: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        typedActionCommitmentRef: z.ZodString;
+        actionContractRef: z.ZodNullable<z.ZodString>;
+        projectionClass: z.ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_export: "auditor_export";
+        }>;
+        commitmentDigest: z.ZodString;
+        subject: z.ZodObject<{
+            kind: z.ZodEnum<{
+                action_contract: "action_contract";
+                service_workflow: "service_workflow";
+                x402_payment: "x402_payment";
+                agentic_endpoint_access: "agentic_endpoint_access";
+                protected_surface: "protected_surface";
+                external_evidence: "external_evidence";
+            }>;
+            ref: z.ZodString;
+            digest: z.ZodString;
+        }, z.core.$strict>;
+        purpose: z.ZodEnum<{
+            external_commitment_evidence: "external_commitment_evidence";
+            policy_required_evidence: "policy_required_evidence";
+            service_workflow_readback: "service_workflow_readback";
+            post_gateway_payment_evidence: "post_gateway_payment_evidence";
+            display_binding_evidence: "display_binding_evidence";
+        }>;
+        profile: z.ZodEnum<{
+            handshake_jcs_typed: "handshake_jcs_typed";
+            eip712: "eip712";
+        }>;
+        domain: z.ZodObject<{
+            domainRef: z.ZodString;
+            domainDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            tenantId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            organizationId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            gatewayId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            actionClass: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            providerEnvironmentRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        }, z.core.$strict>;
+        verificationStatus: z.ZodEnum<{
+            unverified: "unverified";
+            proof_gap: "proof_gap";
+            verified: "verified";
+            refused: "refused";
+            unsupported: "unsupported";
+        }>;
+        verificationReasonCode: z.ZodNullable<z.ZodString>;
+        replayStatus: z.ZodEnum<{
+            stale: "stale";
+            fresh: "fresh";
+            replayed: "replayed";
+            missing: "missing";
+            not_applicable: "not_applicable";
+        }>;
+        idempotencyKey: z.ZodNullable<z.ZodString>;
+        nonceRef: z.ZodNullable<z.ZodString>;
+        nonceDigest: z.ZodNullable<z.ZodString>;
+        replayWindowSeconds: z.ZodNullable<z.ZodNumber>;
+        verifierRef: z.ZodNullable<z.ZodString>;
+        verifierContextDigest: z.ZodNullable<z.ZodString>;
+        keyId: z.ZodNullable<z.ZodString>;
+        providerNativeDigest: z.ZodNullable<z.ZodString>;
+        safetyPosture: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+        displayBindingStatus: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+        authorityBoundary: z.ZodObject<{
+            createsPolicyDecision: z.ZodLiteral<false>;
+            createsGreenlight: z.ZodLiteral<false>;
+            performsGatewayCheck: z.ZodLiteral<false>;
+            authorizesMutation: z.ZodLiteral<false>;
+            createsReceipt: z.ZodLiteral<false>;
+            mintsCertificate: z.ZodLiteral<false>;
+            provesPrincipalConsent: z.ZodLiteral<false>;
+            provesSignerCustody: z.ZodLiteral<false>;
+            provesPaymentCustody: z.ZodLiteral<false>;
+            createsEndpointLease: z.ZodLiteral<false>;
+            provesDownstreamSuccess: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+        refusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        signatureEvidence: z.ZodNullable<z.ZodObject<{
+            signatureRef: z.ZodNullable<z.ZodString>;
+            signatureDigest: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>;
+        rawReadAudit: z.ZodNullable<z.ZodObject<{
+            rawRecordReadAuditRef: z.ZodString;
+            rawRecordReadAuditDigest: z.ZodString;
+            redactionPosture: z.ZodLiteral<"auditor_signature_digest_only">;
+        }, z.core.$strict>>;
+        rawTypedPayloadIncluded: z.ZodLiteral<false>;
+        rawSignatureIncluded: z.ZodLiteral<false>;
+        rawCredentialMaterialIncluded: z.ZodLiteral<false>;
+        rawPaymentMaterialIncluded: z.ZodLiteral<false>;
+        rawRequestBodyIncluded: z.ZodLiteral<false>;
+        commandMaterialIncluded: z.ZodLiteral<false>;
+        redactionProfileRef: z.ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_signature_digest_only: "auditor_signature_digest_only";
+        }>;
+        omittedFields: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strict>>>;
+    typedCommitmentRefusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    typedCommitmentProofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     signerInvocationEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     downstreamEvidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     authMdEvidenceRefs: z.ZodObject<{
@@ -489,13 +660,13 @@ export declare const AgentTransactionEnvelopeProjectionSchema: z.ZodObject<{
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodNullable<z.ZodEnum<{
-        not_applicable: "not_applicable";
         replayed: "replayed";
+        not_applicable: "not_applicable";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>>;
@@ -577,9 +748,9 @@ export declare const OperationReadbackStageSchema: z.ZodEnum<{
     isolation: "isolation";
     recovery: "recovery";
     receipt: "receipt";
+    action_contract: "action_contract";
     greenlight: "greenlight";
     intent_compilation: "intent_compilation";
-    action_contract: "action_contract";
     policy_decision: "policy_decision";
     mutation_attempt: "mutation_attempt";
     candidate_action: "candidate_action";
@@ -636,6 +807,34 @@ export declare const OperationReadbackGreenlightUsePostureSchema: z.ZodEnum<{
     replayed_or_unusable: "replayed_or_unusable";
 }>;
 export type OperationReadbackGreenlightUsePosture = z.infer<typeof OperationReadbackGreenlightUsePostureSchema>;
+export declare const OperationReadbackProjectionFreshnessStatusSchema: z.ZodEnum<{
+    current: "current";
+    not_observed: "not_observed";
+    stale_or_concurrent_update: "stale_or_concurrent_update";
+    stream_tail_missing: "stream_tail_missing";
+}>;
+export type OperationReadbackProjectionFreshnessStatus = z.infer<typeof OperationReadbackProjectionFreshnessStatusSchema>;
+export declare const OperationReadbackProjectionFreshnessSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"handshake.operation-readback-freshness.v0.1">;
+    sourceAuthority: z.ZodLiteral<"protocol_store_projection">;
+    readModelKind: z.ZodLiteral<"direct_protocol_store_projection">;
+    status: z.ZodEnum<{
+        current: "current";
+        not_observed: "not_observed";
+        stale_or_concurrent_update: "stale_or_concurrent_update";
+        stream_tail_missing: "stream_tail_missing";
+    }>;
+    streamId: z.ZodNullable<z.ZodString>;
+    partitionKey: z.ZodNullable<z.ZodString>;
+    observedOffset: z.ZodNullable<z.ZodNumber>;
+    observedEventDigest: z.ZodNullable<z.ZodString>;
+    latestOffset: z.ZodNullable<z.ZodNumber>;
+    latestEventDigest: z.ZodNullable<z.ZodString>;
+    lagEvents: z.ZodNullable<z.ZodNumber>;
+    rawStreamEventsIncluded: z.ZodLiteral<false>;
+    authorityCreatedByFreshness: z.ZodLiteral<false>;
+}, z.core.$strict>;
+export type OperationReadbackProjectionFreshness = z.infer<typeof OperationReadbackProjectionFreshnessSchema>;
 export declare const OperationSupportContextSchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<"handshake.support-context.v0.1">;
     supportContextRef: z.ZodString;
@@ -729,9 +928,9 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
         isolation: "isolation";
         recovery: "recovery";
         receipt: "receipt";
+        action_contract: "action_contract";
         greenlight: "greenlight";
         intent_compilation: "intent_compilation";
-        action_contract: "action_contract";
         policy_decision: "policy_decision";
         mutation_attempt: "mutation_attempt";
         candidate_action: "candidate_action";
@@ -775,9 +974,9 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>;
     downstreamOutcomeStatus: z.ZodEnum<{
         unknown: "unknown";
@@ -822,12 +1021,198 @@ export declare const OperationReadbackProjectionSchema: z.ZodObject<{
     rawInternalRecordIncluded: z.ZodLiteral<false>;
     credentialMaterialIncluded: z.ZodLiteral<false>;
     paymentMaterialIncluded: z.ZodLiteral<false>;
+    typedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    typedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    typedCommitmentProjectionClass: z.ZodDefault<z.ZodNullable<z.ZodEnum<{
+        public_redacted: "public_redacted";
+        operator_redacted: "operator_redacted";
+        auditor_export: "auditor_export";
+    }>>>;
+    typedCommitmentSummaries: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        typedActionCommitmentId: z.ZodString;
+        commitmentDigest: z.ZodString;
+        subjectDigest: z.ZodString;
+        purpose: z.ZodEnum<{
+            external_commitment_evidence: "external_commitment_evidence";
+            policy_required_evidence: "policy_required_evidence";
+            service_workflow_readback: "service_workflow_readback";
+            post_gateway_payment_evidence: "post_gateway_payment_evidence";
+            display_binding_evidence: "display_binding_evidence";
+        }>;
+        profile: z.ZodEnum<{
+            handshake_jcs_typed: "handshake_jcs_typed";
+            eip712: "eip712";
+        }>;
+        verificationStatus: z.ZodEnum<{
+            unverified: "unverified";
+            proof_gap: "proof_gap";
+            verified: "verified";
+            refused: "refused";
+            unsupported: "unsupported";
+        }>;
+        replayStatus: z.ZodEnum<{
+            stale: "stale";
+            fresh: "fresh";
+            replayed: "replayed";
+            missing: "missing";
+            not_applicable: "not_applicable";
+        }>;
+        verifierContextDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        safetyPosture: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+    }, z.core.$strict>>>;
+    typedCommitmentProjections: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        typedActionCommitmentRef: z.ZodString;
+        actionContractRef: z.ZodNullable<z.ZodString>;
+        projectionClass: z.ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_export: "auditor_export";
+        }>;
+        commitmentDigest: z.ZodString;
+        subject: z.ZodObject<{
+            kind: z.ZodEnum<{
+                action_contract: "action_contract";
+                service_workflow: "service_workflow";
+                x402_payment: "x402_payment";
+                agentic_endpoint_access: "agentic_endpoint_access";
+                protected_surface: "protected_surface";
+                external_evidence: "external_evidence";
+            }>;
+            ref: z.ZodString;
+            digest: z.ZodString;
+        }, z.core.$strict>;
+        purpose: z.ZodEnum<{
+            external_commitment_evidence: "external_commitment_evidence";
+            policy_required_evidence: "policy_required_evidence";
+            service_workflow_readback: "service_workflow_readback";
+            post_gateway_payment_evidence: "post_gateway_payment_evidence";
+            display_binding_evidence: "display_binding_evidence";
+        }>;
+        profile: z.ZodEnum<{
+            handshake_jcs_typed: "handshake_jcs_typed";
+            eip712: "eip712";
+        }>;
+        domain: z.ZodObject<{
+            domainRef: z.ZodString;
+            domainDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            tenantId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            organizationId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            gatewayId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            actionClass: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+            providerEnvironmentRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        }, z.core.$strict>;
+        verificationStatus: z.ZodEnum<{
+            unverified: "unverified";
+            proof_gap: "proof_gap";
+            verified: "verified";
+            refused: "refused";
+            unsupported: "unsupported";
+        }>;
+        verificationReasonCode: z.ZodNullable<z.ZodString>;
+        replayStatus: z.ZodEnum<{
+            stale: "stale";
+            fresh: "fresh";
+            replayed: "replayed";
+            missing: "missing";
+            not_applicable: "not_applicable";
+        }>;
+        idempotencyKey: z.ZodNullable<z.ZodString>;
+        nonceRef: z.ZodNullable<z.ZodString>;
+        nonceDigest: z.ZodNullable<z.ZodString>;
+        replayWindowSeconds: z.ZodNullable<z.ZodNumber>;
+        verifierRef: z.ZodNullable<z.ZodString>;
+        verifierContextDigest: z.ZodNullable<z.ZodString>;
+        keyId: z.ZodNullable<z.ZodString>;
+        providerNativeDigest: z.ZodNullable<z.ZodString>;
+        safetyPosture: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+        displayBindingStatus: z.ZodEnum<{
+            proof_gap: "proof_gap";
+            refused: "refused";
+            display_bound: "display_bound";
+            digest_bound: "digest_bound";
+            verifier_bound: "verifier_bound";
+            provider_observed: "provider_observed";
+        }>;
+        authorityBoundary: z.ZodObject<{
+            createsPolicyDecision: z.ZodLiteral<false>;
+            createsGreenlight: z.ZodLiteral<false>;
+            performsGatewayCheck: z.ZodLiteral<false>;
+            authorizesMutation: z.ZodLiteral<false>;
+            createsReceipt: z.ZodLiteral<false>;
+            mintsCertificate: z.ZodLiteral<false>;
+            provesPrincipalConsent: z.ZodLiteral<false>;
+            provesSignerCustody: z.ZodLiteral<false>;
+            provesPaymentCustody: z.ZodLiteral<false>;
+            createsEndpointLease: z.ZodLiteral<false>;
+            provesDownstreamSuccess: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+        refusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        signatureEvidence: z.ZodNullable<z.ZodObject<{
+            signatureRef: z.ZodNullable<z.ZodString>;
+            signatureDigest: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>;
+        rawReadAudit: z.ZodNullable<z.ZodObject<{
+            rawRecordReadAuditRef: z.ZodString;
+            rawRecordReadAuditDigest: z.ZodString;
+            redactionPosture: z.ZodLiteral<"auditor_signature_digest_only">;
+        }, z.core.$strict>>;
+        rawTypedPayloadIncluded: z.ZodLiteral<false>;
+        rawSignatureIncluded: z.ZodLiteral<false>;
+        rawCredentialMaterialIncluded: z.ZodLiteral<false>;
+        rawPaymentMaterialIncluded: z.ZodLiteral<false>;
+        rawRequestBodyIncluded: z.ZodLiteral<false>;
+        commandMaterialIncluded: z.ZodLiteral<false>;
+        redactionProfileRef: z.ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_signature_digest_only: "auditor_signature_digest_only";
+        }>;
+        omittedFields: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strict>>>;
+    typedCommitmentRefusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    typedCommitmentProofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     evidenceRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     refusalRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     recoveryRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     isolationRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     authorityCertificateRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    projectionFreshness: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.operation-readback-freshness.v0.1">;
+        sourceAuthority: z.ZodLiteral<"protocol_store_projection">;
+        readModelKind: z.ZodLiteral<"direct_protocol_store_projection">;
+        status: z.ZodEnum<{
+            current: "current";
+            not_observed: "not_observed";
+            stale_or_concurrent_update: "stale_or_concurrent_update";
+            stream_tail_missing: "stream_tail_missing";
+        }>;
+        streamId: z.ZodNullable<z.ZodString>;
+        partitionKey: z.ZodNullable<z.ZodString>;
+        observedOffset: z.ZodNullable<z.ZodNumber>;
+        observedEventDigest: z.ZodNullable<z.ZodString>;
+        latestOffset: z.ZodNullable<z.ZodNumber>;
+        latestEventDigest: z.ZodNullable<z.ZodString>;
+        lagEvents: z.ZodNullable<z.ZodNumber>;
+        rawStreamEventsIncluded: z.ZodLiteral<false>;
+        authorityCreatedByFreshness: z.ZodLiteral<false>;
+    }, z.core.$strict>;
     providerRequestRef: z.ZodNullable<z.ZodString>;
     providerOperationRef: z.ZodNullable<z.ZodString>;
     traceRef: z.ZodNullable<z.ZodString>;
@@ -987,4 +1372,3 @@ export declare const ProtectedPathInstallHealthProjectionSchema: z.ZodObject<{
     omittedFields: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>;
 export type ProtectedPathInstallHealthProjection = z.infer<typeof ProtectedPathInstallHealthProjectionSchema>;
-export {};

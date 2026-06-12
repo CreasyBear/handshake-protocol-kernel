@@ -65,6 +65,24 @@ export declare const mcpResourceTemplates: readonly [{
     readonly readOnly: true;
     readonly authorityCreated: false;
     readonly projectionStatus: "reference_only";
+}, {
+    readonly uriTemplate: "handshake://guidance/recovery/{guidanceId}";
+    readonly purpose: "read_recovery_guidance";
+    readonly readOnly: true;
+    readonly authorityCreated: false;
+    readonly projectionStatus: "evidence_client";
+}, {
+    readonly uriTemplate: "handshake://guidance/recovery/recent/{scopeRef}";
+    readonly purpose: "read_recent_recovery_guidance";
+    readonly readOnly: true;
+    readonly authorityCreated: false;
+    readonly projectionStatus: "evidence_client";
+}, {
+    readonly uriTemplate: "handshake://guidance/recovery/{guidanceId}/draft-diff";
+    readonly purpose: "read_recovery_draft_diff";
+    readonly readOnly: true;
+    readonly authorityCreated: false;
+    readonly projectionStatus: "evidence_client";
 }];
 export declare const mcpReadOnlyTools: readonly [{
     readonly name: "handshake.evidence.delegation.verify";
@@ -189,12 +207,12 @@ export declare const mcpReadOnlyTools: readonly [{
             proof_gap: "proof_gap";
             replay_refused: "replay_refused";
             refused: "refused";
+            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
             install_not_ready: "install_not_ready";
             gateway_offline: "gateway_offline";
             metadata_stale: "metadata_stale";
-            tool_execution_error: "tool_execution_error";
             tools_list_changed: "tools_list_changed";
-            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+            tool_execution_error: "tool_execution_error";
         }>;
     }, z.core.$strict>], "outcome">>;
     readonly annotations: {
@@ -248,8 +266,8 @@ export declare const mcpProposalTools: readonly [{
         intendedRequestUrl: z.ZodString;
         intendedRequestBodyPosture: z.ZodEnum<{
             unsupported: "unsupported";
-            no_body: "no_body";
             digest_bound: "digest_bound";
+            no_body: "no_body";
             omitted: "omitted";
         }>;
         intendedRequestBodyDigest: z.ZodNullable<z.ZodString>;
@@ -399,12 +417,12 @@ export declare const mcpProposalTools: readonly [{
             proof_gap: "proof_gap";
             replay_refused: "replay_refused";
             refused: "refused";
+            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
             install_not_ready: "install_not_ready";
             gateway_offline: "gateway_offline";
             metadata_stale: "metadata_stale";
-            tool_execution_error: "tool_execution_error";
             tools_list_changed: "tools_list_changed";
-            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+            tool_execution_error: "tool_execution_error";
         }>;
     }, z.core.$strict>], "outcome">>;
     readonly annotations: {
@@ -470,6 +488,24 @@ export declare function mcpCatalogSnapshot(): {
         readonly readOnly: true;
         readonly authorityCreated: false;
         readonly projectionStatus: "reference_only";
+    }, {
+        readonly uriTemplate: "handshake://guidance/recovery/{guidanceId}";
+        readonly purpose: "read_recovery_guidance";
+        readonly readOnly: true;
+        readonly authorityCreated: false;
+        readonly projectionStatus: "evidence_client";
+    }, {
+        readonly uriTemplate: "handshake://guidance/recovery/recent/{scopeRef}";
+        readonly purpose: "read_recent_recovery_guidance";
+        readonly readOnly: true;
+        readonly authorityCreated: false;
+        readonly projectionStatus: "evidence_client";
+    }, {
+        readonly uriTemplate: "handshake://guidance/recovery/{guidanceId}/draft-diff";
+        readonly purpose: "read_recovery_draft_diff";
+        readonly readOnly: true;
+        readonly authorityCreated: false;
+        readonly projectionStatus: "evidence_client";
     }];
     tools: ({
         readonly name: "handshake.evidence.delegation.verify";
@@ -594,12 +630,12 @@ export declare function mcpCatalogSnapshot(): {
                 proof_gap: "proof_gap";
                 replay_refused: "replay_refused";
                 refused: "refused";
+                raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
                 install_not_ready: "install_not_ready";
                 gateway_offline: "gateway_offline";
                 metadata_stale: "metadata_stale";
-                tool_execution_error: "tool_execution_error";
                 tools_list_changed: "tools_list_changed";
-                raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+                tool_execution_error: "tool_execution_error";
             }>;
         }, z.core.$strict>], "outcome">>;
         readonly annotations: {
@@ -652,8 +688,8 @@ export declare function mcpCatalogSnapshot(): {
             intendedRequestUrl: z.ZodString;
             intendedRequestBodyPosture: z.ZodEnum<{
                 unsupported: "unsupported";
-                no_body: "no_body";
                 digest_bound: "digest_bound";
+                no_body: "no_body";
                 omitted: "omitted";
             }>;
             intendedRequestBodyDigest: z.ZodNullable<z.ZodString>;
@@ -803,12 +839,12 @@ export declare function mcpCatalogSnapshot(): {
                 proof_gap: "proof_gap";
                 replay_refused: "replay_refused";
                 refused: "refused";
+                raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
                 install_not_ready: "install_not_ready";
                 gateway_offline: "gateway_offline";
                 metadata_stale: "metadata_stale";
-                tool_execution_error: "tool_execution_error";
                 tools_list_changed: "tools_list_changed";
-                raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+                tool_execution_error: "tool_execution_error";
             }>;
         }, z.core.$strict>], "outcome">>;
         readonly annotations: {

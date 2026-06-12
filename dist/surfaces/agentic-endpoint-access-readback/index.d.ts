@@ -3,11 +3,11 @@ import { type AgenticEndpointAccessReadback } from "../../protocol/areas/agentic
 export declare const AgenticEndpointAccessConsumerDisplayStateSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     stale: "stale";
+    refused: "refused";
+    unsupported: "unsupported";
     revoked: "revoked";
     expired: "expired";
-    unsupported: "unsupported";
     leased: "leased";
-    refused: "refused";
     exhausted: "exhausted";
     quarantined: "quarantined";
     ready: "ready";
@@ -44,11 +44,11 @@ export declare const AgenticEndpointAccessConsumerReadbackSchema: z.ZodObject<{
     displayState: z.ZodEnum<{
         proof_gap: "proof_gap";
         stale: "stale";
+        refused: "refused";
+        unsupported: "unsupported";
         revoked: "revoked";
         expired: "expired";
-        unsupported: "unsupported";
         leased: "leased";
-        refused: "refused";
         exhausted: "exhausted";
         quarantined: "quarantined";
         ready: "ready";
@@ -84,8 +84,8 @@ export declare const AgenticEndpointAccessConsumerReadbackSchema: z.ZodObject<{
         healthReportRef: z.ZodString;
         readinessState: z.ZodEnum<{
             read_only: "read_only";
-            active: "active";
             missing: "missing";
+            active: "active";
             disabled: "disabled";
             configured_but_unverified: "configured_but_unverified";
             not_promoted: "not_promoted";

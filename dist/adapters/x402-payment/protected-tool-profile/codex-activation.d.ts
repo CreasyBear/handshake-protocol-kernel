@@ -231,8 +231,8 @@ export declare const CodexX402ProtectedToolActivationInputSchema: z.ZodObject<{
             intendedRequestUrl: z.ZodString;
             intendedRequestBodyPosture: z.ZodEnum<{
                 unsupported: "unsupported";
-                no_body: "no_body";
                 digest_bound: "digest_bound";
+                no_body: "no_body";
                 omitted: "omitted";
             }>;
             intendedRequestBodyDigest: z.ZodNullable<z.ZodString>;
@@ -324,18 +324,18 @@ export declare const CodexX402ProtectedToolActivationArtifactSchema: z.ZodObject
         read_evidence: "read_evidence";
         recraft_request: "recraft_request";
         stop: "stop";
-        register_control_plane_install: "register_control_plane_install";
         reload_metadata: "reload_metadata";
         fix_install: "fix_install";
         wait_for_gateway: "wait_for_gateway";
+        register_control_plane_install: "register_control_plane_install";
     }>;
     facadeOutcome: z.ZodNullable<z.ZodEnum<{
         refused: "refused";
-        dispatch_block_prepared: "dispatch_block_prepared";
         install_not_ready: "install_not_ready";
         gateway_offline: "gateway_offline";
         metadata_stale: "metadata_stale";
         tool_execution_error: "tool_execution_error";
+        dispatch_block_prepared: "dispatch_block_prepared";
     }>>;
     readinessContractVersion: z.ZodNullable<z.ZodString>;
     gatewayReadinessRef: z.ZodNullable<z.ZodString>;
@@ -673,18 +673,18 @@ export declare const CodexX402ProtectedToolRuntimeTranscriptInputSchema: z.ZodOb
             read_evidence: "read_evidence";
             recraft_request: "recraft_request";
             stop: "stop";
-            register_control_plane_install: "register_control_plane_install";
             reload_metadata: "reload_metadata";
             fix_install: "fix_install";
             wait_for_gateway: "wait_for_gateway";
+            register_control_plane_install: "register_control_plane_install";
         }>;
         facadeOutcome: z.ZodNullable<z.ZodEnum<{
             refused: "refused";
-            dispatch_block_prepared: "dispatch_block_prepared";
             install_not_ready: "install_not_ready";
             gateway_offline: "gateway_offline";
             metadata_stale: "metadata_stale";
             tool_execution_error: "tool_execution_error";
+            dispatch_block_prepared: "dispatch_block_prepared";
         }>>;
         readinessContractVersion: z.ZodNullable<z.ZodString>;
         gatewayReadinessRef: z.ZodNullable<z.ZodString>;
@@ -1040,11 +1040,11 @@ export declare const CodexX402ProtectedToolRuntimeTranscriptSchema: z.ZodObject<
         }>;
         facadeOutcome: z.ZodNullable<z.ZodEnum<{
             refused: "refused";
-            dispatch_block_prepared: "dispatch_block_prepared";
             install_not_ready: "install_not_ready";
             gateway_offline: "gateway_offline";
             metadata_stale: "metadata_stale";
             tool_execution_error: "tool_execution_error";
+            dispatch_block_prepared: "dispatch_block_prepared";
         }>>;
         runtimeDispatchPrepared: z.ZodBoolean;
         policyDecisionCreated: z.ZodLiteral<false>;

@@ -73,19 +73,19 @@ export declare const AgenticEndpointAccessBypassPostureSchema: z.ZodEnum<{
 export type AgenticEndpointAccessBypassPosture = z.infer<typeof AgenticEndpointAccessBypassPostureSchema>;
 export declare const AgenticEndpointAccessStateSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
+    refused: "refused";
     revoked: "revoked";
     expired: "expired";
     attempted: "attempted";
     leased: "leased";
-    refused: "refused";
     exhausted: "exhausted";
     quarantined: "quarantined";
 }>;
 export type AgenticEndpointAccessState = z.infer<typeof AgenticEndpointAccessStateSchema>;
 export declare const AgenticEndpointAccessClearanceStatusSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
-    leased: "leased";
     refused: "refused";
+    leased: "leased";
 }>;
 export type AgenticEndpointAccessClearanceStatus = z.infer<typeof AgenticEndpointAccessClearanceStatusSchema>;
 export declare const AgenticEndpointAccessFailClosedBehaviorSchema: z.ZodEnum<{
@@ -108,6 +108,16 @@ export declare const AgenticEndpointAccessCapabilityStatusSchema: z.ZodEnum<{
     supported: "supported";
 }>;
 export type AgenticEndpointAccessCapabilityStatus = z.infer<typeof AgenticEndpointAccessCapabilityStatusSchema>;
+export declare const AgenticEndpointAccessRequestEvidenceSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+    requestMethod: z.ZodString;
+    requestUrlDigest: z.ZodString;
+    requestHeaderDigest: z.ZodString;
+    requestBodyDigest: z.ZodString;
+    redactionPolicyId: z.ZodString;
+    requestEvidenceDigest: z.ZodString;
+}, z.core.$strict>;
+export type AgenticEndpointAccessRequestEvidence = z.infer<typeof AgenticEndpointAccessRequestEvidenceSchema>;
 export declare const AgenticEndpointAccessPolicySchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
     tenantId: z.ZodString;
@@ -194,6 +204,15 @@ export declare const AgenticEndpointAccessAttemptSchema: z.ZodObject<{
     }>;
     gatewayRegistryEntryId: z.ZodString;
     gatewayId: z.ZodString;
+    requestEvidence: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        requestMethod: z.ZodString;
+        requestUrlDigest: z.ZodString;
+        requestHeaderDigest: z.ZodString;
+        requestBodyDigest: z.ZodString;
+        redactionPolicyId: z.ZodString;
+        requestEvidenceDigest: z.ZodString;
+    }, z.core.$strict>;
     requestedLeaseTtlSeconds: z.ZodNumber;
     requestedBudget: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodType<import("./types").JsonValue, unknown, z.core.$ZodTypeInternals<import("./types").JsonValue, unknown>>>>;
     kernelVersion: z.ZodString;
@@ -224,8 +243,8 @@ export declare const AgenticEndpointAccessClearanceBindingSchema: z.ZodObject<{
     proofGapRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
     clearanceStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
-        leased: "leased";
         refused: "refused";
+        leased: "leased";
     }>;
     reasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
     evaluatedAt: z.ZodString;
@@ -328,6 +347,15 @@ export declare const AgenticEndpointAccessReadbackSchema: z.ZodObject<{
     attemptId: z.ZodString;
     candidateActionId: z.ZodString;
     attemptDigest: z.ZodString;
+    requestEvidence: z.ZodObject<{
+        schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.v0.3.0">;
+        requestMethod: z.ZodString;
+        requestUrlDigest: z.ZodString;
+        requestHeaderDigest: z.ZodString;
+        requestBodyDigest: z.ZodString;
+        redactionPolicyId: z.ZodString;
+        requestEvidenceDigest: z.ZodString;
+    }, z.core.$strict>;
     protectedSurfaceBindingId: z.ZodString;
     protectedSurfaceBindingDigest: z.ZodString;
     protectedSurfaceRef: z.ZodString;

@@ -3,6 +3,7 @@ export * from "../context/request-context-schemas";
 export * from "../areas/action-attempt-lifecycle/schemas";
 export * from "../areas/catalog-envelope/schemas";
 export * from "../areas/credential-custody/schemas";
+export * from "../areas/typed-action-commitment/schemas";
 export * from "../areas/delegated-authority/schemas";
 export * from "../areas/runtime-evidence/schemas";
 export * from "../areas/generated-execution-graph/schemas";

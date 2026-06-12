@@ -1,4 +1,4 @@
-import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessRecordScope, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
 export declare class InMemoryProtocolStore implements ProtocolStore {
     private records;
     private events;
@@ -36,6 +36,9 @@ export declare class InMemoryProtocolStore implements ProtocolStore {
     commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
     commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
     commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
+    getEndpointAccessLeaseByGreenlightId<T>(greenlightId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    getEndpointAccessClearanceBindingByAttemptId<T>(attemptId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    listEndpointAccessUsageEventsByLeaseId<T>(leaseId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T>[]>;
     getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
     commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
     countRecordsOfType(objectType: ProtocolObjectType): number;

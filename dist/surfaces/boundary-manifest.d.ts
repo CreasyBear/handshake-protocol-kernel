@@ -1,5 +1,5 @@
 export declare const surfaceBoundaryManifestVersion: "surface-boundary.v0.1";
-export declare const surfaceIds: readonly ["sdk.runtime", "sdk.evidence", "sdk.control_plane", "sdk.policy", "sdk.adapter", "sdk.install", "sdk.gateway", "cli.operator", "cli.evidence", "cli.process", "mcp.runtime", "x402.protected_tool", "surfaces.a2a_negotiation", "surfaces.a2a_readback", "surfaces.service_workflow_admission", "surfaces.hosted_admission", "surfaces.agentic_endpoint_access_readback"];
+export declare const surfaceIds: readonly ["sdk.runtime", "sdk.evidence", "sdk.control_plane", "sdk.policy", "sdk.adapter", "sdk.install", "sdk.gateway", "cli.operator", "cli.evidence", "mcp.runtime", "x402.protected_tool", "surfaces.a2a_negotiation", "surfaces.a2a_readback", "surfaces.service_workflow_admission", "surfaces.hosted_admission", "surfaces.agentic_endpoint_access_readback", "surfaces.recovery_guidance"];
 export type SurfaceId = (typeof surfaceIds)[number];
 export declare const surfaceRouteFamilies: readonly ["action_contract_proposal_write", "adapter_definition_write", "bypass_probe_write", "catalog_install_write", "certificate_mint_write", "certificate_verify_local", "delegated_authority_write", "evidence_projection_read", "gateway_credential_write", "gateway_check_write", "install_health_read", "install_proposal_shape_read", "isolation_write", "local_process_supervision", "policy_decision_write", "protected_path_posture_write", "raw_record_read", "receipt_export_write", "recovery_write", "runtime_evidence_write", "runtime_ingress_proposal_write", "surface_reconciliation_write", "tool_call_draft_write"];
 export type SurfaceRouteFamily = (typeof surfaceRouteFamilies)[number];
@@ -161,6 +161,32 @@ export declare const surfaceBoundaryManifest: {
         };
         readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "endpoint_access_readback_is_not_mutation_authority", "endpoint_access_lease_is_endpoint_entry_only", "fresh_action_contract_required"];
     };
+    readonly "surfaces.recovery_guidance": {
+        readonly id: "surfaces.recovery_guidance";
+        readonly status: "active";
+        readonly plane: "evidence";
+        readonly custodyRole: "review_custody";
+        readonly authorityPosture: "evidence_only";
+        readonly sourceRoots: readonly ["src/surfaces/protected-action-recovery-guidance.ts"];
+        readonly allowedRouteFamilies: readonly ["evidence_projection_read", "install_health_read"];
+        readonly forbiddenRouteFamilies: readonly ["certificate_mint_write", "isolation_write", "policy_decision_write", "raw_record_read", "receipt_export_write", "recovery_write", "action_contract_proposal_write", "bypass_probe_write", "catalog_install_write", "certificate_verify_local", "delegated_authority_write", "gateway_check_write", "gateway_credential_write", "protected_path_posture_write", "runtime_evidence_write", "runtime_ingress_proposal_write", "surface_reconciliation_write", "tool_call_draft_write"];
+        readonly allowedImportRoots: readonly ["src/surfaces", "src/protocol/public"];
+        readonly forbiddenImportFragments: readonly ["protocol/kernel", "protocol/areas/policy-greenlight/guards", "protocol/areas/policy-greenlight/policy", "protocol/areas/policy-greenlight/policy-record", "protocol/areas/policy-greenlight/sequence-dependencies", "protocol/areas/policy-greenlight/transitions", "protocol/areas/gateway-gate/artifacts", "protocol/areas/gateway-gate/gateway-policy", "protocol/areas/gateway-gate/guards", "protocol/areas/gateway-gate/replay-refusal", "protocol/areas/gateway-gate/transitions", "protocol/areas/receipt-export/transitions", "protocol/areas/authority-certificate/signing", "protocol/areas/authority-certificate/transitions", "storage/", "adapters/x402-payment/wallet-gateway", "experimental", "adapters/", "runtime/", "storage/"];
+        readonly forbiddenCredentialShapes: readonly ["allRoles", "CallerAuthTokens", "transitionToken", "transitionTokens", "control_plane_token", "gateway_custody_token", "private_key", "signer", "wallet"];
+        readonly forbiddenOutputFields: readonly [...("signer" | "PAYMENT-SIGNATURE" | "rawInternalRecord" | "PaymentPayload" | "authorityCertificateMint" | "gatewayCheckInput" | "mutationCommand" | "privateKey" | "rawCredentialMaterial" | "receiptExport")[], "downstreamSuccess"];
+        readonly requiredNonAuthorityFlags: {
+            readonly authorityCreated: false;
+            readonly authorityCertificateMinted: false;
+            readonly credentialMaterialIncluded: false;
+            readonly gatewayCheckPerformed: false;
+            readonly greenlightCreated: false;
+            readonly mutationAttempted: false;
+            readonly mutationCommandIncluded: false;
+            readonly rawInternalRecordIncluded: false;
+            readonly receiptExportCreated: false;
+        };
+        readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "recovery_guidance_is_not_recovery_authority", "candidate_draft_is_not_action_contract", "fresh_action_contract_required"];
+    };
     readonly "mcp.runtime": {
         readonly id: "mcp.runtime";
         readonly status: "active";
@@ -219,7 +245,7 @@ export declare const surfaceBoundaryManifest: {
         readonly plane: "operator";
         readonly custodyRole: "control_plane";
         readonly authorityPosture: "setup_only";
-        readonly sourceRoots: readonly ["src/cli/command-manifest.ts", "src/cli/demo/x402.ts", "src/cli/host/doctor.ts", "src/cli/local-project/doctor.ts", "src/cli/local-project/index.ts", "src/cli/main.ts", "src/cli/mcp/doctor.ts", "src/cli/output.ts", "src/cli/quickstart/x402.ts", "src/cli/state/inspect.ts", "src/cli/x402/index.ts", "src/cli/x402/local-state.ts", "src/cli/x402/readiness.ts"];
+        readonly sourceRoots: readonly ["src/cli/command-manifest.ts", "src/cli/host/doctor.ts", "src/cli/local-project/doctor.ts", "src/cli/local-project/index.ts", "src/cli/main.ts", "src/cli/mcp/doctor.ts", "src/cli/output.ts", "src/cli/quickstart/x402.ts", "src/cli/x402/index.ts", "src/cli/x402/local-state.ts"];
         readonly allowedRouteFamilies: readonly ["catalog_install_write", "install_health_read"];
         readonly forbiddenRouteFamilies: readonly ["certificate_mint_write", "isolation_write", "policy_decision_write", "raw_record_read", "receipt_export_write", "recovery_write", "action_contract_proposal_write", "gateway_check_write", "runtime_evidence_write", "surface_reconciliation_write", "tool_call_draft_write"];
         readonly allowedImportRoots: readonly ["src/cli", "src/adapters/x402-payment/bypass-probes", "src/adapters/x402-payment/conformance", "src/adapters/x402-payment/install-proposal", "src/adapters/x402-payment/protected-tool-profile", "src/adapters/x402-payment/protected-tool-readiness", "src/install/install-proposal", "src/mcp", "src/protocol/areas/bypass-probe", "src/protocol/evidence-projections", "src/protocol/foundation", "src/surfaces"];
@@ -245,7 +271,7 @@ export declare const surfaceBoundaryManifest: {
         readonly plane: "evidence";
         readonly custodyRole: "review_custody";
         readonly authorityPosture: "evidence_only";
-        readonly sourceRoots: readonly ["src/cli/aps-report.ts", "src/cli/certificate.ts", "src/cli/command-manifest.ts", "src/cli/evidence/operation-readback-view.ts", "src/cli/main.ts", "src/cli/output.ts", "src/cli/projection-evidence.ts", "src/cli/quality/report.ts", "src/cli/simulate/x402-payment.ts", "src/cli/support-bundle.ts"];
+        readonly sourceRoots: readonly ["src/cli/aps-report.ts", "src/cli/certificate.ts", "src/cli/command-manifest.ts", "src/cli/evidence/operation-readback-view.ts", "src/cli/main.ts", "src/cli/output.ts", "src/cli/projection-evidence.ts", "src/cli/simulate/x402-payment.ts", "src/cli/support-bundle.ts"];
         readonly allowedRouteFamilies: readonly ["certificate_verify_local", "evidence_projection_read", "install_health_read"];
         readonly forbiddenRouteFamilies: readonly ["certificate_mint_write", "isolation_write", "policy_decision_write", "raw_record_read", "receipt_export_write", "recovery_write", "action_contract_proposal_write", "catalog_install_write", "gateway_check_write", "runtime_evidence_write", "surface_reconciliation_write", "tool_call_draft_write"];
         readonly allowedImportRoots: readonly ["src/cli", "src/hosted-admission", "src/mcp", "src/protocol/areas/authority-certificate/verify", "src/protocol/evidence-projections", "src/protocol/public", "src/surfaces"];
@@ -264,32 +290,6 @@ export declare const surfaceBoundaryManifest: {
             readonly receiptExportCreated: false;
         };
         readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "cli_evidence_is_not_clearance"];
-    };
-    readonly "cli.process": {
-        readonly id: "cli.process";
-        readonly status: "deferred";
-        readonly plane: "process";
-        readonly custodyRole: "none";
-        readonly authorityPosture: "transport_only";
-        readonly sourceRoots: readonly ["src/cli/process"];
-        readonly allowedRouteFamilies: readonly ["local_process_supervision"];
-        readonly forbiddenRouteFamilies: readonly ["certificate_mint_write", "isolation_write", "policy_decision_write", "raw_record_read", "receipt_export_write", "recovery_write", "action_contract_proposal_write", "catalog_install_write", "gateway_check_write", "runtime_evidence_write", "surface_reconciliation_write", "tool_call_draft_write"];
-        readonly allowedImportRoots: readonly ["src/cli", "src/sdk", "src/surfaces"];
-        readonly forbiddenImportFragments: readonly ["protocol/kernel", "protocol/areas/policy-greenlight/guards", "protocol/areas/policy-greenlight/policy", "protocol/areas/policy-greenlight/policy-record", "protocol/areas/policy-greenlight/sequence-dependencies", "protocol/areas/policy-greenlight/transitions", "protocol/areas/gateway-gate/artifacts", "protocol/areas/gateway-gate/gateway-policy", "protocol/areas/gateway-gate/guards", "protocol/areas/gateway-gate/replay-refusal", "protocol/areas/gateway-gate/transitions", "protocol/areas/receipt-export/transitions", "protocol/areas/authority-certificate/signing", "protocol/areas/authority-certificate/transitions", "storage/", "adapters/x402-payment/wallet-gateway", "experimental", "adapters/", "storage/"];
-        readonly forbiddenCredentialShapes: readonly ["allRoles", "CallerAuthTokens", "transitionToken", "transitionTokens", "control_plane_token", "gateway_custody_token", "private_key", "signer", "wallet"];
-        readonly forbiddenOutputFields: readonly [...("signer" | "PAYMENT-SIGNATURE" | "rawInternalRecord" | "PaymentPayload" | "authorityCertificateMint" | "gatewayCheckInput" | "mutationCommand" | "privateKey" | "rawCredentialMaterial" | "receiptExport")[], "greenlightId", "greenlightRef", "gatewayCheckInput"];
-        readonly requiredNonAuthorityFlags: {
-            readonly authorityCreated: false;
-            readonly authorityCertificateMinted: false;
-            readonly credentialMaterialIncluded: false;
-            readonly gatewayCheckPerformed: false;
-            readonly greenlightCreated: false;
-            readonly mutationAttempted: false;
-            readonly mutationCommandIncluded: false;
-            readonly rawInternalRecordIncluded: false;
-            readonly receiptExportCreated: false;
-        };
-        readonly claimBoundaryLabels: readonly ["local_or_self_hosted_only", "no_broad_runtime_control", "no_clearing_house_operation", "no_cross_org_trust", "no_hosted_operation", "no_provider_custody", "no_settlement_claim", "process_start_is_not_gateway_custody"];
     };
     readonly "sdk.runtime": {
         readonly id: "sdk.runtime";

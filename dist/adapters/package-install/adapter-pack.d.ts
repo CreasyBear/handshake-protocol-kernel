@@ -19,8 +19,8 @@ export declare const PackageInstallMaterialEvidenceStatusSchema: z.ZodEnum<{
     unverified: "unverified";
     proof_gap: "proof_gap";
     unavailable: "unavailable";
-    not_requested: "not_requested";
     verified: "verified";
+    not_requested: "not_requested";
 }>;
 export type PackageInstallMaterialEvidenceStatus = z.infer<typeof PackageInstallMaterialEvidenceStatusSchema>;
 export declare const PackageInstallMaterialEvidenceSchema: z.ZodObject<{
@@ -48,22 +48,22 @@ export declare const PackageInstallMaterialEvidenceSchema: z.ZodObject<{
         unverified: "unverified";
         proof_gap: "proof_gap";
         unavailable: "unavailable";
-        not_requested: "not_requested";
         verified: "verified";
+        not_requested: "not_requested";
     }>;
     npmSignatureStatus: z.ZodEnum<{
         unverified: "unverified";
         proof_gap: "proof_gap";
         unavailable: "unavailable";
-        not_requested: "not_requested";
         verified: "verified";
+        not_requested: "not_requested";
     }>;
     registryIntegrityStatus: z.ZodEnum<{
         unverified: "unverified";
         proof_gap: "proof_gap";
         unavailable: "unavailable";
-        not_requested: "not_requested";
         verified: "verified";
+        not_requested: "not_requested";
     }>;
     tarballIntegrityDigest: z.ZodNullable<z.ZodString>;
     bunLockfileEvidenceRole: z.ZodLiteral<"local_reconstruction_only">;
@@ -128,22 +128,22 @@ export declare const PackageInstallAdapterEvidenceReportSchema: z.ZodObject<{
             unverified: "unverified";
             proof_gap: "proof_gap";
             unavailable: "unavailable";
-            not_requested: "not_requested";
             verified: "verified";
+            not_requested: "not_requested";
         }>;
         npmSignatureStatus: z.ZodEnum<{
             unverified: "unverified";
             proof_gap: "proof_gap";
             unavailable: "unavailable";
-            not_requested: "not_requested";
             verified: "verified";
+            not_requested: "not_requested";
         }>;
         registryIntegrityStatus: z.ZodEnum<{
             unverified: "unverified";
             proof_gap: "proof_gap";
             unavailable: "unavailable";
-            not_requested: "not_requested";
             verified: "verified";
+            not_requested: "not_requested";
         }>;
         tarballIntegrityDigest: z.ZodNullable<z.ZodString>;
         bunLockfileEvidenceRole: z.ZodLiteral<"local_reconstruction_only">;

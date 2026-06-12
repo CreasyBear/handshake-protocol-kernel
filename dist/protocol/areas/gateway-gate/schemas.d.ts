@@ -38,6 +38,9 @@ export declare const GatewayCheckAttemptSchema: z.ZodObject<{
         blind: "blind";
         fixture_only: "fixture_only";
     }>>;
+    observedTypedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    observedTypedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    typedCommitmentRefusalReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
     gateDecision: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";

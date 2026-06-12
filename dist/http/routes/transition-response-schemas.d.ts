@@ -70,6 +70,8 @@ export declare const PolicyEvaluationResponseSchema: z.ZodObject<{
         gatewayCredentialRefDigests: z.ZodDefault<z.ZodArray<z.ZodString>>;
         delegatedAuthorityRefIds: z.ZodDefault<z.ZodArray<z.ZodString>>;
         delegatedAuthorityRefDigests: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        requiredTypedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        requiredTypedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         paramsDigest: z.ZodString;
         contractDigest: z.ZodString;
         idempotencyKey: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -147,6 +149,9 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
             blind: "blind";
             fixture_only: "fixture_only";
         }>>;
+        observedTypedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        observedTypedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        typedCommitmentRefusalReasonCodes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         gateDecision: z.ZodEnum<{
             proof_gap: "proof_gap";
             refused: "refused";
@@ -210,13 +215,13 @@ export declare const GatewayCheckResponseSchema: z.ZodObject<{
         gatewayAdmissionStatus: z.ZodEnum<{
             proof_gap: "proof_gap";
             refused: "refused";
+            replayed: "replayed";
             not_requested: "not_requested";
             admitted: "admitted";
-            replayed: "replayed";
         }>;
         greenlightConsumptionStatus: z.ZodEnum<{
-            not_applicable: "not_applicable";
             replayed: "replayed";
+            not_applicable: "not_applicable";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -1620,10 +1625,10 @@ export declare const RuntimeIngressProposalResponseSchema: z.ZodObject<{
             classification: z.ZodEnum<{
                 read_only: "read_only";
                 ambiguous: "ambiguous";
+                unsupported: "unsupported";
                 hidden_trigger: "hidden_trigger";
                 candidate_action_eligible: "candidate_action_eligible";
                 nonconsequential: "nonconsequential";
-                unsupported: "unsupported";
                 bypass_risk: "bypass_risk";
                 observer_only: "observer_only";
             }>;

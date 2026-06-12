@@ -2,6 +2,7 @@ import type { ActionContract, ProposeActionContractInput } from "./areas/action-
 import { type AgenticEndpointAccessLeaseIssueResult, type AgenticEndpointAccessUsageResult, type IssueAgenticEndpointAccessLeaseInput, type RecordAgenticEndpointAccessUsageEventInput } from "./areas/agentic-endpoint-access";
 import type { AuthorityCertificate, CreateAuthorityCertificateInput } from "./areas/authority-certificate";
 import type { CredentialResolutionEvidence, GatewayCredentialRef, GatewayCustodyProofPacket, RecordCredentialResolutionEvidenceInput, RecordGatewayCustodyProofPacketInput, RegisterGatewayCredentialRefInput } from "./areas/credential-custody";
+import type { RecordTypedActionCommitmentInput, TypedActionCommitmentRecord } from "./areas/typed-action-commitment";
 import type { DelegatedAuthorityRef, DelegatedAuthorityStatusTransition, RegisterDelegatedAuthorityRefInput, TransitionDelegatedAuthorityStatusInput } from "./areas/delegated-authority";
 import { type GatewayCheckResult } from "./areas/gateway-gate";
 import type { GatewayCheckInput } from "./areas/gateway-gate";
@@ -53,6 +54,7 @@ export declare class HandshakeKernel {
     transitionDelegatedAuthorityStatus(input: TransitionDelegatedAuthorityStatusInput): Promise<DelegatedAuthorityStatusTransition>;
     recordCredentialResolutionEvidence(input: RecordCredentialResolutionEvidenceInput): Promise<CredentialResolutionEvidence>;
     recordGatewayCustodyProofPacket(input: RecordGatewayCustodyProofPacketInput): Promise<GatewayCustodyProofPacket>;
+    recordTypedActionCommitment(input: RecordTypedActionCommitmentInput): Promise<TypedActionCommitmentRecord>;
     createAuthorityCertificate(input: CreateAuthorityCertificateInput): Promise<AuthorityCertificate>;
     evaluatePolicy(input: EvaluatePolicyInput): Promise<PolicyEvaluationResponse>;
     gatewayCheck(input: GatewayCheckInput): Promise<GatewayCheckResult>;

@@ -3,6 +3,7 @@ export * from "../areas/generated-execution-graph/inputs";
 export * from "../areas/install-setup/inputs";
 export * from "../areas/bypass-probe/inputs";
 export * from "../areas/credential-custody/inputs";
+export * from "../areas/typed-action-commitment/inputs";
 export * from "../areas/delegated-authority/inputs";
 export * from "../areas/tool-call-draft/inputs";
 export * from "../areas/protected-path-posture/inputs";

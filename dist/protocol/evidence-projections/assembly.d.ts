@@ -8,5 +8,6 @@ export type AgentTransactionEnvelopeAssembly = {
     supplementalRecords: StoredProtocolRecord[];
 };
 export declare function assembleAgentTransactionEnvelopeInput(store: ProtocolStore, contract: ActionContract): Promise<AgentTransactionEnvelopeInput>;
+export declare function assembleOperationReadbackInput(store: ProtocolStore, contract: ActionContract): Promise<AgentTransactionEnvelopeInput>;
 export declare function assembleAgentTransactionEnvelope(store: ProtocolStore, contract: ActionContract): Promise<AgentTransactionEnvelopeAssembly>;
 export declare function resolveReceiptTimelineDelegationProvenance(store: ProtocolStore, receipt: Receipt): Promise<ReceiptDelegationProvenance | null>;

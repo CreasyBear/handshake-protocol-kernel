@@ -7,6 +7,35 @@ public artifact repository. It does not claim hosted operation, provider
 custody, settlement finality, marketplace certification, MCP Registry
 discoverability, or Handshake authority from publication alone.
 
+## 0.4.0 - 2026-06-12
+
+### Added
+
+- Candidate `TypedActionCommitment` source family for composed external
+  commitment evidence across `handshake_jcs_typed` Cloud HMAC,
+  service-workflow readback, and later EIP-712 profile adapters.
+- Required typed commitment set material in policy/gateway binding so policy
+  can require refs and a set digest, and gateway checks can refuse mismatched,
+  missing, stale, or downgraded observed sets before mutation.
+- Public-schema-only package posture for `TypedActionCommitment*Schema`,
+  projection schemas, and `RecordTypedActionCommitmentInputSchema` through the
+  existing root exports. There is no `./typed-action-commitment` package
+  subpath.
+
+### Boundary Notes
+
+- `TypedActionCommitment` is evidence only. It does not create policy
+  decisions, greenlights, gateway checks, mutations, receipts, terminal
+  certificates, endpoint leases, signer custody, payment custody, principal
+  consent, or downstream success.
+- Profile normalizers, transition helpers, projectors, store readback, and
+  adapter wiring are not public-complete package surfaces in this release
+  posture.
+- Release `0.4.0` is not claimable from EIP-712 or x402 evidence alone. Promotion
+  requires the composed model, Cloud HMAC profile, policy/gateway binding,
+  readback/export posture, stores, hostile matrix, and stakeholder
+  simplification gate; otherwise the work remains v0.3.1 or draft-only.
+
 ## 0.3.0 - 2026-06-01
 
 ### Added

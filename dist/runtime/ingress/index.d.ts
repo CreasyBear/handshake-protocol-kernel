@@ -313,8 +313,8 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
                 unsupported: "unsupported";
-                no_body: "no_body";
                 digest_bound: "digest_bound";
+                no_body: "no_body";
                 omitted: "omitted";
             }>>;
             intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -361,8 +361,8 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
                 unsupported: "unsupported";
-                no_body: "no_body";
                 digest_bound: "digest_bound";
+                no_body: "no_body";
                 omitted: "omitted";
             }>>;
             intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -411,8 +411,8 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
             intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
                 unsupported: "unsupported";
-                no_body: "no_body";
                 digest_bound: "digest_bound";
+                no_body: "no_body";
                 omitted: "omitted";
             }>>;
             intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -480,9 +480,9 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             gatewayCredentialRefPosture: z.ZodDefault<z.ZodEnum<{
                 unknown: "unknown";
                 stale: "stale";
+                fresh: "fresh";
                 revoked: "revoked";
                 expired: "expired";
-                fresh: "fresh";
             }>>;
             rawAuthorizationHeaderObserved: z.ZodDefault<z.ZodBoolean>;
             dynamicEndpointConstructionObserved: z.ZodDefault<z.ZodBoolean>;
@@ -534,9 +534,9 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             gatewayCredentialRefPosture: z.ZodDefault<z.ZodEnum<{
                 unknown: "unknown";
                 stale: "stale";
+                fresh: "fresh";
                 revoked: "revoked";
                 expired: "expired";
-                fresh: "fresh";
             }>>;
             rawAuthorizationHeaderObserved: z.ZodDefault<z.ZodBoolean>;
             dynamicEndpointConstructionObserved: z.ZodDefault<z.ZodBoolean>;
@@ -590,9 +590,9 @@ export declare const RuntimeIngressProposalInputSchema: z.ZodObject<{
             gatewayCredentialRefPosture: z.ZodDefault<z.ZodEnum<{
                 unknown: "unknown";
                 stale: "stale";
+                fresh: "fresh";
                 revoked: "revoked";
                 expired: "expired";
-                fresh: "fresh";
             }>>;
             rawAuthorizationHeaderObserved: z.ZodDefault<z.ZodBoolean>;
             dynamicEndpointConstructionObserved: z.ZodDefault<z.ZodBoolean>;

@@ -109,12 +109,12 @@ export declare const McpStructuredContentSchema: z.ZodDiscriminatedUnion<[z.ZodO
         proof_gap: "proof_gap";
         replay_refused: "replay_refused";
         refused: "refused";
+        raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
         install_not_ready: "install_not_ready";
         gateway_offline: "gateway_offline";
         metadata_stale: "metadata_stale";
-        tool_execution_error: "tool_execution_error";
         tools_list_changed: "tools_list_changed";
-        raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+        tool_execution_error: "tool_execution_error";
     }>;
 }, z.core.$strict>], "outcome">;
 export declare const McpToolResultSchema: z.ZodObject<{
@@ -225,12 +225,12 @@ export declare const McpToolResultSchema: z.ZodObject<{
             proof_gap: "proof_gap";
             replay_refused: "replay_refused";
             refused: "refused";
+            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
             install_not_ready: "install_not_ready";
             gateway_offline: "gateway_offline";
             metadata_stale: "metadata_stale";
-            tool_execution_error: "tool_execution_error";
             tools_list_changed: "tools_list_changed";
-            raw_sibling_bypass_detected: "raw_sibling_bypass_detected";
+            tool_execution_error: "tool_execution_error";
         }>;
     }, z.core.$strict>], "outcome">;
     failureClass: z.ZodOptional<z.ZodNullable<z.ZodEnum<{
@@ -312,7 +312,7 @@ export declare function mcpNonContractOutcome(input: SurfaceOutcomeBaseInput, is
         challengeRef: string | null;
         correlationRef: string | null;
         idempotencyKey: string | null;
-        outcome: "review_required" | "proof_gap" | "replay_refused" | "refused" | "install_not_ready" | "gateway_offline" | "metadata_stale" | "tool_execution_error" | "tools_list_changed" | "raw_sibling_bypass_detected";
+        outcome: "review_required" | "proof_gap" | "replay_refused" | "refused" | "raw_sibling_bypass_detected" | "install_not_ready" | "gateway_offline" | "metadata_stale" | "tools_list_changed" | "tool_execution_error";
     };
     content: {
         type: "text";

@@ -42,10 +42,10 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             classification: import("zod").ZodEnum<{
                 read_only: "read_only";
                 ambiguous: "ambiguous";
+                unsupported: "unsupported";
                 hidden_trigger: "hidden_trigger";
                 candidate_action_eligible: "candidate_action_eligible";
                 nonconsequential: "nonconsequential";
-                unsupported: "unsupported";
                 bypass_risk: "bypass_risk";
                 observer_only: "observer_only";
             }>;
@@ -60,10 +60,10 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             classification: import("zod").ZodEnum<{
                 read_only: "read_only";
                 ambiguous: "ambiguous";
+                unsupported: "unsupported";
                 hidden_trigger: "hidden_trigger";
                 candidate_action_eligible: "candidate_action_eligible";
                 nonconsequential: "nonconsequential";
-                unsupported: "unsupported";
                 bypass_risk: "bypass_risk";
                 observer_only: "observer_only";
             }>;
@@ -253,6 +253,172 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         gatewayCredentialEvidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         delegatedAuthorityEvidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         credentialResolutionEvidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        typedCommitmentRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        typedCommitmentSetDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+        typedCommitmentProjectionClass: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_export: "auditor_export";
+        }>>>;
+        typedCommitmentSummaries: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodObject<{
+            typedActionCommitmentId: import("zod").ZodString;
+            commitmentDigest: import("zod").ZodString;
+            subjectDigest: import("zod").ZodString;
+            purpose: import("zod").ZodEnum<{
+                external_commitment_evidence: "external_commitment_evidence";
+                policy_required_evidence: "policy_required_evidence";
+                service_workflow_readback: "service_workflow_readback";
+                post_gateway_payment_evidence: "post_gateway_payment_evidence";
+                display_binding_evidence: "display_binding_evidence";
+            }>;
+            profile: import("zod").ZodEnum<{
+                handshake_jcs_typed: "handshake_jcs_typed";
+                eip712: "eip712";
+            }>;
+            verificationStatus: import("zod").ZodEnum<{
+                unverified: "unverified";
+                proof_gap: "proof_gap";
+                verified: "verified";
+                refused: "refused";
+                unsupported: "unsupported";
+            }>;
+            replayStatus: import("zod").ZodEnum<{
+                stale: "stale";
+                fresh: "fresh";
+                replayed: "replayed";
+                missing: "missing";
+                not_applicable: "not_applicable";
+            }>;
+            verifierContextDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+            safetyPosture: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+        }, import("zod/v4/core").$strict>>>;
+        typedCommitmentProjections: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodObject<{
+            typedActionCommitmentRef: import("zod").ZodString;
+            actionContractRef: import("zod").ZodNullable<import("zod").ZodString>;
+            projectionClass: import("zod").ZodEnum<{
+                public_redacted: "public_redacted";
+                operator_redacted: "operator_redacted";
+                auditor_export: "auditor_export";
+            }>;
+            commitmentDigest: import("zod").ZodString;
+            subject: import("zod").ZodObject<{
+                kind: import("zod").ZodEnum<{
+                    action_contract: "action_contract";
+                    service_workflow: "service_workflow";
+                    x402_payment: "x402_payment";
+                    agentic_endpoint_access: "agentic_endpoint_access";
+                    protected_surface: "protected_surface";
+                    external_evidence: "external_evidence";
+                }>;
+                ref: import("zod").ZodString;
+                digest: import("zod").ZodString;
+            }, import("zod/v4/core").$strict>;
+            purpose: import("zod").ZodEnum<{
+                external_commitment_evidence: "external_commitment_evidence";
+                policy_required_evidence: "policy_required_evidence";
+                service_workflow_readback: "service_workflow_readback";
+                post_gateway_payment_evidence: "post_gateway_payment_evidence";
+                display_binding_evidence: "display_binding_evidence";
+            }>;
+            profile: import("zod").ZodEnum<{
+                handshake_jcs_typed: "handshake_jcs_typed";
+                eip712: "eip712";
+            }>;
+            domain: import("zod").ZodObject<{
+                domainRef: import("zod").ZodString;
+                domainDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                tenantId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                organizationId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                gatewayId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                actionClass: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                providerEnvironmentRef: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+            }, import("zod/v4/core").$strict>;
+            verificationStatus: import("zod").ZodEnum<{
+                unverified: "unverified";
+                proof_gap: "proof_gap";
+                verified: "verified";
+                refused: "refused";
+                unsupported: "unsupported";
+            }>;
+            verificationReasonCode: import("zod").ZodNullable<import("zod").ZodString>;
+            replayStatus: import("zod").ZodEnum<{
+                stale: "stale";
+                fresh: "fresh";
+                replayed: "replayed";
+                missing: "missing";
+                not_applicable: "not_applicable";
+            }>;
+            idempotencyKey: import("zod").ZodNullable<import("zod").ZodString>;
+            nonceRef: import("zod").ZodNullable<import("zod").ZodString>;
+            nonceDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            replayWindowSeconds: import("zod").ZodNullable<import("zod").ZodNumber>;
+            verifierRef: import("zod").ZodNullable<import("zod").ZodString>;
+            verifierContextDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            keyId: import("zod").ZodNullable<import("zod").ZodString>;
+            providerNativeDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            safetyPosture: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+            displayBindingStatus: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+            authorityBoundary: import("zod").ZodObject<{
+                createsPolicyDecision: import("zod").ZodLiteral<false>;
+                createsGreenlight: import("zod").ZodLiteral<false>;
+                performsGatewayCheck: import("zod").ZodLiteral<false>;
+                authorizesMutation: import("zod").ZodLiteral<false>;
+                createsReceipt: import("zod").ZodLiteral<false>;
+                mintsCertificate: import("zod").ZodLiteral<false>;
+                provesPrincipalConsent: import("zod").ZodLiteral<false>;
+                provesSignerCustody: import("zod").ZodLiteral<false>;
+                provesPaymentCustody: import("zod").ZodLiteral<false>;
+                createsEndpointLease: import("zod").ZodLiteral<false>;
+                provesDownstreamSuccess: import("zod").ZodLiteral<false>;
+            }, import("zod/v4/core").$strict>;
+            refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            evidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            signatureEvidence: import("zod").ZodNullable<import("zod").ZodObject<{
+                signatureRef: import("zod").ZodNullable<import("zod").ZodString>;
+                signatureDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            }, import("zod/v4/core").$strict>>;
+            rawReadAudit: import("zod").ZodNullable<import("zod").ZodObject<{
+                rawRecordReadAuditRef: import("zod").ZodString;
+                rawRecordReadAuditDigest: import("zod").ZodString;
+                redactionPosture: import("zod").ZodLiteral<"auditor_signature_digest_only">;
+            }, import("zod/v4/core").$strict>>;
+            rawTypedPayloadIncluded: import("zod").ZodLiteral<false>;
+            rawSignatureIncluded: import("zod").ZodLiteral<false>;
+            rawCredentialMaterialIncluded: import("zod").ZodLiteral<false>;
+            rawPaymentMaterialIncluded: import("zod").ZodLiteral<false>;
+            rawRequestBodyIncluded: import("zod").ZodLiteral<false>;
+            commandMaterialIncluded: import("zod").ZodLiteral<false>;
+            redactionProfileRef: import("zod").ZodEnum<{
+                public_redacted: "public_redacted";
+                operator_redacted: "operator_redacted";
+                auditor_signature_digest_only: "auditor_signature_digest_only";
+            }>;
+            omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        }, import("zod/v4/core").$strict>>>;
+        typedCommitmentRefusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        typedCommitmentProofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         signerInvocationEvidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         downstreamEvidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         authMdEvidenceRefs: import("zod").ZodObject<{
@@ -284,13 +450,13 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         gatewayAdmissionStatus: import("zod").ZodEnum<{
             proof_gap: "proof_gap";
             refused: "refused";
+            replayed: "replayed";
             not_requested: "not_requested";
             admitted: "admitted";
-            replayed: "replayed";
         }>;
         greenlightConsumptionStatus: import("zod").ZodNullable<import("zod").ZodEnum<{
-            not_applicable: "not_applicable";
             replayed: "replayed";
+            not_applicable: "not_applicable";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>>;
@@ -395,9 +561,9 @@ export declare const evidenceReadRouteDefinitions: readonly [{
             isolation: "isolation";
             recovery: "recovery";
             receipt: "receipt";
+            action_contract: "action_contract";
             greenlight: "greenlight";
             intent_compilation: "intent_compilation";
-            action_contract: "action_contract";
             policy_decision: "policy_decision";
             mutation_attempt: "mutation_attempt";
             candidate_action: "candidate_action";
@@ -441,9 +607,9 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         gatewayAdmissionStatus: import("zod").ZodEnum<{
             proof_gap: "proof_gap";
             refused: "refused";
+            replayed: "replayed";
             not_requested: "not_requested";
             admitted: "admitted";
-            replayed: "replayed";
         }>;
         downstreamOutcomeStatus: import("zod").ZodEnum<{
             unknown: "unknown";
@@ -488,12 +654,198 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         rawInternalRecordIncluded: import("zod").ZodLiteral<false>;
         credentialMaterialIncluded: import("zod").ZodLiteral<false>;
         paymentMaterialIncluded: import("zod").ZodLiteral<false>;
+        typedCommitmentRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        typedCommitmentSetDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+        typedCommitmentProjectionClass: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodEnum<{
+            public_redacted: "public_redacted";
+            operator_redacted: "operator_redacted";
+            auditor_export: "auditor_export";
+        }>>>;
+        typedCommitmentSummaries: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodObject<{
+            typedActionCommitmentId: import("zod").ZodString;
+            commitmentDigest: import("zod").ZodString;
+            subjectDigest: import("zod").ZodString;
+            purpose: import("zod").ZodEnum<{
+                external_commitment_evidence: "external_commitment_evidence";
+                policy_required_evidence: "policy_required_evidence";
+                service_workflow_readback: "service_workflow_readback";
+                post_gateway_payment_evidence: "post_gateway_payment_evidence";
+                display_binding_evidence: "display_binding_evidence";
+            }>;
+            profile: import("zod").ZodEnum<{
+                handshake_jcs_typed: "handshake_jcs_typed";
+                eip712: "eip712";
+            }>;
+            verificationStatus: import("zod").ZodEnum<{
+                unverified: "unverified";
+                proof_gap: "proof_gap";
+                verified: "verified";
+                refused: "refused";
+                unsupported: "unsupported";
+            }>;
+            replayStatus: import("zod").ZodEnum<{
+                stale: "stale";
+                fresh: "fresh";
+                replayed: "replayed";
+                missing: "missing";
+                not_applicable: "not_applicable";
+            }>;
+            verifierContextDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+            safetyPosture: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+        }, import("zod/v4/core").$strict>>>;
+        typedCommitmentProjections: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodObject<{
+            typedActionCommitmentRef: import("zod").ZodString;
+            actionContractRef: import("zod").ZodNullable<import("zod").ZodString>;
+            projectionClass: import("zod").ZodEnum<{
+                public_redacted: "public_redacted";
+                operator_redacted: "operator_redacted";
+                auditor_export: "auditor_export";
+            }>;
+            commitmentDigest: import("zod").ZodString;
+            subject: import("zod").ZodObject<{
+                kind: import("zod").ZodEnum<{
+                    action_contract: "action_contract";
+                    service_workflow: "service_workflow";
+                    x402_payment: "x402_payment";
+                    agentic_endpoint_access: "agentic_endpoint_access";
+                    protected_surface: "protected_surface";
+                    external_evidence: "external_evidence";
+                }>;
+                ref: import("zod").ZodString;
+                digest: import("zod").ZodString;
+            }, import("zod/v4/core").$strict>;
+            purpose: import("zod").ZodEnum<{
+                external_commitment_evidence: "external_commitment_evidence";
+                policy_required_evidence: "policy_required_evidence";
+                service_workflow_readback: "service_workflow_readback";
+                post_gateway_payment_evidence: "post_gateway_payment_evidence";
+                display_binding_evidence: "display_binding_evidence";
+            }>;
+            profile: import("zod").ZodEnum<{
+                handshake_jcs_typed: "handshake_jcs_typed";
+                eip712: "eip712";
+            }>;
+            domain: import("zod").ZodObject<{
+                domainRef: import("zod").ZodString;
+                domainDigest: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                tenantId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                organizationId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                gatewayId: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                actionClass: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+                providerEnvironmentRef: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodString>>;
+            }, import("zod/v4/core").$strict>;
+            verificationStatus: import("zod").ZodEnum<{
+                unverified: "unverified";
+                proof_gap: "proof_gap";
+                verified: "verified";
+                refused: "refused";
+                unsupported: "unsupported";
+            }>;
+            verificationReasonCode: import("zod").ZodNullable<import("zod").ZodString>;
+            replayStatus: import("zod").ZodEnum<{
+                stale: "stale";
+                fresh: "fresh";
+                replayed: "replayed";
+                missing: "missing";
+                not_applicable: "not_applicable";
+            }>;
+            idempotencyKey: import("zod").ZodNullable<import("zod").ZodString>;
+            nonceRef: import("zod").ZodNullable<import("zod").ZodString>;
+            nonceDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            replayWindowSeconds: import("zod").ZodNullable<import("zod").ZodNumber>;
+            verifierRef: import("zod").ZodNullable<import("zod").ZodString>;
+            verifierContextDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            keyId: import("zod").ZodNullable<import("zod").ZodString>;
+            providerNativeDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            safetyPosture: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+            displayBindingStatus: import("zod").ZodEnum<{
+                proof_gap: "proof_gap";
+                refused: "refused";
+                display_bound: "display_bound";
+                digest_bound: "digest_bound";
+                verifier_bound: "verifier_bound";
+                provider_observed: "provider_observed";
+            }>;
+            authorityBoundary: import("zod").ZodObject<{
+                createsPolicyDecision: import("zod").ZodLiteral<false>;
+                createsGreenlight: import("zod").ZodLiteral<false>;
+                performsGatewayCheck: import("zod").ZodLiteral<false>;
+                authorizesMutation: import("zod").ZodLiteral<false>;
+                createsReceipt: import("zod").ZodLiteral<false>;
+                mintsCertificate: import("zod").ZodLiteral<false>;
+                provesPrincipalConsent: import("zod").ZodLiteral<false>;
+                provesSignerCustody: import("zod").ZodLiteral<false>;
+                provesPaymentCustody: import("zod").ZodLiteral<false>;
+                createsEndpointLease: import("zod").ZodLiteral<false>;
+                provesDownstreamSuccess: import("zod").ZodLiteral<false>;
+            }, import("zod/v4/core").$strict>;
+            refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            evidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+            signatureEvidence: import("zod").ZodNullable<import("zod").ZodObject<{
+                signatureRef: import("zod").ZodNullable<import("zod").ZodString>;
+                signatureDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            }, import("zod/v4/core").$strict>>;
+            rawReadAudit: import("zod").ZodNullable<import("zod").ZodObject<{
+                rawRecordReadAuditRef: import("zod").ZodString;
+                rawRecordReadAuditDigest: import("zod").ZodString;
+                redactionPosture: import("zod").ZodLiteral<"auditor_signature_digest_only">;
+            }, import("zod/v4/core").$strict>>;
+            rawTypedPayloadIncluded: import("zod").ZodLiteral<false>;
+            rawSignatureIncluded: import("zod").ZodLiteral<false>;
+            rawCredentialMaterialIncluded: import("zod").ZodLiteral<false>;
+            rawPaymentMaterialIncluded: import("zod").ZodLiteral<false>;
+            rawRequestBodyIncluded: import("zod").ZodLiteral<false>;
+            commandMaterialIncluded: import("zod").ZodLiteral<false>;
+            redactionProfileRef: import("zod").ZodEnum<{
+                public_redacted: "public_redacted";
+                operator_redacted: "operator_redacted";
+                auditor_signature_digest_only: "auditor_signature_digest_only";
+            }>;
+            omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        }, import("zod/v4/core").$strict>>>;
+        typedCommitmentRefusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        typedCommitmentProofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         evidenceRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         proofGapRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         refusalRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         recoveryRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         isolationRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
         authorityCertificateRefs: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+        projectionFreshness: import("zod").ZodObject<{
+            schemaVersion: import("zod").ZodLiteral<"handshake.operation-readback-freshness.v0.1">;
+            sourceAuthority: import("zod").ZodLiteral<"protocol_store_projection">;
+            readModelKind: import("zod").ZodLiteral<"direct_protocol_store_projection">;
+            status: import("zod").ZodEnum<{
+                current: "current";
+                not_observed: "not_observed";
+                stale_or_concurrent_update: "stale_or_concurrent_update";
+                stream_tail_missing: "stream_tail_missing";
+            }>;
+            streamId: import("zod").ZodNullable<import("zod").ZodString>;
+            partitionKey: import("zod").ZodNullable<import("zod").ZodString>;
+            observedOffset: import("zod").ZodNullable<import("zod").ZodNumber>;
+            observedEventDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            latestOffset: import("zod").ZodNullable<import("zod").ZodNumber>;
+            latestEventDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            lagEvents: import("zod").ZodNullable<import("zod").ZodNumber>;
+            rawStreamEventsIncluded: import("zod").ZodLiteral<false>;
+            authorityCreatedByFreshness: import("zod").ZodLiteral<false>;
+        }, import("zod/v4/core").$strict>;
         providerRequestRef: import("zod").ZodNullable<import("zod").ZodString>;
         providerOperationRef: import("zod").ZodNullable<import("zod").ZodString>;
         traceRef: import("zod").ZodNullable<import("zod").ZodString>;
@@ -670,13 +1022,13 @@ export declare const evidenceReadRouteDefinitions: readonly [{
         gatewayAdmissionStatus: import("zod").ZodEnum<{
             proof_gap: "proof_gap";
             refused: "refused";
+            replayed: "replayed";
             not_requested: "not_requested";
             admitted: "admitted";
-            replayed: "replayed";
         }>;
         greenlightConsumptionStatus: import("zod").ZodEnum<{
-            not_applicable: "not_applicable";
             replayed: "replayed";
+            not_applicable: "not_applicable";
             not_consumed: "not_consumed";
             consumed: "consumed";
         }>;
@@ -755,6 +1107,7 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 delegated_authority_status_changed: "delegated_authority_status_changed";
                 gateway_custody_proof_packet_recorded: "gateway_custody_proof_packet_recorded";
                 credential_resolution_recorded: "credential_resolution_recorded";
+                typed_action_commitment_recorded: "typed_action_commitment_recorded";
                 idempotency_ledger_recorded: "idempotency_ledger_recorded";
                 bypass_probe_recorded: "bypass_probe_recorded";
                 tool_call_draft_recorded: "tool_call_draft_recorded";
@@ -776,6 +1129,7 @@ export declare const evidenceReadRouteDefinitions: readonly [{
                 breaker_decision_recorded: "breaker_decision_recorded";
                 receipt_emitted: "receipt_emitted";
                 authority_certificate_emitted: "authority_certificate_emitted";
+                raw_evidence_read_audited: "raw_evidence_read_audited";
                 recovery_status_changed: "recovery_status_changed";
                 proof_gap_recorded: "proof_gap_recorded";
                 isolation_changed: "isolation_changed";

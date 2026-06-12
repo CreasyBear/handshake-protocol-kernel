@@ -81,8 +81,8 @@ export declare const X402AuthorityCertificateEvidenceProfileSchema: z.ZodObject<
     authorityCreated: z.ZodLiteral<false>;
     verificationOutcome: z.ZodEnum<{
         proof_gap: "proof_gap";
-        refused: "refused";
         verified: "verified";
+        refused: "refused";
     }>;
     evidenceProfile: z.ZodEnum<{
         proof_gap: "proof_gap";
@@ -95,9 +95,9 @@ export declare const X402AuthorityCertificateEvidenceProfileSchema: z.ZodObject<
     gatewayAdmissionStatus: z.ZodNullable<z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>>;
     downstreamOutcomeStatus: z.ZodNullable<z.ZodEnum<{
         unknown: "unknown";

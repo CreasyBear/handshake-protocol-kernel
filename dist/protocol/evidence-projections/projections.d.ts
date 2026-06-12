@@ -9,9 +9,11 @@ import type { Greenlight, PolicyDecision } from "../areas/policy-greenlight/sche
 import type { ProofGap } from "../areas/proof-gap";
 import { type Refusal } from "../areas/refusal";
 import type { Receipt } from "../areas/receipt-export/schemas";
+import { type TypedActionCommitmentRecord } from "../areas/typed-action-commitment";
 import type { ContractStreamEvent } from "../events/schemas";
 import type { StoredProtocolRecord } from "../store/port";
-import { type AgentTransactionEnvelopeProjection, type ContractEvidenceProjection, type IdempotencyRecoveryProjection, type OperationCorrelationIndex, type OperationReadbackProjection, type ProtectedPathInstallHealthProjection, type ReceiptTimelineProjection } from "./schemas";
+import { type AgentTransactionEnvelopeProjection, type ContractEvidenceProjection, type IdempotencyRecoveryProjection, type OperationCorrelationIndex, type OperationReadbackProjection, type OperationReadbackProjectionFreshness, type ProtectedPathInstallHealthProjection, type ReceiptTimelineProjection } from "./schemas";
+export { projectTypedActionCommitment } from "../areas/typed-action-commitment";
 export declare function projectContractEvidence(contract: ActionContract): ContractEvidenceProjection;
 export type AgentTransactionEnvelopeInput = {
     contract: ActionContract;
@@ -24,6 +26,7 @@ export type AgentTransactionEnvelopeInput = {
     refusals?: Refusal[];
     reconciliations?: SurfaceOperationReconciliation[];
     credentialResolutionEvidence?: CredentialResolutionEvidence[];
+    typedCommitments?: TypedActionCommitmentRecord[];
     ledger?: IdempotencyLedgerEntry | null;
     recoveryRefs?: string[];
     isolationRefs?: string[];
@@ -34,6 +37,7 @@ export type AgentTransactionEnvelopeInput = {
         };
     }>;
     receiptExportRef?: string | null;
+    projectionFreshness?: OperationReadbackProjectionFreshness;
 };
 export declare function projectAgentTransactionEnvelope(input: AgentTransactionEnvelopeInput): Promise<AgentTransactionEnvelopeProjection>;
 export declare function projectIdempotencyRecovery(input: {

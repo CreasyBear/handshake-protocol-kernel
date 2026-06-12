@@ -22,7 +22,7 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         gatewayPolicyVersion: string;
         sourceAuthority: "protocol_store_projection";
         operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "quarantined" | "downstream_refused" | "gateway_refused" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "action_contract" | "greenlight" | "intent_compilation" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         policyDecisionRef: string;
         policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
         agreementObligationPolicy: {
@@ -42,7 +42,7 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         gateAttemptRef: string | null;
         mutationAttemptRef: string | null;
         receiptRef: string | null;
-        gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
+        gatewayAdmissionStatus: "proof_gap" | "refused" | "replayed" | "not_requested" | "admitted";
         downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         finalityStatus: "unknown" | "pending" | "final" | "suspect" | null;
         greenlightUsePosture: "unknown" | "none" | "consumed" | "available_for_one_gateway_check" | "replayed_or_unusable";
@@ -59,12 +59,111 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         rawInternalRecordIncluded: false;
         credentialMaterialIncluded: false;
         paymentMaterialIncluded: false;
+        typedCommitmentRefs: string[];
+        typedCommitmentSetDigest: string | null;
+        typedCommitmentProjectionClass: "public_redacted" | "operator_redacted" | "auditor_export" | null;
+        typedCommitmentSummaries: {
+            typedActionCommitmentId: string;
+            commitmentDigest: string;
+            subjectDigest: string;
+            purpose: "external_commitment_evidence" | "policy_required_evidence" | "service_workflow_readback" | "post_gateway_payment_evidence" | "display_binding_evidence";
+            profile: "handshake_jcs_typed" | "eip712";
+            verificationStatus: "unverified" | "proof_gap" | "verified" | "refused" | "unsupported";
+            replayStatus: "stale" | "fresh" | "replayed" | "missing" | "not_applicable";
+            verifierContextDigest: string | null;
+            safetyPosture: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+        }[];
+        typedCommitmentProjections: {
+            typedActionCommitmentRef: string;
+            actionContractRef: string | null;
+            projectionClass: "public_redacted" | "operator_redacted" | "auditor_export";
+            commitmentDigest: string;
+            subject: {
+                kind: "action_contract" | "service_workflow" | "x402_payment" | "agentic_endpoint_access" | "protected_surface" | "external_evidence";
+                ref: string;
+                digest: string;
+            };
+            purpose: "external_commitment_evidence" | "policy_required_evidence" | "service_workflow_readback" | "post_gateway_payment_evidence" | "display_binding_evidence";
+            profile: "handshake_jcs_typed" | "eip712";
+            domain: {
+                domainRef: string;
+                domainDigest: string | null;
+                tenantId: string | null;
+                organizationId: string | null;
+                gatewayId: string | null;
+                actionClass: string | null;
+                providerEnvironmentRef: string | null;
+            };
+            verificationStatus: "unverified" | "proof_gap" | "verified" | "refused" | "unsupported";
+            verificationReasonCode: string | null;
+            replayStatus: "stale" | "fresh" | "replayed" | "missing" | "not_applicable";
+            idempotencyKey: string | null;
+            nonceRef: string | null;
+            nonceDigest: string | null;
+            replayWindowSeconds: number | null;
+            verifierRef: string | null;
+            verifierContextDigest: string | null;
+            keyId: string | null;
+            providerNativeDigest: string | null;
+            safetyPosture: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+            displayBindingStatus: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+            authorityBoundary: {
+                createsPolicyDecision: false;
+                createsGreenlight: false;
+                performsGatewayCheck: false;
+                authorizesMutation: false;
+                createsReceipt: false;
+                mintsCertificate: false;
+                provesPrincipalConsent: false;
+                provesSignerCustody: false;
+                provesPaymentCustody: false;
+                createsEndpointLease: false;
+                provesDownstreamSuccess: false;
+            };
+            refusalRefs: string[];
+            proofGapRefs: string[];
+            evidenceRefs: string[];
+            signatureEvidence: {
+                signatureRef: string | null;
+                signatureDigest: string | null;
+            } | null;
+            rawReadAudit: {
+                rawRecordReadAuditRef: string;
+                rawRecordReadAuditDigest: string;
+                redactionPosture: "auditor_signature_digest_only";
+            } | null;
+            rawTypedPayloadIncluded: false;
+            rawSignatureIncluded: false;
+            rawCredentialMaterialIncluded: false;
+            rawPaymentMaterialIncluded: false;
+            rawRequestBodyIncluded: false;
+            commandMaterialIncluded: false;
+            redactionProfileRef: "public_redacted" | "operator_redacted" | "auditor_signature_digest_only";
+            omittedFields: string[];
+        }[];
+        typedCommitmentRefusalRefs: string[];
+        typedCommitmentProofGapRefs: string[];
         evidenceRefs: string[];
         proofGapRefs: string[];
         refusalRefs: string[];
         recoveryRefs: string[];
         isolationRefs: string[];
         authorityCertificateRefs: string[];
+        projectionFreshness: {
+            schemaVersion: "handshake.operation-readback-freshness.v0.1";
+            sourceAuthority: "protocol_store_projection";
+            readModelKind: "direct_protocol_store_projection";
+            status: "current" | "not_observed" | "stale_or_concurrent_update" | "stream_tail_missing";
+            streamId: string | null;
+            partitionKey: string | null;
+            observedOffset: number | null;
+            observedEventDigest: string | null;
+            latestOffset: number | null;
+            latestEventDigest: string | null;
+            lagEvents: number | null;
+            rawStreamEventsIncluded: false;
+            authorityCreatedByFreshness: false;
+        };
         providerRequestRef: string | null;
         providerOperationRef: string | null;
         traceRef: string | null;
@@ -100,7 +199,7 @@ export declare function evidenceOperationReadbackCommand(value: unknown): import
         viewBoundary: "redacted_cli_projection_view";
         title: string;
         status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "quarantined" | "downstream_refused" | "gateway_refused" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        stage: "isolation" | "recovery" | "receipt" | "action_contract" | "greenlight" | "intent_compilation" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         stageOrder: readonly ["intent_compilation", "candidate_action", "action_contract", "policy_decision", "greenlight", "gateway_check", "mutation_attempt", "receipt", "recovery", "isolation"];
         correlationSummary: {
@@ -128,7 +227,7 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         gatewayPolicyVersion: string;
         sourceAuthority: "protocol_store_projection";
         operationStatus: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "quarantined" | "downstream_refused" | "gateway_refused" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        latestAuthoritativeStage: "isolation" | "recovery" | "receipt" | "action_contract" | "greenlight" | "intent_compilation" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         policyDecisionRef: string;
         policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
         agreementObligationPolicy: {
@@ -148,7 +247,7 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         gateAttemptRef: string | null;
         mutationAttemptRef: string | null;
         receiptRef: string | null;
-        gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
+        gatewayAdmissionStatus: "proof_gap" | "refused" | "replayed" | "not_requested" | "admitted";
         downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         finalityStatus: "unknown" | "pending" | "final" | "suspect" | null;
         greenlightUsePosture: "unknown" | "none" | "consumed" | "available_for_one_gateway_check" | "replayed_or_unusable";
@@ -165,12 +264,111 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         rawInternalRecordIncluded: false;
         credentialMaterialIncluded: false;
         paymentMaterialIncluded: false;
+        typedCommitmentRefs: string[];
+        typedCommitmentSetDigest: string | null;
+        typedCommitmentProjectionClass: "public_redacted" | "operator_redacted" | "auditor_export" | null;
+        typedCommitmentSummaries: {
+            typedActionCommitmentId: string;
+            commitmentDigest: string;
+            subjectDigest: string;
+            purpose: "external_commitment_evidence" | "policy_required_evidence" | "service_workflow_readback" | "post_gateway_payment_evidence" | "display_binding_evidence";
+            profile: "handshake_jcs_typed" | "eip712";
+            verificationStatus: "unverified" | "proof_gap" | "verified" | "refused" | "unsupported";
+            replayStatus: "stale" | "fresh" | "replayed" | "missing" | "not_applicable";
+            verifierContextDigest: string | null;
+            safetyPosture: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+        }[];
+        typedCommitmentProjections: {
+            typedActionCommitmentRef: string;
+            actionContractRef: string | null;
+            projectionClass: "public_redacted" | "operator_redacted" | "auditor_export";
+            commitmentDigest: string;
+            subject: {
+                kind: "action_contract" | "service_workflow" | "x402_payment" | "agentic_endpoint_access" | "protected_surface" | "external_evidence";
+                ref: string;
+                digest: string;
+            };
+            purpose: "external_commitment_evidence" | "policy_required_evidence" | "service_workflow_readback" | "post_gateway_payment_evidence" | "display_binding_evidence";
+            profile: "handshake_jcs_typed" | "eip712";
+            domain: {
+                domainRef: string;
+                domainDigest: string | null;
+                tenantId: string | null;
+                organizationId: string | null;
+                gatewayId: string | null;
+                actionClass: string | null;
+                providerEnvironmentRef: string | null;
+            };
+            verificationStatus: "unverified" | "proof_gap" | "verified" | "refused" | "unsupported";
+            verificationReasonCode: string | null;
+            replayStatus: "stale" | "fresh" | "replayed" | "missing" | "not_applicable";
+            idempotencyKey: string | null;
+            nonceRef: string | null;
+            nonceDigest: string | null;
+            replayWindowSeconds: number | null;
+            verifierRef: string | null;
+            verifierContextDigest: string | null;
+            keyId: string | null;
+            providerNativeDigest: string | null;
+            safetyPosture: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+            displayBindingStatus: "proof_gap" | "refused" | "display_bound" | "digest_bound" | "verifier_bound" | "provider_observed";
+            authorityBoundary: {
+                createsPolicyDecision: false;
+                createsGreenlight: false;
+                performsGatewayCheck: false;
+                authorizesMutation: false;
+                createsReceipt: false;
+                mintsCertificate: false;
+                provesPrincipalConsent: false;
+                provesSignerCustody: false;
+                provesPaymentCustody: false;
+                createsEndpointLease: false;
+                provesDownstreamSuccess: false;
+            };
+            refusalRefs: string[];
+            proofGapRefs: string[];
+            evidenceRefs: string[];
+            signatureEvidence: {
+                signatureRef: string | null;
+                signatureDigest: string | null;
+            } | null;
+            rawReadAudit: {
+                rawRecordReadAuditRef: string;
+                rawRecordReadAuditDigest: string;
+                redactionPosture: "auditor_signature_digest_only";
+            } | null;
+            rawTypedPayloadIncluded: false;
+            rawSignatureIncluded: false;
+            rawCredentialMaterialIncluded: false;
+            rawPaymentMaterialIncluded: false;
+            rawRequestBodyIncluded: false;
+            commandMaterialIncluded: false;
+            redactionProfileRef: "public_redacted" | "operator_redacted" | "auditor_signature_digest_only";
+            omittedFields: string[];
+        }[];
+        typedCommitmentRefusalRefs: string[];
+        typedCommitmentProofGapRefs: string[];
         evidenceRefs: string[];
         proofGapRefs: string[];
         refusalRefs: string[];
         recoveryRefs: string[];
         isolationRefs: string[];
         authorityCertificateRefs: string[];
+        projectionFreshness: {
+            schemaVersion: "handshake.operation-readback-freshness.v0.1";
+            sourceAuthority: "protocol_store_projection";
+            readModelKind: "direct_protocol_store_projection";
+            status: "current" | "not_observed" | "stale_or_concurrent_update" | "stream_tail_missing";
+            streamId: string | null;
+            partitionKey: string | null;
+            observedOffset: number | null;
+            observedEventDigest: string | null;
+            latestOffset: number | null;
+            latestEventDigest: string | null;
+            lagEvents: number | null;
+            rawStreamEventsIncluded: false;
+            authorityCreatedByFreshness: false;
+        };
         providerRequestRef: string | null;
         providerOperationRef: string | null;
         traceRef: string | null;
@@ -206,7 +404,7 @@ export declare function evidenceFetchCommand(input: EvidenceFetchCommandInput): 
         viewBoundary: "redacted_cli_projection_view";
         title: string;
         status: "policy_refused" | "policy_proof_gap" | "review_required" | "gateway_admitted" | "gateway_proof_gap" | "replay_refused" | "isolated" | "quarantined" | "downstream_refused" | "gateway_refused" | "halted" | "greenlight_available" | "downstream_pending" | "downstream_succeeded" | "downstream_failed" | "downstream_unknown" | "recovery_required";
-        stage: "isolation" | "recovery" | "receipt" | "greenlight" | "intent_compilation" | "action_contract" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
+        stage: "isolation" | "recovery" | "receipt" | "action_contract" | "greenlight" | "intent_compilation" | "policy_decision" | "mutation_attempt" | "candidate_action" | "gateway_check";
         nextMechanism: "use_greenlight_at_gateway" | "read_evidence" | "request_review" | "recraft_request" | "create_new_contract" | "recover_terminal_unknown" | "stop" | "wait_for_downstream";
         stageOrder: readonly ["intent_compilation", "candidate_action", "action_contract", "policy_decision", "greenlight", "gateway_check", "mutation_attempt", "receipt", "recovery", "isolation"];
         correlationSummary: {

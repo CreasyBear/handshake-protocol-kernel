@@ -42,6 +42,11 @@ export declare const ProductLaunchGateResolutionSchema: z.ZodObject<{
     nonClaims: z.ZodArray<z.ZodString>;
 }, z.core.$strict>;
 export type ProductLaunchGateResolution = z.infer<typeof ProductLaunchGateResolutionSchema>;
+export declare const currentProductLaunchPackage: {
+    readonly name: "handshake-protocol-kernel";
+    readonly version: "0.4.0";
+    readonly mcpName: "io.github.CreasyBear/handshake-protocol-kernel";
+};
 export declare const productLaunchGateResolutions: {
     gateId: "first_external_runtime_transcript" | "external_product_custody_threshold" | "distribution_bar" | "first_buyer_segment" | "terminal_certificate_prominence" | "auth_md_x402_expansion_trigger" | "live_external_provider_x402_proof" | "package_provenance_npm_attestation";
     status: "resolved_selected" | "resolved_raised_bar" | "resolved_blocked" | "resolved_cut_line";

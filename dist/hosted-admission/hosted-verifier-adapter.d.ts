@@ -13,8 +13,8 @@ export declare const HostedProviderMembershipPostureSchema: z.ZodEnum<{
     unknown: "unknown";
     current: "current";
     stale: "stale";
-    revoked: "revoked";
     missing: "missing";
+    revoked: "revoked";
 }>;
 export type HostedProviderMembershipPosture = z.infer<typeof HostedProviderMembershipPostureSchema>;
 export declare const HostedVerifierAdapterClaimsSchema: z.ZodObject<{
@@ -82,8 +82,8 @@ export declare const HostedVerifierAdapterClaimsSchema: z.ZodObject<{
         unknown: "unknown";
         current: "current";
         stale: "stale";
-        revoked: "revoked";
         missing: "missing";
+        revoked: "revoked";
     }>>;
     rawIdentityMaterialPersisted: z.ZodLiteral<false>;
     identityProviderLockInCreated: z.ZodLiteral<false>;

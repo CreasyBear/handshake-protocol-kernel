@@ -2,6 +2,7 @@ export * from "./activation-gate";
 export * from "./agentic-endpoint-access-readback";
 export * from "./boundary-manifest";
 export * from "./outcome";
+export * from "./protected-action-recovery-guidance";
 export * from "./product-launch-gate-resolution";
 export * from "./proof-packets";
 export * from "./release-proof";

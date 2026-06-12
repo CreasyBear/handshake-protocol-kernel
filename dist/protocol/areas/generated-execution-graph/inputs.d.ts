@@ -65,10 +65,10 @@ export declare const CreateGeneratedExecutionGraphInputSchema: z.ZodObject<{
         classification: z.ZodEnum<{
             read_only: "read_only";
             ambiguous: "ambiguous";
+            unsupported: "unsupported";
             hidden_trigger: "hidden_trigger";
             candidate_action_eligible: "candidate_action_eligible";
             nonconsequential: "nonconsequential";
-            unsupported: "unsupported";
             bypass_risk: "bypass_risk";
             observer_only: "observer_only";
         }>;

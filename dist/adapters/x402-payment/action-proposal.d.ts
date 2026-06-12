@@ -25,8 +25,8 @@ export declare const X402PaymentAttemptSchema: z.ZodObject<{
     intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
         unsupported: "unsupported";
-        no_body: "no_body";
         digest_bound: "digest_bound";
+        no_body: "no_body";
         omitted: "omitted";
     }>>;
     intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;

@@ -33,6 +33,7 @@ export declare const ContractStreamEventSchema: z.ZodObject<{
         delegated_authority_status_changed: "delegated_authority_status_changed";
         gateway_custody_proof_packet_recorded: "gateway_custody_proof_packet_recorded";
         credential_resolution_recorded: "credential_resolution_recorded";
+        typed_action_commitment_recorded: "typed_action_commitment_recorded";
         idempotency_ledger_recorded: "idempotency_ledger_recorded";
         bypass_probe_recorded: "bypass_probe_recorded";
         tool_call_draft_recorded: "tool_call_draft_recorded";
@@ -54,6 +55,7 @@ export declare const ContractStreamEventSchema: z.ZodObject<{
         breaker_decision_recorded: "breaker_decision_recorded";
         receipt_emitted: "receipt_emitted";
         authority_certificate_emitted: "authority_certificate_emitted";
+        raw_evidence_read_audited: "raw_evidence_read_audited";
         recovery_status_changed: "recovery_status_changed";
         proof_gap_recorded: "proof_gap_recorded";
         isolation_changed: "isolation_changed";

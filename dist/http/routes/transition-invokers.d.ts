@@ -807,9 +807,9 @@ export declare const transitionInvokers: {
         gatewayPolicyVersion: string;
         policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
         gatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
-        gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
+        gatewayAdmissionStatus: "proof_gap" | "refused" | "replayed" | "not_requested" | "admitted";
         gatewayCheckedAt: string | null;
-        greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
+        greenlightConsumptionStatus: "replayed" | "not_applicable" | "not_consumed" | "consumed";
         mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
         downstreamExecutionStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
         downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";

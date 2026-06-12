@@ -1,0 +1,21 @@
+import type { JsonValue } from "../../../protocol/foundation/schema-core";
+import { type AgenticEndpointAccessForwardedEvent, type AgenticEndpointAccessMiddlewareOptions, type AgenticEndpointAccessProtectionOutcome, type AgenticEndpointAccessProtectionStatus } from "../contracts";
+export declare function statusToHttpStatus(status: AgenticEndpointAccessProtectionStatus): number;
+export declare function buildMiddlewareFailureOutcome(input: {
+    readonly options: AgenticEndpointAccessMiddlewareOptions;
+    readonly status: Exclude<AgenticEndpointAccessProtectionStatus, "leased">;
+    readonly requestId?: string | null;
+    readonly idempotencyKey?: string | null;
+    readonly attemptRef?: string | null;
+    readonly leaseRef?: string | null;
+    readonly refusalRefs?: readonly string[];
+    readonly proofGapRefs?: readonly string[];
+    readonly policyDecisionRef?: string | null;
+    readonly greenlightRef?: string | null;
+    readonly gatewayCheckAttemptRef?: string | null;
+    readonly reasonCodes: readonly string[];
+    readonly nowIso?: string | undefined;
+    readonly body?: Record<string, JsonValue> | undefined;
+}): AgenticEndpointAccessProtectionOutcome;
+export declare function protectionOutcomeResponseBody(outcome: AgenticEndpointAccessProtectionOutcome): JsonValue;
+export declare function forwardedEventForProtectionOutcome(outcome: AgenticEndpointAccessProtectionOutcome): Promise<AgenticEndpointAccessForwardedEvent | null>;

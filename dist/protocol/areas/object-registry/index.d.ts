@@ -14,7 +14,7 @@ export type ProtocolObjectRegistryEntry<T extends ProtocolObjectType = ProtocolO
     exportPosture: ProtocolObjectExportPosture;
     rawReadPosture: ProtocolObjectRawReadPosture;
 };
-export declare const protocolObjectTypes: ("refusal" | "proof_gap" | "receipt" | "greenlight" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "endpoint_access_surface_binding" | "agentic_endpoint_access_policy" | "agentic_endpoint_access_attempt" | "agentic_endpoint_access_clearance_binding" | "agentic_endpoint_access_lease" | "agentic_endpoint_access_usage_event" | "agentic_endpoint_access_readback" | "agentic_endpoint_access_capabilities" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "credential_resolution_evidence" | "transition_request_context" | "runtime_execution" | "generated_execution_graph" | "idempotency_ledger_entry" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "intent_compilation" | "delegation_evidence_record" | "negotiation_session" | "negotiation_offer" | "negotiation_decision" | "linked_agreement" | "agreement_obligation_binding" | "agreement_status_transition" | "action_contract" | "authority_certificate" | "policy_decision" | "review_artifact" | "review_decision" | "breaker_decision" | "isolation_state" | "gateway_check_attempt" | "mutation_attempt" | "protected_surface_operation_claim" | "surface_operation_reconciliation" | "receipt_export" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "contract_stream_event")[];
+export declare const protocolObjectTypes: ("refusal" | "proof_gap" | "receipt" | "action_contract" | "greenlight" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "endpoint_access_surface_binding" | "agentic_endpoint_access_policy" | "agentic_endpoint_access_attempt" | "agentic_endpoint_access_clearance_binding" | "agentic_endpoint_access_lease" | "agentic_endpoint_access_usage_event" | "agentic_endpoint_access_readback" | "agentic_endpoint_access_capabilities" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "credential_resolution_evidence" | "typed_action_commitment" | "transition_request_context" | "runtime_execution" | "generated_execution_graph" | "idempotency_ledger_entry" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "intent_compilation" | "delegation_evidence_record" | "negotiation_session" | "negotiation_offer" | "negotiation_decision" | "linked_agreement" | "agreement_obligation_binding" | "agreement_status_transition" | "authority_certificate" | "policy_decision" | "review_artifact" | "review_decision" | "breaker_decision" | "isolation_state" | "gateway_check_attempt" | "mutation_attempt" | "protected_surface_operation_claim" | "surface_operation_reconciliation" | "receipt_export" | "raw_record_read_audit" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "contract_stream_event")[];
 export declare const protocolObjectRegistry: {
     tool_capability: ProtocolObjectRegistryEntry<"tool_capability">;
     action_type: ProtocolObjectRegistryEntry<"action_type">;
@@ -33,6 +33,7 @@ export declare const protocolObjectRegistry: {
     delegated_authority_status_transition: ProtocolObjectRegistryEntry<"delegated_authority_status_transition">;
     gateway_custody_proof_packet: ProtocolObjectRegistryEntry<"gateway_custody_proof_packet">;
     credential_resolution_evidence: ProtocolObjectRegistryEntry<"credential_resolution_evidence">;
+    typed_action_commitment: ProtocolObjectRegistryEntry<"typed_action_commitment">;
     transition_request_context: ProtocolObjectRegistryEntry<"transition_request_context">;
     runtime_execution: ProtocolObjectRegistryEntry<"runtime_execution">;
     generated_execution_graph: ProtocolObjectRegistryEntry<"generated_execution_graph">;
@@ -64,6 +65,7 @@ export declare const protocolObjectRegistry: {
     refusal: ProtocolObjectRegistryEntry<"refusal">;
     receipt: ProtocolObjectRegistryEntry<"receipt">;
     receipt_export: ProtocolObjectRegistryEntry<"receipt_export">;
+    raw_record_read_audit: ProtocolObjectRegistryEntry<"raw_record_read_audit">;
     recovery_recommendation: ProtocolObjectRegistryEntry<"recovery_recommendation">;
     recovery_recommendation_status_transition: ProtocolObjectRegistryEntry<"recovery_recommendation_status_transition">;
     contract_stream_event: ProtocolObjectRegistryEntry<"contract_stream_event">;

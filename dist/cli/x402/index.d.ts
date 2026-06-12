@@ -260,16 +260,16 @@ export declare function installHealthCommand(input: {
             evidenceRefs: string[];
         } | null;
         checks: {
-            projectConfig: "present" | "missing";
+            projectConfig: "missing" | "present";
             installCompilation: "refused" | "missing" | "ready_to_install";
             controlPlaneRegistration: "missing" | "registered" | "required_not_performed";
             signerCustody: "unknown" | "gateway_held" | "fixture_gateway_held" | "missing" | "agent_exposed";
             custodyProof: "unverified" | "stale" | "missing" | "registered";
             gatewayPosture: "unknown" | "stale" | "registered_online" | "local_classification_passed" | "local_classification_failed";
             policyVersion: "unknown" | "registered" | "local_metadata_only";
-            probeFreshness: "stale" | "missing" | "fresh";
+            probeFreshness: "stale" | "fresh" | "missing";
         };
-        proofGapPostures: ("project_config_missing" | "install_missing" | "install_refused" | "probe_missing" | "probe_failed" | "probe_stale" | "control_plane_registration_missing" | "trusted_gateway_posture_invalid" | "trusted_gateway_posture_missing" | "trusted_gateway_posture_stale" | "custody_proof_missing" | "custody_proof_unverified" | "custody_proof_stale")[];
+        proofGapPostures: ("custody_proof_missing" | "custody_proof_stale" | "custody_proof_unverified" | "project_config_missing" | "install_missing" | "install_refused" | "probe_missing" | "probe_failed" | "probe_stale" | "control_plane_registration_missing" | "trusted_gateway_posture_invalid" | "trusted_gateway_posture_missing" | "trusted_gateway_posture_stale")[];
         proofGapReasonCodes: string[];
         nonClaims: string[];
         authorityCreated: false;

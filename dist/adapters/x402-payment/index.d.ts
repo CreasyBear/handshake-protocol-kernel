@@ -3,6 +3,7 @@ export * from "./bypass-probes";
 export * from "./conformance";
 export * from "./install-proposal";
 export * from "./protected-tool-readiness";
+export * from "./protected-action-recovery-guidance";
 export * from "./protected-tool-facade";
 export * from "./protected-tool-profile/claude-code-activation";
 export * from "./protected-tool-profile/codex-activation";

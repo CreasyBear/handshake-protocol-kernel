@@ -4,6 +4,7 @@ export * from "./agentic-endpoint-access";
 export * from "./authority-certificate";
 export * from "./catalog-envelope";
 export * from "./credential-custody";
+export * from "./typed-action-commitment";
 export * from "./gateway-gate";
 export * from "./generated-execution-graph";
 export * from "./intent-compilation";

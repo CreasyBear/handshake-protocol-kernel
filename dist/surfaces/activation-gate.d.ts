@@ -79,8 +79,8 @@ export declare const ActivationGateExternalCheckSchema: z.ZodObject<{
     checkId: z.ZodString;
     status: z.ZodEnum<{
         proof_gap: "proof_gap";
-        blocked: "blocked";
         verified: "verified";
+        blocked: "blocked";
         cut: "cut";
     }>;
     owner: z.ZodString;
@@ -197,8 +197,8 @@ export declare const ActivationGateReportInputSchema: z.ZodObject<{
         checkId: z.ZodString;
         status: z.ZodEnum<{
             proof_gap: "proof_gap";
-            blocked: "blocked";
             verified: "verified";
+            blocked: "blocked";
             cut: "cut";
         }>;
         owner: z.ZodString;
@@ -278,8 +278,8 @@ export declare const ActivationGateReportSchema: z.ZodObject<{
         checkId: z.ZodString;
         status: z.ZodEnum<{
             proof_gap: "proof_gap";
-            blocked: "blocked";
             verified: "verified";
+            blocked: "blocked";
             cut: "cut";
         }>;
         owner: z.ZodString;

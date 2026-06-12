@@ -22,4 +22,11 @@ export type EventDescriptor = {
 };
 export declare function buildEventChain(store: ProtocolStore, descriptors: EventDescriptor[]): Promise<ContractStreamEvent[]>;
 export declare function actionLifecycleStreamRefs(contract: Pick<ActionContract, "actionContractId" | "runId" | "gatewayId" | "resourceRef">): ActionLifecycleStreamRefs;
+export declare function actionLifecycleStreamKey(source: {
+    tenantId: string;
+    organizationId: string;
+}, actionContractId: string): {
+    streamId: string;
+    partitionKey: string;
+};
 export declare function receiptStreamReferencesForEvents(events: ContractStreamEvent[]): ReceiptStreamReference[];

@@ -79,6 +79,8 @@ export declare const GreenlightSchema: z.ZodObject<{
     gatewayCredentialRefDigests: z.ZodDefault<z.ZodArray<z.ZodString>>;
     delegatedAuthorityRefIds: z.ZodDefault<z.ZodArray<z.ZodString>>;
     delegatedAuthorityRefDigests: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    requiredTypedCommitmentRefs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    requiredTypedCommitmentSetDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     paramsDigest: z.ZodString;
     contractDigest: z.ZodString;
     idempotencyKey: z.ZodDefault<z.ZodNullable<z.ZodString>>;

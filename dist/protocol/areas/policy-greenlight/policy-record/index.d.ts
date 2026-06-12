@@ -36,6 +36,9 @@ export type PolicyCommitResult = {
     proofGap: null;
 };
 export declare function buildPolicyDecision(input: ParsedEvaluatePolicyInput, contract: ActionContract, envelope: OperatingEnvelope, decisionValue: PolicyDecisionValue, policyInputDigest: `sha256:${string}`, isolationSnapshot: string, now: string): Promise<PolicyDecision>;
-export declare function buildGreenlight(contract: ActionContract, decision: PolicyDecision, now: string, protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null, idempotencyLedgerKeyDigest: `sha256:${string}`, idempotencyKey?: string): Greenlight;
+export declare function buildGreenlight(contract: ActionContract, decision: PolicyDecision, now: string, protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null, idempotencyLedgerKeyDigest: `sha256:${string}`, idempotencyKey?: string, typedCommitmentBinding?: {
+    requiredTypedCommitmentRefs: string[];
+    requiredTypedCommitmentSetDigest: string | null;
+}): Greenlight;
 export declare function commitPolicyEvaluation(recorder: ProtocolRecorder, plan: PolicyCommitPlan): Promise<PolicyCommitResult>;
 export {};

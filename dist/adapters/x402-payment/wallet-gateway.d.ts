@@ -3,6 +3,7 @@ import type { ClientEvmSigner } from "@x402/evm";
 import { type GatewayCheckInput, type GatewayCheckResult, type VerifiedGatewayCheck } from "../../protocol/areas/gateway-gate";
 import type { CredentialResolutionEvidence, RecordCredentialResolutionEvidenceInput } from "../../protocol/areas/credential-custody";
 import type { ReconcileSurfaceOperationInput, SurfaceOperationReconciliation, SurfaceOperationReconciliationResult } from "../../protocol/areas/operation-lifecycle";
+import { type Eip712TypedCommitmentInput, type NormalizedEip712TypedCommitment, type RecordTypedActionCommitmentInput, type TypedActionCommitmentRecord } from "../../protocol/areas/typed-action-commitment";
 export declare const X402PaymentParametersSchema: z.ZodObject<{
     endpointUrl: z.ZodString;
     endpointDomain: z.ZodString;
@@ -10,8 +11,8 @@ export declare const X402PaymentParametersSchema: z.ZodObject<{
     intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
         unsupported: "unsupported";
-        no_body: "no_body";
         digest_bound: "digest_bound";
+        no_body: "no_body";
         omitted: "omitted";
     }>>;
     intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
@@ -61,6 +62,7 @@ export type X402PaymentSignatureCommand = {
     verifiedGate: VerifiedGatewayCheck;
     parameters: X402PaymentParameters;
     credentialResolutionEvidence: CredentialResolutionEvidence;
+    typedActionCommitment?: NormalizedEip712TypedCommitment;
     credentialUseRef: string;
     providerRequestRef: string;
     providerOperationRef: string;
@@ -101,6 +103,25 @@ export type X402PaymentSignatureEvidence = {
 export interface X402WalletSigningSurface {
     signPayment(command: X402PaymentSignatureCommand): Promise<X402PaymentSignatureEvidence>;
 }
+export type X402WalletTypedPayloadEvidence = {
+    chainId?: string;
+    verifyingContract?: string;
+    selectedPaymentRequirementIndex?: number;
+    selectedPaymentRequirementDigest?: `sha256:${string}`;
+    paramsDigest?: `sha256:${string}`;
+    idempotencyKey?: string;
+    verifierContextDigest?: `sha256:${string}`;
+    expectedVerifierContextDigest?: `sha256:${string}`;
+    signingMethod?: Eip712TypedCommitmentInput["signingMethod"];
+    signerKind?: Eip712TypedCommitmentInput["signerKind"];
+    signerRef?: string;
+    domainSeparator?: string;
+    structHash?: string;
+    eip712Digest?: string;
+    nonceRef?: string;
+    nonceDigest?: `sha256:${string}`;
+    replayStatus?: Eip712TypedCommitmentInput["replayStatus"];
+};
 /**
  * D-64 Mechanism A — gateway-held credential custody (structural, not label-only).
  *
@@ -127,6 +148,7 @@ export type CreateOfficialExactX402SigningSurfaceInput = {
 export type X402WalletGatewayProtocol = {
     gatewayCheck(input: GatewayCheckInput): Promise<GatewayCheckResult>;
     recordCredentialResolutionEvidence(input: RecordCredentialResolutionEvidenceInput): Promise<CredentialResolutionEvidence>;
+    recordTypedActionCommitment?(input: RecordTypedActionCommitmentInput): Promise<TypedActionCommitmentRecord>;
     reconcileSurfaceOperation(input: ReconcileSurfaceOperationInput): Promise<SurfaceOperationReconciliationResult>;
 };
 export type X402WalletGatewayInput = {
@@ -135,36 +157,42 @@ export type X402WalletGatewayInput = {
     actionContractId: string;
     greenlightId: string;
     observedParameters: X402PaymentParameters;
+    typedPayloadEvidence?: X402WalletTypedPayloadEvidence;
     surfaceOperationRef?: string;
 };
 export type X402WalletGatewayResult = {
     outcome: "gateway_check_refused";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: null;
+    typedActionCommitment: null;
     reconciliation: null;
     signatureEvidence: null;
 } | {
     outcome: "gateway_check_not_authoritative";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: null;
+    typedActionCommitment: null;
     reconciliation: null;
     signatureEvidence: null;
 } | {
     outcome: "payment_signature_reconciled";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: CredentialResolutionEvidence;
+    typedActionCommitment: TypedActionCommitmentRecord | null;
     reconciliation: SurfaceOperationReconciliation;
     signatureEvidence: X402PaymentSignatureEvidence;
 } | {
     outcome: "payment_signature_proof_gap";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: CredentialResolutionEvidence;
+    typedActionCommitment: TypedActionCommitmentRecord | null;
     reconciliation: SurfaceOperationReconciliation;
     signatureEvidence: X402PaymentSignatureEvidence;
 } | {
     outcome: "payment_signature_failed";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: CredentialResolutionEvidence | null;
+    typedActionCommitment: TypedActionCommitmentRecord | null;
     reconciliation: SurfaceOperationReconciliation;
     signatureEvidence: null;
 };

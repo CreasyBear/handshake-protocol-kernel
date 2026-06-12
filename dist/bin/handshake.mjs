@@ -14463,6 +14463,7 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "generated_graph_recorded",
   "bypass_risk_recorded",
   "credential_custody_recorded",
+  "typed_commitment_recorded",
   "authority_scope_recorded",
   "authority_status_recorded",
   "draft_recorded",
@@ -14850,6 +14851,214 @@ function decodeBase64Like(token) {
     return null;
   }
 }
+// src/protocol/foundation/authority-safe-reference/index.ts
+var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "authority references must carry opaque refs or digests, not raw authority material"
+});
+function looksLikeEndpointAccessSecret(value) {
+  return endpointAccessStringVariants(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /PAYMENT-SIGNATURE\s*:/i,
+    /raw[_-]?payment[_-]?signature/i,
+    /private[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/.*\/secret/i,
+    /infisical:\/\/.*\/secret/i
+  ].some((pattern) => pattern.test(variant)));
+}
+function endpointAccessStringVariants(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like2(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like2(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/protocol/areas/typed-action-commitment/schemas.ts
+var TypedActionCommitmentProfileSchema = exports_external.enum(["handshake_jcs_typed", "eip712"]);
+var TypedActionCommitmentPurposeSchema = exports_external.enum([
+  "external_commitment_evidence",
+  "policy_required_evidence",
+  "service_workflow_readback",
+  "post_gateway_payment_evidence",
+  "display_binding_evidence"
+]);
+var TypedActionCommitmentProjectionClassSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_export"
+]);
+var TypedActionCommitmentVerificationStatusSchema = exports_external.enum([
+  "unverified",
+  "verified",
+  "refused",
+  "proof_gap",
+  "unsupported"
+]);
+var TypedActionCommitmentReplayStatusSchema = exports_external.enum([
+  "fresh",
+  "stale",
+  "replayed",
+  "missing",
+  "not_applicable"
+]);
+var TypedActionCommitmentSafetyPostureSchema = exports_external.enum([
+  "display_bound",
+  "digest_bound",
+  "verifier_bound",
+  "provider_observed",
+  "proof_gap",
+  "refused"
+]);
+var TypedCommitmentSafeReferenceSchema = AuthoritySafeReferenceSchema;
+var TypedActionCommitmentSubjectSchema = exports_external.strictObject({
+  kind: exports_external.enum([
+    "action_contract",
+    "service_workflow",
+    "x402_payment",
+    "agentic_endpoint_access",
+    "protected_surface",
+    "external_evidence"
+  ]),
+  ref: ResourceRefSchema,
+  digest: DigestSchema
+});
+var TypedActionCommitmentDomainSchema = exports_external.strictObject({
+  domainRef: TypedCommitmentSafeReferenceSchema,
+  domainDigest: DigestSchema.nullable().default(null),
+  tenantId: IdSchema.nullable().default(null),
+  organizationId: IdSchema.nullable().default(null),
+  gatewayId: IdSchema.nullable().default(null),
+  actionClass: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  providerEnvironmentRef: TypedCommitmentSafeReferenceSchema.nullable().default(null)
+});
+var TypedActionCommitmentTypedPayloadSchema = exports_external.record(exports_external.string(), JsonValueSchema).superRefine((payload, ctx) => {
+  for (const issue2 of rawMaterialIssues(payload)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: issue2
+    });
+  }
+});
+var TypedActionCommitmentReplayPostureSchema = exports_external.strictObject({
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceDigest: DigestSchema.nullable().default(null),
+  issuedAt: IsoDateSchema.nullable().default(null),
+  expiresAt: IsoDateSchema.nullable().default(null),
+  replayWindowSeconds: exports_external.number().int().positive().nullable().default(null)
+});
+var TypedActionCommitmentSignerOrVerifierSchema = exports_external.strictObject({
+  verifierRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  keyId: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureDigest: DigestSchema.nullable().default(null),
+  providerNativeDigest: DigestSchema.nullable().default(null),
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable().default(null)
+});
+var TypedActionCommitmentAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  authorizesMutation: exports_external.literal(false),
+  createsReceipt: exports_external.literal(false),
+  mintsCertificate: exports_external.literal(false),
+  provesPrincipalConsent: exports_external.literal(false),
+  provesSignerCustody: exports_external.literal(false),
+  provesPaymentCustody: exports_external.literal(false),
+  createsEndpointLease: exports_external.literal(false),
+  provesDownstreamSuccess: exports_external.literal(false)
+});
+var typedActionCommitmentAuthorityBoundary = {
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  authorizesMutation: false,
+  createsReceipt: false,
+  mintsCertificate: false,
+  provesPrincipalConsent: false,
+  provesSignerCustody: false,
+  provesPaymentCustody: false,
+  createsEndpointLease: false,
+  provesDownstreamSuccess: false
+};
+var TypedActionCommitmentSummarySchema = exports_external.strictObject({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  subjectDigest: DigestSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema
+});
+var TypedActionCommitmentRecordSchema = ProtocolBaseSchema.extend({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema,
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema,
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  proofGapRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  evidenceRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  recordedAt: IsoDateSchema
+});
+function rawMaterialIssues(value, path = []) {
+  if (value === null || value === undefined)
+    return [];
+  if (typeof value === "string") {
+    return looksLikeEndpointAccessSecret(value) ? [`typed action commitments must store refs or digests, not raw authority material at ${path.join(".")}`] : [];
+  }
+  if (typeof value !== "object")
+    return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => rawMaterialIssues(item, [...path, String(index)]));
+  }
+  const issues = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (isForbiddenRawMaterialKey(key)) {
+      issues.push(`typed action commitments must not store raw material field ${[...path, key].join(".")}`);
+    }
+    issues.push(...rawMaterialIssues(nested, [...path, key]));
+  }
+  return issues;
+}
+function isForbiddenRawMaterialKey(key) {
+  return /raw.*(secret|credential|payment|private.*key|signature)|private.*key|secret.*material/i.test(key);
+}
 // src/protocol/areas/delegated-authority/schemas.ts
 var AtomicAmountSchema = exports_external.string().regex(/^(?:0|[1-9]\d*)$/);
 var AuthoritySafeStringSchema = exports_external.string().min(1).refine((value) => !looksLikeAuthoritySecret(value), {
@@ -14927,13 +15136,13 @@ function authorityStringVariants(value) {
     variants.add(decodeURIComponent(value));
   } catch {}
   for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
-    const decoded = decodeBase64Like2(token);
+    const decoded = decodeBase64Like3(token);
     if (decoded)
       variants.add(decoded);
   }
   return [...variants];
 }
-function decodeBase64Like2(token) {
+function decodeBase64Like3(token) {
   const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
     return null;
@@ -16374,6 +16583,9 @@ var GatewayCheckAttemptSchema = ProtocolBaseSchema.extend({
   protectedPathPostureIdSeen: IdSchema.nullable(),
   protectedPathPostureDigestSeen: DigestSchema.nullable(),
   protectedPathPostureStateSeen: ProtectedPathStateSchema.nullable(),
+  observedTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  observedTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentRefusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
   gateDecision: GateDecisionSchema,
   gateDecisionReasonCode: ReasonCodeSchema,
   consumedGreenlight: exports_external.boolean(),
@@ -16532,6 +16744,8 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   gatewayCredentialRefDigests: exports_external.array(DigestSchema).default([]),
   delegatedAuthorityRefIds: exports_external.array(IdSchema).default([]),
   delegatedAuthorityRefDigests: exports_external.array(DigestSchema).default([]),
+  requiredTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  requiredTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
   paramsDigest: DigestSchema,
   contractDigest: DigestSchema,
   idempotencyKey: IdSchema.nullable().default(null),
@@ -17846,7 +18060,344 @@ var ReceiptExportSchema = ProtocolBaseSchema.extend({
   exportDigest: DigestSchema,
   delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
 });
-
+// src/protocol/areas/typed-action-commitment/inputs.ts
+var RecordTypedActionCommitmentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  typedActionCommitmentId: exports_external.string().min(1).optional(),
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema.default({
+    domainRef: "typed-action-commitment:default-domain",
+    domainDigest: null,
+    tenantId: null,
+    organizationId: null,
+    gatewayId: null,
+    actionClass: null,
+    providerEnvironmentRef: null
+  }),
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema.default({
+    replayStatus: "not_applicable",
+    idempotencyKey: null,
+    nonceRef: null,
+    nonceDigest: null,
+    issuedAt: null,
+    expiresAt: null,
+    replayWindowSeconds: null
+  }),
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema.default({
+    verifierRef: null,
+    verifierContextDigest: null,
+    keyId: null,
+    signatureRef: null,
+    signatureDigest: null,
+    providerNativeDigest: null,
+    verificationStatus: "unverified",
+    verificationReasonCode: null
+  }),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema.default("digest_bound"),
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema.default(typedActionCommitmentAuthorityBoundary),
+  refusalRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  recordedAt: exports_external.string().datetime({ offset: true }).optional()
+});
+// src/protocol/areas/typed-action-commitment/digests.ts
+async function commitmentDigest(recordMaterial) {
+  return digestCanonical(stripCommitmentDigest(asJsonValue(recordMaterial)));
+}
+function normalizeTypedCommitmentSummary(value) {
+  const record2 = TypedActionCommitmentRecordSchema.safeParse(value);
+  if (record2.success)
+    return summaryFromRecord(record2.data);
+  return TypedActionCommitmentSummarySchema.parse(value);
+}
+async function commitmentSetDigest(summaries) {
+  const normalized = summaries.map((summary) => normalizeTypedCommitmentSummary(summary));
+  assertNoDuplicateCommitmentIds(normalized);
+  const sorted = [...normalized].sort(compareTypedCommitmentSummaries);
+  return digestCanonical({ typedActionCommitmentSummaries: sorted });
+}
+function summaryFromRecord(record2) {
+  return TypedActionCommitmentSummarySchema.parse({
+    typedActionCommitmentId: record2.typedActionCommitmentId,
+    commitmentDigest: record2.commitmentDigest,
+    subjectDigest: record2.subject.digest,
+    purpose: record2.purpose,
+    profile: record2.profile,
+    verificationStatus: record2.signerOrVerifier.verificationStatus,
+    replayStatus: record2.replayPosture.replayStatus,
+    verifierContextDigest: record2.signerOrVerifier.verifierContextDigest,
+    safetyPosture: record2.safetyPosture
+  });
+}
+function assertNoDuplicateCommitmentIds(summaries) {
+  const seen = new Set;
+  for (const summary of summaries) {
+    if (seen.has(summary.typedActionCommitmentId)) {
+      throw new HandshakeProtocolError("typed_commitment_set_digest_mismatch", "Typed action commitment sets cannot contain duplicate typedActionCommitmentId values.", 409);
+    }
+    seen.add(summary.typedActionCommitmentId);
+  }
+}
+function compareTypedCommitmentSummaries(left, right) {
+  return left.typedActionCommitmentId.localeCompare(right.typedActionCommitmentId) || left.commitmentDigest.localeCompare(right.commitmentDigest) || left.purpose.localeCompare(right.purpose);
+}
+function stripCommitmentDigest(value) {
+  if (Array.isArray(value))
+    return value.map(stripCommitmentDigest);
+  if (value === null || typeof value !== "object")
+    return value;
+  const result = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "commitmentDigest")
+      continue;
+    result[key] = stripCommitmentDigest(nested);
+  }
+  return result;
+}
+function asJsonValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+// src/protocol/areas/typed-action-commitment/profiles.ts
+var typedActionCommitmentProfiles = TypedActionCommitmentProfileSchema.options;
+// src/protocol/areas/typed-action-commitment/projections.ts
+var TypedActionCommitmentProjectionRedactionPostureSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_signature_digest_only"
+]);
+var TypedActionCommitmentSignatureEvidenceProjectionSchema = exports_external.strictObject({
+  signatureRef: ResourceRefSchema.nullable(),
+  signatureDigest: DigestSchema.nullable()
+});
+var TypedActionCommitmentRawReadAuditLinkSchema = exports_external.strictObject({
+  rawRecordReadAuditRef: ResourceRefSchema,
+  rawRecordReadAuditDigest: DigestSchema,
+  redactionPosture: exports_external.literal("auditor_signature_digest_only")
+});
+var TypedActionCommitmentProjectionSchema = exports_external.strictObject({
+  typedActionCommitmentRef: IdSchema,
+  actionContractRef: IdSchema.nullable(),
+  projectionClass: TypedActionCommitmentProjectionClassSchema,
+  commitmentDigest: DigestSchema,
+  subject: TypedActionCommitmentSubjectSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable(),
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: ResourceRefSchema.nullable(),
+  nonceRef: ResourceRefSchema.nullable(),
+  nonceDigest: DigestSchema.nullable(),
+  replayWindowSeconds: exports_external.number().int().positive().nullable(),
+  verifierRef: ResourceRefSchema.nullable(),
+  verifierContextDigest: DigestSchema.nullable(),
+  keyId: ResourceRefSchema.nullable(),
+  providerNativeDigest: DigestSchema.nullable(),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  displayBindingStatus: TypedActionCommitmentSafetyPostureSchema,
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  signatureEvidence: TypedActionCommitmentSignatureEvidenceProjectionSchema.nullable(),
+  rawReadAudit: TypedActionCommitmentRawReadAuditLinkSchema.nullable(),
+  rawTypedPayloadIncluded: exports_external.literal(false),
+  rawSignatureIncluded: exports_external.literal(false),
+  rawCredentialMaterialIncluded: exports_external.literal(false),
+  rawPaymentMaterialIncluded: exports_external.literal(false),
+  rawRequestBodyIncluded: exports_external.literal(false),
+  commandMaterialIncluded: exports_external.literal(false),
+  redactionProfileRef: TypedActionCommitmentProjectionRedactionPostureSchema,
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+}).superRefine((projection, ctx) => {
+  if (projection.projectionClass === "auditor_export") {
+    if (!projection.rawReadAudit) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "auditor_export typed commitment projection requires raw-read audit linkage",
+        path: ["rawReadAudit"]
+      });
+    }
+    return;
+  }
+  if (projection.signatureEvidence) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include signature evidence",
+      path: ["signatureEvidence"]
+    });
+  }
+  if (projection.rawReadAudit) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include raw-read audit linkage",
+      path: ["rawReadAudit"]
+    });
+  }
+});
+var BASE_OMITTED_FIELDS = [
+  "typedPayload",
+  "rawTypedPayload",
+  "rawSignature",
+  "rawSignatureHeader",
+  "signerSecret",
+  "rawHmacSecret",
+  "rawRequestBody",
+  "rawCredential",
+  "credentialMaterial",
+  "rawPayment",
+  "paymentMaterial",
+  "commandMaterial"
+];
+function projectTypedActionCommitment(commitment, options) {
+  const projectionClass = TypedActionCommitmentProjectionClassSchema.parse(options.projectionClass);
+  const auditorOptions = projectionClass === "auditor_export" ? asAuditorExportOptions(options) : null;
+  const redactionProfileRef = projectionClass === "auditor_export" ? "auditor_signature_digest_only" : projectionClass;
+  const rawReadAudit = auditorOptions ? TypedActionCommitmentRawReadAuditLinkSchema.parse({
+    rawRecordReadAuditRef: auditorOptions.rawRecordReadAuditRef,
+    rawRecordReadAuditDigest: auditorOptions.rawRecordReadAuditDigest,
+    redactionPosture: auditorOptions.redactionPosture
+  }) : null;
+  const signatureEvidence = projectionClass === "auditor_export" ? TypedActionCommitmentSignatureEvidenceProjectionSchema.parse({
+    signatureRef: commitment.signerOrVerifier.signatureRef,
+    signatureDigest: commitment.signerOrVerifier.signatureDigest
+  }) : null;
+  return TypedActionCommitmentProjectionSchema.parse({
+    typedActionCommitmentRef: commitment.typedActionCommitmentId,
+    actionContractRef: commitment.actionContractId,
+    projectionClass,
+    commitmentDigest: commitment.commitmentDigest,
+    subject: commitment.subject,
+    purpose: commitment.purpose,
+    profile: commitment.profile,
+    domain: commitment.domain,
+    verificationStatus: commitment.signerOrVerifier.verificationStatus,
+    verificationReasonCode: commitment.signerOrVerifier.verificationReasonCode,
+    replayStatus: commitment.replayPosture.replayStatus,
+    idempotencyKey: commitment.replayPosture.idempotencyKey,
+    nonceRef: commitment.replayPosture.nonceRef,
+    nonceDigest: commitment.replayPosture.nonceDigest,
+    replayWindowSeconds: commitment.replayPosture.replayWindowSeconds,
+    verifierRef: commitment.signerOrVerifier.verifierRef,
+    verifierContextDigest: commitment.signerOrVerifier.verifierContextDigest,
+    keyId: commitment.signerOrVerifier.keyId,
+    providerNativeDigest: commitment.signerOrVerifier.providerNativeDigest,
+    safetyPosture: commitment.safetyPosture,
+    displayBindingStatus: commitment.safetyPosture,
+    authorityBoundary: commitment.authorityBoundary,
+    refusalRefs: commitment.refusalRefs,
+    proofGapRefs: commitment.proofGapRefs,
+    evidenceRefs: projectionClass === "public_redacted" ? [] : commitment.evidenceRefs,
+    signatureEvidence,
+    rawReadAudit,
+    rawTypedPayloadIncluded: false,
+    rawSignatureIncluded: false,
+    rawCredentialMaterialIncluded: false,
+    rawPaymentMaterialIncluded: false,
+    rawRequestBodyIncluded: false,
+    commandMaterialIncluded: false,
+    redactionProfileRef,
+    omittedFields: omittedFieldsForProjectionClass(projectionClass)
+  });
+}
+function omittedFieldsForProjectionClass(projectionClass) {
+  const base = [...BASE_OMITTED_FIELDS];
+  return projectionClass === "auditor_export" ? base : [...base, "signature evidence"];
+}
+function asAuditorExportOptions(options) {
+  if (!("rawRecordReadAuditRef" in options) || !("rawRecordReadAuditDigest" in options) || options.redactionPosture !== "auditor_signature_digest_only") {
+    throw new Error("auditor_export typed commitment projection requires raw-read audit linkage");
+  }
+  return options;
+}
+// src/protocol/areas/typed-action-commitment/transitions.ts
+async function recordTypedActionCommitment(recorder, inputValue) {
+  const input = RecordTypedActionCommitmentInputSchema.parse(inputValue);
+  const record2 = await buildTypedActionCommitmentRecord(input);
+  const objectType = "typed_action_commitment";
+  await recorder.commitRecordsWithEvents(typedActionCommitmentRecords(record2, objectType), [
+    typedActionCommitmentRecordedEvent(record2)
+  ]);
+  return record2;
+}
+async function buildTypedActionCommitmentRecord(input) {
+  const createdAt = nowIso();
+  const recordedAt = input.recordedAt ?? createdAt;
+  const typedActionCommitmentId = input.typedActionCommitmentId ?? createId("tac");
+  const digestMaterial = typedActionCommitmentDigestMaterial(input, {
+    createdAt,
+    recordedAt,
+    typedActionCommitmentId
+  });
+  const digest = await commitmentDigest(digestMaterial);
+  return TypedActionCommitmentRecordSchema.parse({
+    ...digestMaterial,
+    commitmentDigest: digest
+  });
+}
+function typedActionCommitmentDigestMaterial(input, generated) {
+  return {
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    createdAt: generated.createdAt,
+    typedActionCommitmentId: generated.typedActionCommitmentId,
+    actionContractId: input.actionContractId,
+    subject: input.subject,
+    domain: input.domain,
+    purpose: input.purpose,
+    profile: input.profile,
+    typedPayload: input.typedPayload,
+    replayPosture: input.replayPosture,
+    signerOrVerifier: input.signerOrVerifier,
+    safetyPosture: input.safetyPosture,
+    projectionClass: input.projectionClass,
+    authorityBoundary: input.authorityBoundary,
+    refusalRefs: input.refusalRefs,
+    proofGapRefs: input.proofGapRefs,
+    evidenceRefs: input.evidenceRefs,
+    recordedAt: generated.recordedAt
+  };
+}
+function typedActionCommitmentRecords(record2, objectType) {
+  return [{ objectType, payload: record2 }];
+}
+function typedActionCommitmentRecordedEvent(record2) {
+  return {
+    source: record2,
+    eventType: "typed_action_commitment_recorded",
+    objectRefs: [
+      record2.typedActionCommitmentId,
+      record2.commitmentDigest,
+      record2.subject.ref,
+      ...record2.actionContractId ? [record2.actionContractId] : []
+    ],
+    payload: {
+      typedActionCommitmentId: record2.typedActionCommitmentId,
+      commitmentDigest: record2.commitmentDigest,
+      actionContractId: record2.actionContractId,
+      subjectRef: record2.subject.ref,
+      subjectDigest: record2.subject.digest,
+      profile: record2.profile,
+      evidencePosture: "recorded_only",
+      authorityCreated: false,
+      policyDecisionCreated: false,
+      greenlightCreated: false,
+      gatewayCheckPerformed: false,
+      mutationAttempted: false,
+      receiptCreated: false,
+      certificateCreated: false,
+      endpointLeaseCreated: false
+    }
+  };
+}
 // src/protocol/events/schemas.ts
 var ContractStreamEventSchema = ProtocolBaseSchema.extend({
   streamEventId: IdSchema,
@@ -17865,6 +18416,7 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "delegated_authority_status_changed",
     "gateway_custody_proof_packet_recorded",
     "credential_resolution_recorded",
+    "typed_action_commitment_recorded",
     "idempotency_ledger_recorded",
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
@@ -17892,6 +18444,7 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "receipt_emitted",
     "authority_certificate_emitted",
     "receipt_exported",
+    "raw_evidence_read_audited",
     "recovery_recommended",
     "recovery_status_changed",
     "proof_gap_recorded",
@@ -17954,6 +18507,12 @@ function actionLifecycleStreamRefs(contract) {
     runId: contract.runId,
     gatewayId: contract.gatewayId,
     resourceRef: contract.resourceRef
+  };
+}
+function actionLifecycleStreamKey(source, actionContractId) {
+  return {
+    streamId: organizationStreamId(source),
+    partitionKey: `action:${actionContractId}`
   };
 }
 function receiptStreamReferencesForEvents(events) {
@@ -18372,6 +18931,13 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   gatewayCredentialEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   delegatedAuthorityEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   credentialResolutionEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
   signerInvocationEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   downstreamEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   authMdEvidenceRefs: AuthMdEvidenceRefsProjectionSchema,
@@ -18488,6 +19054,27 @@ var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
   "replayed_or_unusable",
   "unknown"
 ]);
+var OperationReadbackProjectionFreshnessStatusSchema = exports_external.enum([
+  "current",
+  "stale_or_concurrent_update",
+  "stream_tail_missing",
+  "not_observed"
+]);
+var OperationReadbackProjectionFreshnessSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback-freshness.v0.1"),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  readModelKind: exports_external.literal("direct_protocol_store_projection"),
+  status: OperationReadbackProjectionFreshnessStatusSchema,
+  streamId: IdSchema.nullable(),
+  partitionKey: exports_external.string().min(1).nullable(),
+  observedOffset: exports_external.number().int().nonnegative().nullable(),
+  observedEventDigest: DigestSchema.nullable(),
+  latestOffset: exports_external.number().int().nonnegative().nullable(),
+  latestEventDigest: DigestSchema.nullable(),
+  lagEvents: exports_external.number().int().nonnegative().nullable(),
+  rawStreamEventsIncluded: exports_external.literal(false),
+  authorityCreatedByFreshness: exports_external.literal(false)
+});
 var OperationSupportContextSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
   supportContextRef: exports_external.string().min(1),
@@ -18551,12 +19138,20 @@ var OperationReadbackProjectionSchema = exports_external.strictObject({
   rawInternalRecordIncluded: exports_external.literal(false),
   credentialMaterialIncluded: exports_external.literal(false),
   paymentMaterialIncluded: exports_external.literal(false),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   proofGapRefs: exports_external.array(IdSchema).default([]),
   refusalRefs: exports_external.array(IdSchema).default([]),
   recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
   isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
   authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  projectionFreshness: OperationReadbackProjectionFreshnessSchema,
   providerRequestRef: exports_external.string().min(1).nullable(),
   providerOperationRef: exports_external.string().min(1).nullable(),
   traceRef: exports_external.string().min(1).nullable(),
@@ -18711,6 +19306,7 @@ var AuthorityCertificateArtifactKindSchema = exports_external.enum([
   "receipt_export",
   "surface_operation_reconciliation",
   "credential_resolution_evidence",
+  "typed_action_commitment",
   "idempotency_ledger_entry",
   "recovery_recommendation",
   "recovery_recommendation_status_transition",
@@ -19235,50 +19831,6 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
-// src/protocol/foundation/authority-safe-reference/index.ts
-var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
-  message: "authority references must carry opaque refs or digests, not raw authority material"
-});
-function looksLikeEndpointAccessSecret(value) {
-  return endpointAccessStringVariants(value).some((variant) => [
-    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
-    /PAYMENT-SIGNATURE\s*:/i,
-    /raw[_-]?payment[_-]?signature/i,
-    /private[_-]?key/i,
-    /api[_-]?key\s*=/i,
-    /access[_-]?token\s*=/i,
-    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
-    /secret\s*=/i,
-    /password\s*=/i,
-    /vault:\/\/.*\/secret/i,
-    /infisical:\/\/.*\/secret/i
-  ].some((pattern) => pattern.test(variant)));
-}
-function endpointAccessStringVariants(value) {
-  const variants = new Set([value]);
-  try {
-    variants.add(decodeURIComponent(value));
-  } catch {}
-  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
-    const decoded = decodeBase64Like3(token);
-    if (decoded)
-      variants.add(decoded);
-  }
-  return [...variants];
-}
-function decodeBase64Like3(token) {
-  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
-    return null;
-  const paddingLength = (4 - normalized.length % 4) % 4;
-  try {
-    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
-    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
 // src/protocol/areas/agentic-endpoint-access/schemas.ts
 var agenticEndpointAccessSchemaVersion = "handshake.agentic-endpoint-access.v0.3.0";
 var AgenticEndpointAccessSafeReferenceSchema = AuthoritySafeReferenceSchema.describe("Rejects raw authority material such as PAYMENT-SIGNATURE, private keys, API keys, access tokens, and bearer tokens.");
@@ -19358,6 +19910,15 @@ var AgenticEndpointAccessClearanceStatusSchema = exports_external.enum(["leased"
 var AgenticEndpointAccessFailClosedBehaviorSchema = exports_external.enum(["refuse", "proof_gap", "quarantine"]);
 var AgenticEndpointAccessUsageKindSchema = exports_external.enum(["request", "token", "tool_call", "cost_unit"]);
 var AgenticEndpointAccessCapabilityStatusSchema = exports_external.enum(["supported", "unsupported", "stale", "unknown"]);
+var AgenticEndpointAccessRequestEvidenceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  requestMethod: AuthoritySafeStringSchema2,
+  requestUrlDigest: DigestSchema,
+  requestHeaderDigest: DigestSchema,
+  requestBodyDigest: DigestSchema,
+  redactionPolicyId: AuthoritySafeStringSchema2,
+  requestEvidenceDigest: DigestSchema
+});
 var AgenticEndpointAccessPolicySchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
   tenantId: IdSchema,
@@ -19415,6 +19976,7 @@ var AgenticEndpointAccessAttemptSchema = exports_external.strictObject({
   siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
   gatewayRegistryEntryId: IdSchema,
   gatewayId: IdSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
   requestedLeaseTtlSeconds: PositiveLimitSchema,
   requestedBudget: BudgetSchema,
   kernelVersion: AuthoritySafeStringSchema2,
@@ -19512,6 +20074,7 @@ var AgenticEndpointAccessReadbackSchema = exports_external.strictObject({
   attemptId: IdSchema,
   candidateActionId: IdSchema,
   attemptDigest: DigestSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
   protectedSurfaceBindingId: IdSchema,
   protectedSurfaceBindingDigest: DigestSchema,
   protectedSurfaceRef: ResourceRefSchema,
@@ -19810,6 +20373,51 @@ function requireReconstructionRefs(kind) {
   };
 }
 
+// src/protocol/areas/raw-read-audit/schemas.ts
+var RawRecordReadAuditAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  createsMutationAuthority: exports_external.literal(false),
+  createsRawReadAuthority: exports_external.literal(false),
+  exposesRawRecordInAudit: exports_external.literal(false)
+});
+var rawRecordReadAuditAuthorityBoundary = {
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  createsMutationAuthority: false,
+  createsRawReadAuthority: false,
+  exposesRawRecordInAudit: false
+};
+var RawRecordReadAuditSchema = ProtocolBaseSchema.extend({
+  rawRecordReadAuditId: IdSchema,
+  targetObjectType: exports_external.string().min(1).max(120),
+  targetObjectId: IdSchema,
+  targetRecordDigest: DigestSchema,
+  targetRecordSchemaVersion: exports_external.string().min(1).max(100),
+  targetRecordCreatedAt: IsoDateSchema,
+  callerIdentityRef: exports_external.string().min(1).max(500),
+  callerSubjectDigest: DigestSchema,
+  authProviderRef: exports_external.string().min(1).max(500),
+  authSessionDigest: DigestSchema.nullable(),
+  serviceCredentialDigest: DigestSchema.nullable(),
+  projectId: IdSchema.nullable(),
+  workspaceId: IdSchema.nullable(),
+  custodyRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedScopes: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  rawReadPurposeDigest: DigestSchema,
+  purposeRedactionPolicyId: exports_external.literal("hosted-raw-read-purpose-digest.v1"),
+  rawReadExpiresAt: IsoDateSchema,
+  routeId: exports_external.literal("readProtocolRecord"),
+  requestMethod: exports_external.literal("GET"),
+  requestedAt: IsoDateSchema,
+  rawRecordReturned: exports_external.literal(true),
+  rawRecordPayloadIncludedInAudit: exports_external.literal(false),
+  authorityBoundary: RawRecordReadAuditAuthorityBoundarySchema
+});
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -19829,6 +20437,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "delegated_authority_status_transition",
   "gateway_custody_proof_packet",
   "credential_resolution_evidence",
+  "typed_action_commitment",
   "transition_request_context",
   "runtime_execution",
   "generated_execution_graph",
@@ -19860,6 +20469,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "refusal",
   "receipt",
   "receipt_export",
+  "raw_record_read_audit",
   "recovery_recommendation",
   "recovery_recommendation_status_transition",
   "contract_stream_event"
@@ -19915,6 +20525,10 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
     objectType: exports_external.literal("credential_resolution_evidence"),
     payload: CredentialResolutionEvidenceSchema
   }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("typed_action_commitment"),
+    payload: TypedActionCommitmentRecordSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("transition_request_context"), payload: TransitionRequestContextSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("runtime_execution"), payload: RuntimeExecutionRecordSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("generated_execution_graph"), payload: GeneratedExecutionGraphSchema }),
@@ -19961,6 +20575,7 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("refusal"), payload: RefusalSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("receipt"), payload: ReceiptSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("receipt_export"), payload: ReceiptExportSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("raw_record_read_audit"), payload: RawRecordReadAuditSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("recovery_recommendation"), payload: RecoveryRecommendationSchema }),
   exports_external.strictObject({
     objectType: exports_external.literal("recovery_recommendation_status_transition"),
@@ -21324,6 +21939,284 @@ function validateProtectedReadinessSnapshotBinding(config2, record2, install, pr
   }
 }
 
+// src/surfaces/protected-action-recovery-guidance.ts
+var PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION = "handshake.surface.protected-action-recovery-guidance.v1";
+var sha256DigestSchema = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var nonEmptyStringSchema = exports_external.string().min(1);
+var ProtectedActionRecoveryGuidanceSourceKindSchema = exports_external.enum([
+  "protocol_recovery_projection",
+  "pre_contract_surface_guidance"
+]);
+var ProtectedActionRecoveryGuidanceOutcomeSchema = exports_external.enum([
+  "draft_available",
+  "reload_required",
+  "recraft_required",
+  "read_evidence",
+  "abandon_required",
+  "stop"
+]);
+var ProtectedActionRecoveryGuidanceFindingCategorySchema = exports_external.enum([
+  "x402_metadata_stale",
+  "x402_policy_or_readiness_stale",
+  "x402_install_not_ready",
+  "x402_gateway_offline",
+  "x402_gateway_posture_unknown",
+  "x402_amount_over_bound",
+  "x402_request_body_unsupported",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "x402_custody_proof_unverified",
+  "x402_selected_requirement_mismatch",
+  "runtime_dynamic_tool_construction",
+  "runtime_late_bound_parameters",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_posture_named_not_controlled",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "proof_gap_only_evidence",
+  "isolation_or_quarantine_active",
+  "draft_stale_or_intent_changed",
+  "draft_superseded_by_stricter_draft",
+  "draft_guidance_stale",
+  "surface_next_action_projection",
+  "protocol_recovery_recommendation_present"
+]);
+var ProtectedActionRecoveryAbandonQualityClassSchema = exports_external.enum([
+  "good_abandon",
+  "avoidable_abandon",
+  "ambiguous_abandon",
+  "stale_abandon",
+  "operator_abandon"
+]);
+var ProtectedActionRecoveryFindingSchema = exports_external.strictObject({
+  category: ProtectedActionRecoveryGuidanceFindingCategorySchema,
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  affectedFields: exports_external.array(nonEmptyStringSchema),
+  guidanceOutcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  draftEligible: exports_external.boolean()
+});
+var ProtectedActionRecoveryCandidateDraftSchema = exports_external.strictObject({
+  draftId: nonEmptyStringSchema,
+  draftDigest: sha256DigestSchema,
+  sourceRefs: exports_external.array(nonEmptyStringSchema),
+  digestInputsToPreserve: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  requiredFreshProposalPath: nonEmptyStringSchema,
+  supersedesDraftRefs: exports_external.array(nonEmptyStringSchema),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  redactionProfile: nonEmptyStringSchema
+});
+var ProtectedActionRecoveryAgentHandoffSchema = exports_external.strictObject({
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  readback: nonEmptyStringSchema,
+  requiredRefs: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  allowedNextMechanism: exports_external.enum([
+    "submit_fresh_proposal",
+    "reload_evidence",
+    "recraft_request",
+    "read_evidence",
+    "abandon_current_material",
+    "stop_and_escalate"
+  ]),
+  disallowedActions: exports_external.array(nonEmptyStringSchema),
+  stopReasons: exports_external.array(nonEmptyStringSchema),
+  nonClaims: exports_external.array(nonEmptyStringSchema)
+});
+var ProtectedActionRecoverySourceErrorSchema = exports_external.strictObject({
+  code: nonEmptyStringSchema,
+  failureClass: nonEmptyStringSchema,
+  failurePhase: nonEmptyStringSchema.nullable(),
+  requiresNewContract: exports_external.boolean(),
+  status: exports_external.number().int().min(100).max(599)
+});
+var ProtectedActionRecoveryGuidanceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION),
+  guidanceId: nonEmptyStringSchema,
+  sourceKind: ProtectedActionRecoveryGuidanceSourceKindSchema,
+  protectedSurfaceKind: nonEmptyStringSchema,
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  sourceReceiptRef: nonEmptyStringSchema.nullable(),
+  sourceProofGapRef: nonEmptyStringSchema.nullable(),
+  sourceRefusalRef: nonEmptyStringSchema.nullable(),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  recommendationDigest: sha256DigestSchema.nullable(),
+  sourceTerminalEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  findings: exports_external.array(ProtectedActionRecoveryFindingSchema),
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  abandonQuality: ProtectedActionRecoveryAbandonQualityClassSchema.nullable(),
+  unsafeSalvageAttemptPrevented: exports_external.boolean(),
+  sourceError: ProtectedActionRecoverySourceErrorSchema.nullable(),
+  mustCreateNewActionContract: exports_external.literal(true),
+  mayReuseGreenlight: exports_external.literal(false),
+  authorityCreated: exports_external.literal(false),
+  authorityCertificateMinted: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  gatewayCheckPerformed: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false),
+  mutationAttempted: exports_external.literal(false),
+  mutationCommandIncluded: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  receiptExportCreated: exports_external.literal(false),
+  policyDecisionRef: exports_external.null(),
+  greenlightRef: exports_external.null(),
+  gatewayCheckRef: exports_external.null(),
+  receiptRef: exports_external.null(),
+  authorityCertificateRef: exports_external.null(),
+  mutationAttemptRef: exports_external.null(),
+  agentHandoff: ProtectedActionRecoveryAgentHandoffSchema,
+  candidateDraft: ProtectedActionRecoveryCandidateDraftSchema.optional()
+}).superRefine((guidance, ctx) => {
+  if (guidance.sourceKind === "protocol_recovery_projection") {
+    if (!guidance.recoveryRecommendationId) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "protocol recovery projections require recoveryRecommendationId"
+      });
+    }
+    if (!guidance.recommendationDigest) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "protocol recovery projections require recommendationDigest"
+      });
+    }
+    if (guidance.sourceTerminalEvidenceRefs.length === 0) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["sourceTerminalEvidenceRefs"],
+        message: "protocol recovery projections require source terminal evidence refs"
+      });
+    }
+  }
+  if (guidance.sourceKind === "pre_contract_surface_guidance") {
+    if (guidance.recoveryRecommendationId !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "pre-contract guidance cannot claim a recovery recommendation"
+      });
+    }
+    if (guidance.recommendationDigest !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "pre-contract guidance cannot claim a recovery recommendation digest"
+      });
+    }
+  }
+  if (guidance.candidateDraft && guidance.outcome !== "draft_available") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["candidateDraft"],
+      message: "candidateDraft is legal only when outcome is draft_available"
+    });
+  }
+  if (guidance.outcome === "abandon_required" && guidance.abandonQuality === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["abandonQuality"],
+      message: "abandon_required requires abandonQuality"
+    });
+  }
+});
+var candidateDraftBlockingFindingCategories = new Set([
+  "x402_gateway_posture_unknown",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "isolation_or_quarantine_active",
+  "draft_guidance_stale"
+]);
+
+// src/cli/recovery-guidance/index.ts
+var cliRecoveryGuidanceRawMaterialOmissions = [
+  "payment_payload_material",
+  "payment_signature_header",
+  "signer_refs",
+  "key_material",
+  "private_keys",
+  "role_token_values",
+  "transition_token_values",
+  "gateway_check_inputs",
+  "raw_request_bodies",
+  "gateway_credential_material",
+  "mutation_commands",
+  "receipt_exports"
+];
+function cliNextActionForRecoveryGuidance(guidance) {
+  switch (guidance.outcome) {
+    case "reload_required":
+      return "fix_install";
+    case "draft_available":
+    case "recraft_required":
+    case "read_evidence":
+      return "read_evidence";
+    case "abandon_required":
+    case "stop":
+      return "stop";
+  }
+}
+function cliRetryabilityForRecoveryGuidance(guidance) {
+  return guidance.outcome === "reload_required" ? "retryable_after_fix" : "not_retryable";
+}
+function recoveryGuidanceCliSummary(value) {
+  const guidance = ProtectedActionRecoveryGuidanceSchema.parse(value);
+  return {
+    guidanceId: guidance.guidanceId,
+    guidanceRef: `handshake://guidance/recovery/${encodeURIComponent(guidance.guidanceId)}`,
+    sourceKind: guidance.sourceKind,
+    protectedSurfaceKind: guidance.protectedSurfaceKind,
+    outcome: guidance.outcome,
+    abandonQuality: guidance.abandonQuality,
+    unsafeSalvageAttemptPrevented: guidance.unsafeSalvageAttemptPrevented,
+    sourceRefs: guidance.sourceEvidenceRefs,
+    terminalEvidenceRefs: guidance.sourceTerminalEvidenceRefs,
+    reasonCodes: guidance.reasonCodes,
+    topFindings: guidance.findings.slice(0, 5).map((finding) => ({
+      category: finding.category,
+      guidanceOutcome: finding.guidanceOutcome,
+      draftEligible: finding.draftEligible,
+      reasonCodes: finding.reasonCodes,
+      affectedFields: finding.affectedFields
+    })),
+    agentHandoff: {
+      outcome: guidance.agentHandoff.outcome,
+      allowedNextMechanism: guidance.agentHandoff.allowedNextMechanism,
+      requiredRefs: guidance.agentHandoff.requiredRefs,
+      missingInputs: guidance.agentHandoff.missingInputs,
+      stopReasons: guidance.agentHandoff.stopReasons,
+      nonClaims: guidance.agentHandoff.nonClaims
+    },
+    candidateDraft: guidance.candidateDraft ? {
+      draftId: guidance.candidateDraft.draftId,
+      draftDigest: guidance.candidateDraft.draftDigest,
+      digestInputsToPreserve: guidance.candidateDraft.digestInputsToPreserve,
+      missingInputs: guidance.candidateDraft.missingInputs,
+      requiredFreshProposalPath: guidance.candidateDraft.requiredFreshProposalPath,
+      supersedesDraftRefs: guidance.candidateDraft.supersedesDraftRefs,
+      recoveryRecommendationId: guidance.candidateDraft.recoveryRecommendationId,
+      redactionProfile: guidance.candidateDraft.redactionProfile
+    } : null,
+    redactionProfileRef: guidance.candidateDraft?.redactionProfile ?? "protected-action-recovery-guidance:v1-redacted",
+    rawMaterialOmitted: cliRecoveryGuidanceRawMaterialOmissions,
+    authorityCreated: false,
+    greenlightCreated: false,
+    gatewayCheckPerformed: false,
+    mutationAttempted: false,
+    credentialMaterialIncluded: false,
+    mutationCommandIncluded: false,
+    rawInternalRecordIncluded: false,
+    receiptExportCreated: false,
+    authorityCertificateMinted: false
+  };
+}
+
 // src/cli/local-project/doctor.ts
 async function initCommand(input) {
   const result = await initializeLocalProject(input);
@@ -21338,15 +22231,17 @@ async function initCommand(input) {
 }
 async function doctorCommand(input) {
   const result = await doctorLocalProject(input.cwd);
+  const recoveryGuidance = input.recoveryGuidance ? recoveryGuidanceCliSummary(input.recoveryGuidance) : null;
+  const reasonCodes = [...new Set([...result.reasonCodes, ...input.recoveryGuidance?.reasonCodes ?? []])].sort();
   return cliOutput({
     command: "doctor",
     plane: "operator",
     ok: result.status === "ready",
-    reasonCodes: result.reasonCodes,
-    nextAction: result.status === "ready" ? "read_result" : "fix_install",
-    retryability: result.status === "ready" ? "not_retryable" : "retryable_after_fix",
+    reasonCodes,
+    nextAction: input.recoveryGuidance ? cliNextActionForRecoveryGuidance(input.recoveryGuidance) : result.status === "ready" ? "read_result" : "fix_install",
+    retryability: input.recoveryGuidance ? cliRetryabilityForRecoveryGuidance(input.recoveryGuidance) : result.status === "ready" ? "not_retryable" : "retryable_after_fix",
     redactionProfileRef: "cli-local-project:v1-redacted",
-    result
+    result: recoveryGuidance ? { ...result, recoveryGuidance } : result
   });
 }
 
@@ -21621,6 +22516,22 @@ var protocolReasonCodes = [
   code2("gateway_custody_proof_customer_evidence_missing", "transition_error", "credential_custody"),
   code2("gateway_custody_proof_drifted", "transition_error", "credential_custody"),
   code2("gateway_custody_proof_redaction_failed", "transition_error", "credential_custody"),
+  code2("typed_commitment_required_missing", "proof_gap", "policy"),
+  code2("typed_commitment_subject_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_params_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_idempotency_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_domain_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_set_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_verification_unavailable", "proof_gap", "policy"),
+  code2("typed_commitment_verification_refused", "policy_decision", "policy"),
+  code2("typed_commitment_replay_posture_missing", "proof_gap", "policy"),
+  code2("typed_commitment_replay_window_expired", "policy_decision", "policy"),
+  code2("typed_commitment_display_binding_drifted", "policy_decision", "policy"),
+  code2("typed_commitment_provider_downgrade_refused", "policy_decision", "policy"),
+  code2("typed_commitment_gateway_observed_set_missing", "gateway_decision", "gateway"),
+  code2("typed_commitment_gateway_observed_set_mismatch", "gateway_decision", "gateway"),
+  code2("typed_commitment_profile_unsupported", "policy_decision", "policy"),
+  code2("typed_commitment_ed25519_unsupported", "policy_decision", "policy"),
   code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
@@ -21646,6 +22557,15 @@ var protocolReasonCodes = [
   code2("protected_action_policy_readiness_binding_mismatch", "policy_decision", "policy"),
   code2("protected_action_policy_version_binding_missing", "proof_gap", "policy"),
   code2("protected_action_policy_version_binding_mismatch", "policy_decision", "policy"),
+  code2("ambiguous_runtime_graph", "recovery", "recovery"),
+  code2("idempotency_or_replay_conflict", "recovery", "recovery"),
+  code2("proof_gap_only_evidence", "recovery", "recovery"),
+  code2("raw_sibling_bypass_detected", "recovery", "recovery"),
+  code2("raw_sibling_posture_named_not_controlled", "recovery", "recovery"),
+  code2("unsafe_salvage_attempted", "recovery", "recovery"),
+  code2("x402_credential_custody_unsafe", "recovery", "recovery"),
+  code2("x402_gateway_posture_unknown", "recovery", "recovery"),
+  code2("x402_provider_environment_untrusted", "recovery", "recovery"),
   code2("idempotency_recovery_missing", "recovery", "recovery"),
   code2("idempotency_result_reusable", "recovery", "recovery"),
   code2("idempotency_terminal_unknown_recovery_required", "recovery", "recovery"),
@@ -21736,8 +22656,25 @@ var protocolReasonCodes = [
   }),
   code2("agentic_endpoint_access_schema_version_unsupported", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_delegation_evidence_kind_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_not_registered", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_scope_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_digest_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_sync_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_invalidated", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_config_revision_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_cloud_config_hmac_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_kernel_sync_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_local_fail_closed", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_local_resync_required", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_scheme_unsupported", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_signature_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_timestamp_expired", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_timestamp_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_callback_payload_unknown", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_callback_delivery_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_cloud_ingest_unavailable", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_outbox_commit_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_middleware_version_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_readiness_unknown", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_capability_report_missing", "proof_gap", "agentic_endpoint_access"),
@@ -21778,11 +22715,21 @@ var protocolReasonCodes = [
   code2("agentic_endpoint_access_isolation_state_stale", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_subject_quarantined", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_missing_clearance_proof", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_idempotency_key_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_idempotency_replay", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_delegation_evidence_missing", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_runtime_posture_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_ingress_contains_raw_authority_material", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_ingress_context_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_body_digest_mismatch", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_budget_exhausted", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_lease_ref_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_counter_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_commit_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_outcome_store_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_expired", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_revoked", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_handler_failed", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_downstream_fresh_contract_missing", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_validator_transcript_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_dry_run_transcript_missing", "proof_gap", "agentic_endpoint_access"),
@@ -22594,8 +23541,9 @@ var SupportBundleInputSchema = exports_external.strictObject({
   installHealth: ProtectedPathInstallHealthProjectionSchema.optional(),
   localX402Install: LocalX402InstallRecordSchema.optional(),
   localX402ProbeReport: LocalX402ProbeReportSchema.optional(),
+  recoveryGuidance: ProtectedActionRecoveryGuidanceSchema.optional(),
   operatorNotes: exports_external.array(exports_external.string().min(1).max(240)).max(12).default([])
-}).refine((input) => Boolean(input.contractView ?? input.agentTransactionEnvelope ?? input.receiptTimeline ?? input.installHealth ?? input.localX402Install ?? input.localX402ProbeReport), { message: "support bundle requires at least one redacted projection or local posture record" });
+}).refine((input) => Boolean(input.contractView ?? input.agentTransactionEnvelope ?? input.receiptTimeline ?? input.installHealth ?? input.localX402Install ?? input.localX402ProbeReport ?? input.recoveryGuidance), { message: "support bundle requires at least one redacted projection or local posture record" });
 var rawMaterialOmissions = [
   "payment_payload_material",
   "payment_payloads",
@@ -22640,6 +23588,8 @@ function supportBundleCommand(value) {
     reasonCodes.add(reason);
   for (const reason of input.localX402ProbeReport?.reasonCodes ?? [])
     reasonCodes.add(reason);
+  for (const reason of input.recoveryGuidance?.reasonCodes ?? [])
+    reasonCodes.add(reason);
   const sortedReasonCodes = [...reasonCodes].sort();
   const proofGapRefs = [
     ...input.agentTransactionEnvelope?.proofGapRefs ?? [],
@@ -22649,14 +23599,19 @@ function supportBundleCommand(value) {
     ...input.contractView?.evidenceRefs ?? [],
     ...input.agentTransactionEnvelope?.evidenceRefs ?? [],
     ...input.receiptTimeline?.proofGapRefs.map((ref) => `proof_gap:${ref}`) ?? [],
-    input.installHealth?.currentPostureRef ? `protected_path_posture:${input.installHealth.currentPostureRef}` : null
+    input.installHealth?.currentPostureRef ? `protected_path_posture:${input.installHealth.currentPostureRef}` : null,
+    ...input.recoveryGuidance?.sourceEvidenceRefs ?? [],
+    ...input.recoveryGuidance?.sourceTerminalEvidenceRefs ?? []
   ].filter((ref) => ref !== null);
+  const nextAction = input.recoveryGuidance ? cliNextActionForRecoveryGuidance(input.recoveryGuidance) : reasonCodes.size > 0 || proofGapRefs.length > 0 ? "read_evidence" : "read_result";
+  const retryability = input.recoveryGuidance ? cliRetryabilityForRecoveryGuidance(input.recoveryGuidance) : "not_retryable";
   return cliOutput({
     command: "support bundle",
     plane: "evidence",
     custodyRole: "review_custody",
     reasonCodes: sortedReasonCodes,
-    nextAction: reasonCodes.size > 0 || proofGapRefs.length > 0 ? "read_evidence" : "read_result",
+    nextAction,
+    retryability,
     redactionProfileRef: "cli-support-bundle:v1-redacted",
     evidenceRefs,
     proofGapRefs,
@@ -22676,7 +23631,8 @@ function supportBundleCommand(value) {
         receiptTimeline: projectionItem(input.receiptTimeline, "receipt-timeline:v0.2-redacted"),
         installHealth: projectionItem(input.installHealth, "protected-path-install-health:v0.2-redacted"),
         localX402Install: localItem(input.localX402Install, "local_compilation"),
-        localX402ProbeReport: localItem(input.localX402ProbeReport, "local_classification")
+        localX402ProbeReport: localItem(input.localX402ProbeReport, "local_classification"),
+        ...input.recoveryGuidance ? { recoveryGuidance: localItem(input.recoveryGuidance, "caller_supplied_recovery_guidance") } : {}
       },
       terminalPosture: input.receiptTimeline ? {
         policyDecisionStatus: input.receiptTimeline.policyDecisionStatus,
@@ -22700,6 +23656,7 @@ function supportBundleCommand(value) {
         reasonCode,
         nextMechanism: supportRunbookActionFor(reasonCode)
       })),
+      ...input.recoveryGuidance ? { recoveryGuidance: recoveryGuidanceCliSummary(input.recoveryGuidance) } : {},
       operatorNotes: input.operatorNotes,
       rawMaterialOmitted: rawMaterialOmissions,
       receiptExportCreated: false,
@@ -24698,6 +25655,9 @@ function actionContractIdsForRecord(record2) {
   const terminal = asRecord(payload.terminal);
   if (terminal)
     addString(ids, terminal.actionContractId);
+  const subject = asRecord(payload.subject);
+  if (typeof subject?.ref === "string")
+    addActionContractRef(ids, subject.ref);
   for (const ref of arrayOfStrings(payload.affectedObjectRefs)) {
     addActionContractRef(ids, ref);
   }
@@ -24980,6 +25940,39 @@ class InMemoryProtocolStore {
     this.endpointAccessLeaseClaims = nextEndpointAccessLeaseClaims;
     return "committed";
   }
+  async getEndpointAccessLeaseByGreenlightId(greenlightId, scope2) {
+    const claim = this.endpointAccessLeaseClaims.get(greenlightId);
+    if (!claim || !sameEndpointAccessScope(claim, scope2))
+      return null;
+    const record2 = await this.getRecord("agentic_endpoint_access_lease", claim.leaseId);
+    return record2 && sameEndpointAccessScope(record2, scope2) ? record2 : null;
+  }
+  async getEndpointAccessClearanceBindingByAttemptId(attemptId, scope2) {
+    const records2 = [];
+    for (const record2 of this.records.values()) {
+      if (record2.objectType !== "agentic_endpoint_access_clearance_binding")
+        continue;
+      if (!sameEndpointAccessScope(record2, scope2))
+        continue;
+      if (payloadString(record2.payload, "attemptId") !== attemptId)
+        continue;
+      records2.push(structuredClone(record2));
+    }
+    return sortEndpointAccessRecords(records2).at(-1) ?? null;
+  }
+  async listEndpointAccessUsageEventsByLeaseId(leaseId, scope2) {
+    const records2 = [];
+    for (const record2 of this.records.values()) {
+      if (record2.objectType !== "agentic_endpoint_access_usage_event")
+        continue;
+      if (!sameEndpointAccessScope(record2, scope2))
+        continue;
+      if (payloadString(record2.payload, "leaseId") !== leaseId)
+        continue;
+      records2.push(structuredClone(record2));
+    }
+    return sortEndpointAccessRecords(records2);
+  }
   async getEndpointAccessUsageCounter(key) {
     return this.endpointAccessUsageCounters.get(endpointAccessUsageCounterKey(key)) ?? 0;
   }
@@ -25053,6 +26046,21 @@ function isolationScopeKey(scopeRef) {
 }
 function endpointAccessUsageCounterKey(key) {
   return `${key.tenantId}:${key.organizationId}:${key.leaseId}:${key.usageKind}`;
+}
+function sameEndpointAccessScope(value, scope2) {
+  return value.tenantId === scope2.tenantId && value.organizationId === scope2.organizationId;
+}
+function payloadString(payload, key) {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload))
+    return null;
+  const value = payload[key];
+  return typeof value === "string" ? value : null;
+}
+function sortEndpointAccessRecords(records2) {
+  return records2.sort((left, right) => {
+    const createdAtOrder = left.createdAt.localeCompare(right.createdAt);
+    return createdAtOrder === 0 ? left.objectId.localeCompare(right.objectId) : createdAtOrder;
+  });
 }
 
 // src/http/admission/caller-auth.ts
@@ -25161,6 +26169,24 @@ var HostedScopeSchema = exports_external.enum([
 ]);
 var HostedTenantSourceSchema = exports_external.enum(["verifier_claims", "route_scope_match", "static_test_scope"]);
 var HostedRawReadPostureSchema = exports_external.enum(["unavailable", "disabled", "gated", "allowed"]);
+var HostedRawReadAuditPostureSchema = exports_external.strictObject({
+  sourceOwned: exports_external.boolean(),
+  productionEligible: exports_external.boolean(),
+  auditRecordObjectType: exports_external.literal("raw_record_read_audit"),
+  auditEventType: exports_external.literal("raw_evidence_read_audited"),
+  auditCommitBoundary: exports_external.literal("before_raw_record_response"),
+  auditPayloadIncludesRawRecord: exports_external.literal(false)
+});
+function buildHostedRawReadAuditPosture(overrides = {}) {
+  return {
+    sourceOwned: overrides.sourceOwned ?? false,
+    productionEligible: overrides.productionEligible ?? false,
+    auditRecordObjectType: "raw_record_read_audit",
+    auditEventType: "raw_evidence_read_audited",
+    auditCommitBoundary: "before_raw_record_response",
+    auditPayloadIncludesRawRecord: false
+  };
+}
 var HostedReadinessStateSchema = exports_external.enum([
   "active",
   "configured_but_unverified",
@@ -25283,6 +26309,7 @@ var HostedAdmissionConfigSchema = exports_external.strictObject({
   secretNames: exports_external.array(exports_external.string().min(1).max(200)),
   publicVarNames: exports_external.array(exports_external.string().min(1).max(200)),
   rawReadPosture: HostedRawReadPostureSchema,
+  rawReadAudit: HostedRawReadAuditPostureSchema.default(buildHostedRawReadAuditPosture()),
   redactionProfileRefs: exports_external.array(exports_external.string().min(1).max(200)).min(1),
   retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]),
   exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]),
@@ -25345,6 +26372,20 @@ var HostedAdmissionConfigSchema = exports_external.strictObject({
       message: "Promoted hosted modes must declare required secret names."
     });
   }
+  if (config2.deploymentMode === "production" && (config2.rawReadPosture === "gated" || config2.rawReadPosture === "allowed") && (!config2.rawReadAudit.sourceOwned || !config2.rawReadAudit.productionEligible)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["rawReadPosture"],
+      message: "Production raw evidence reads must stay disabled until raw-read audit evidence is source-owned."
+    });
+  }
+  if (config2.rawReadAudit.productionEligible && !config2.rawReadAudit.sourceOwned) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["rawReadAudit", "productionEligible"],
+      message: "Raw-read audit cannot be production eligible unless the audit evidence path is source-owned."
+    });
+  }
 });
 var HostedReadinessReportSchema = exports_external.strictObject({
   configured: exports_external.boolean(),
@@ -25400,6 +26441,7 @@ var HostedReadinessReportSchema = exports_external.strictObject({
     present: exports_external.boolean()
   })),
   rawReadPosture: HostedRawReadPostureSchema.nullable(),
+  rawReadAudit: HostedRawReadAuditPostureSchema.nullable(),
   redactionProfileRefs: exports_external.array(exports_external.string()),
   retentionPosture: exports_external.enum(["not_configured", "declared_non_certified", "disabled"]).nullable(),
   exportPosture: exports_external.enum(["disabled", "redacted_only", "not_configured"]).nullable(),
@@ -26372,6 +27414,14 @@ async function projectAgentTransactionEnvelope(input) {
   const surfaceOperationEvidenceRefs = redactedProjectionRefs(reconciliations.flatMap((reconciliation) => reconciliation.evidenceRefs));
   const credentialResolutionEvidence = scopedCredentialResolutionEvidence(input.credentialResolutionEvidence ?? [], input.contract);
   const credentialResolutionEvidenceRefs = credentialResolutionEvidence.map((evidence) => protocolObjectRef("credential_resolution_evidence", evidence.credentialResolutionEvidenceId)).filter(unique2);
+  const typedCommitments = scopedTypedCommitments(input.typedCommitments ?? [], input.contract);
+  const typedCommitmentRefs = typedCommitments.map((commitment) => protocolObjectRef("typed_action_commitment", commitment.typedActionCommitmentId)).filter(unique2);
+  const typedCommitmentSummaries = typedCommitments.map((commitment) => normalizeTypedCommitmentSummary(commitment));
+  const typedCommitmentSetDigest = typedCommitmentSummaries.length > 0 ? await commitmentSetDigest(typedCommitmentSummaries) : null;
+  const typedCommitmentProjectionClass = typedCommitments.length > 0 ? "operator_redacted" : null;
+  const typedCommitmentProjections = typedCommitments.map((commitment) => projectTypedActionCommitment(commitment, { projectionClass: "operator_redacted" }));
+  const typedCommitmentRefusalRefs = typedCommitments.flatMap((commitment) => commitment.refusalRefs).filter(unique2);
+  const typedCommitmentProofGapRefs = typedCommitments.flatMap((commitment) => commitment.proofGapRefs).filter(unique2);
   const signerInvocationEvidenceRefs = signerInvocationEvidenceRefsFor(surfaceOperationEvidenceRefs);
   const gatewayCredentialRefs = gatewayCredentialEvidenceRefs([
     ...surfaceOperationEvidenceRefs,
@@ -26389,6 +27439,7 @@ async function projectAgentTransactionEnvelope(input) {
     ...redactedProjectionRefs(input.ledger?.evidenceRefs ?? []),
     ...surfaceOperationEvidenceRefs,
     ...credentialResolutionEvidenceRefs,
+    ...typedCommitmentRefs,
     ...redactedProjectionRefs(credentialResolutionEvidence.flatMap((evidence) => evidence.evidenceRefs))
   ].filter(unique2);
   const authMdEvidenceRefs = projectAuthMdEvidenceRefs({
@@ -26438,6 +27489,13 @@ async function projectAgentTransactionEnvelope(input) {
     surfaceOperationEvidenceRefs,
     gatewayCredentialEvidenceRefs: gatewayCredentialRefs,
     credentialResolutionEvidenceRefs,
+    typedCommitmentRefs,
+    typedCommitmentSetDigest,
+    typedCommitmentProjectionClass,
+    typedCommitmentSummaries,
+    typedCommitmentProjections,
+    typedCommitmentRefusalRefs,
+    typedCommitmentProofGapRefs,
     signerInvocationEvidenceRefs,
     downstreamEvidenceRefs: downstreamRefs,
     authMdEvidenceRefs,
@@ -26498,6 +27556,9 @@ function scopedReconciliations(reconciliations, contract) {
 }
 function scopedCredentialResolutionEvidence(records2, contract) {
   return records2.filter((record2) => record2.actionContractId === contract.actionContractId);
+}
+function scopedTypedCommitments(records2, contract) {
+  return records2.filter((record2) => record2.actionContractId === contract.actionContractId || record2.subject.ref === protocolObjectRef("action_contract", contract.actionContractId));
 }
 function latestReconciliationFor(reconciliations) {
   return [...reconciliations].sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;
@@ -26861,6 +27922,7 @@ async function projectOperationReadback(input) {
   const reasonCodes = operationReadbackReasonCodes(envelope, input.policyDecision.decisionReasonCode);
   const safeToReuseGreenlight = greenlightUsePosture === "available_for_one_gateway_check";
   const requiresNewContract = operationReadbackRequiresNewContract(operationStatus);
+  const projectionFreshness = input.projectionFreshness ?? notObservedOperationReadbackProjectionFreshness();
   const supportContext = {
     schemaVersion: "handshake.support-context.v0.1",
     supportContextRef: `support_context:${input.contract.actionContractId}`,
@@ -26924,12 +27986,20 @@ async function projectOperationReadback(input) {
     rawInternalRecordIncluded: false,
     credentialMaterialIncluded: false,
     paymentMaterialIncluded: false,
+    typedCommitmentRefs: envelope.typedCommitmentRefs,
+    typedCommitmentSetDigest: envelope.typedCommitmentSetDigest,
+    typedCommitmentProjectionClass: envelope.typedCommitmentProjectionClass,
+    typedCommitmentSummaries: envelope.typedCommitmentSummaries,
+    typedCommitmentProjections: envelope.typedCommitmentProjections,
+    typedCommitmentRefusalRefs: envelope.typedCommitmentRefusalRefs,
+    typedCommitmentProofGapRefs: envelope.typedCommitmentProofGapRefs,
     evidenceRefs: envelope.evidenceRefs,
     proofGapRefs: envelope.proofGapRefs,
     refusalRefs: envelope.refusalRefs,
     recoveryRefs: envelope.recoveryRefs,
     isolationRefs: envelope.isolationRefs,
     authorityCertificateRefs: envelope.authorityCertificateRefs,
+    projectionFreshness,
     providerRequestRef: envelope.providerRequestRef,
     providerOperationRef: envelope.providerOperationRef,
     traceRef: envelope.providerRequestRef,
@@ -26944,6 +28014,23 @@ async function projectOperationReadback(input) {
       "paymentMaterial"
     ],
     supportContext
+  });
+}
+function notObservedOperationReadbackProjectionFreshness() {
+  return OperationReadbackProjectionFreshnessSchema.parse({
+    schemaVersion: "handshake.operation-readback-freshness.v0.1",
+    sourceAuthority: "protocol_store_projection",
+    readModelKind: "direct_protocol_store_projection",
+    status: "not_observed",
+    streamId: null,
+    partitionKey: null,
+    observedOffset: null,
+    observedEventDigest: null,
+    latestOffset: null,
+    latestEventDigest: null,
+    lagEvents: null,
+    rawStreamEventsIncluded: false,
+    authorityCreatedByFreshness: false
   });
 }
 function projectOperationCorrelationIndex(input) {
@@ -27124,6 +28211,7 @@ var protocolObjectRegistry = {
   delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
   gateway_custody_proof_packet: entry("gateway_custody_proof_packet", GatewayCustodyProofPacketSchema, (record2) => record2.payload.gatewayCustodyProofPacketId, "transition_evidence", "audit_read"),
   credential_resolution_evidence: entry("credential_resolution_evidence", CredentialResolutionEvidenceSchema, (record2) => record2.payload.credentialResolutionEvidenceId, "transition_evidence", "audit_read"),
+  typed_action_commitment: entry("typed_action_commitment", TypedActionCommitmentRecordSchema, (record2) => record2.payload.typedActionCommitmentId, "transition_evidence", "audit_read"),
   transition_request_context: entry("transition_request_context", TransitionRequestContextSchema, (record2) => record2.payload.transitionRequestContextId, "internal_evidence", "internal_only"),
   runtime_execution: entry("runtime_execution", RuntimeExecutionRecordSchema, (record2) => record2.payload.runtimeExecutionId, "transition_evidence", "audit_read"),
   generated_execution_graph: entry("generated_execution_graph", GeneratedExecutionGraphSchema, (record2) => record2.payload.generatedExecutionGraphId, "transition_evidence", "audit_read"),
@@ -27155,6 +28243,7 @@ var protocolObjectRegistry = {
   refusal: entry("refusal", RefusalSchema, (record2) => record2.payload.refusalId, "transition_evidence", "audit_read"),
   receipt: entry("receipt", ReceiptSchema, (record2) => record2.payload.receiptId, "receipt_evidence", "audit_read"),
   receipt_export: entry("receipt_export", ReceiptExportSchema, (record2) => record2.payload.receiptExportId, "receipt_evidence", "audit_read"),
+  raw_record_read_audit: entry("raw_record_read_audit", RawRecordReadAuditSchema, (record2) => record2.payload.rawRecordReadAuditId, "internal_evidence", "internal_only"),
   recovery_recommendation: entry("recovery_recommendation", RecoveryRecommendationSchema, (record2) => record2.payload.recoveryRecommendationId, "transition_evidence", "audit_read"),
   recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
   contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
@@ -27220,6 +28309,16 @@ function entry(objectType, schema, idSelector, exportPosture, rawReadPosture) {
 async function assembleAgentTransactionEnvelopeInput(store, contract) {
   return (await assembleAgentTransactionEnvelope(store, contract)).input;
 }
+async function assembleOperationReadbackInput(store, contract) {
+  const streamKey = actionLifecycleStreamKey(contract, contract.actionContractId);
+  const observedTail = await store.getStreamTail(streamKey.streamId, streamKey.partitionKey);
+  const assembly = await assembleAgentTransactionEnvelope(store, contract);
+  const latestTail = await store.getStreamTail(streamKey.streamId, streamKey.partitionKey);
+  return {
+    ...assembly.input,
+    projectionFreshness: operationReadbackProjectionFreshness(streamKey, observedTail, latestTail)
+  };
+}
 async function assembleAgentTransactionEnvelope(store, contract) {
   const scope2 = { tenantId: contract.tenantId, organizationId: contract.organizationId };
   const [
@@ -27231,6 +28330,7 @@ async function assembleAgentTransactionEnvelope(store, contract) {
     reconciliationRecords,
     authorityCertificateRecords,
     credentialResolutionEvidenceRecords2,
+    typedCommitmentRecords,
     recoveryRecommendationRecords,
     recoveryRecommendationStatusTransitionRecords
   ] = await Promise.all([
@@ -27242,6 +28342,7 @@ async function assembleAgentTransactionEnvelope(store, contract) {
     store.listRecordsByActionContract("surface_operation_reconciliation", contract.actionContractId, scope2),
     store.listRecordsByActionContract("authority_certificate", contract.actionContractId, scope2),
     store.listRecordsByActionContract("credential_resolution_evidence", contract.actionContractId, scope2),
+    store.listRecordsByActionContract("typed_action_commitment", contract.actionContractId, scope2),
     store.listRecordsByActionContract("recovery_recommendation", contract.actionContractId, scope2),
     store.listRecordsByActionContract("recovery_recommendation_status_transition", contract.actionContractId, scope2)
   ]);
@@ -27279,6 +28380,7 @@ async function assembleAgentTransactionEnvelope(store, contract) {
       refusals,
       reconciliations: scopedReconciliationRecords.map((record2) => record2.payload),
       credentialResolutionEvidence: credentialResolutionEvidence.map((record2) => record2.payload),
+      typedCommitments: typedCommitmentRecords.map((record2) => record2.payload),
       ledger: ledger?.payload ?? null,
       recoveryRefs: recoveryRefs(recoveryRecommendations, recoveryStatusTransitions),
       isolationRefs: activeIsolationStateRecords.map((record2) => protocolObjectRef("isolation_state", record2.payload.isolationStateId)).filter(unique3),
@@ -27286,6 +28388,7 @@ async function assembleAgentTransactionEnvelope(store, contract) {
     },
     supplementalRecords: [
       ...credentialResolutionEvidence,
+      ...typedCommitmentRecords,
       ...ledger ? [ledger] : [],
       ...recoveryRecommendations,
       ...recoveryStatusTransitions,
@@ -27293,6 +28396,25 @@ async function assembleAgentTransactionEnvelope(store, contract) {
       ...scopedReconciliationRecords
     ]
   };
+}
+function operationReadbackProjectionFreshness(streamKey, observedTail, latestTail) {
+  const status2 = latestTail === null ? "stream_tail_missing" : observedTail !== null && observedTail.offset === latestTail.offset && observedTail.eventDigest === latestTail.eventDigest ? "current" : "stale_or_concurrent_update";
+  const lagEvents = latestTail === null ? null : observedTail === null ? latestTail.offset + 1 : Math.max(0, latestTail.offset - observedTail.offset);
+  return OperationReadbackProjectionFreshnessSchema.parse({
+    schemaVersion: "handshake.operation-readback-freshness.v0.1",
+    sourceAuthority: "protocol_store_projection",
+    readModelKind: "direct_protocol_store_projection",
+    status: status2,
+    streamId: streamKey.streamId,
+    partitionKey: streamKey.partitionKey,
+    observedOffset: observedTail?.offset ?? null,
+    observedEventDigest: observedTail?.eventDigest ?? null,
+    latestOffset: latestTail?.offset ?? null,
+    latestEventDigest: latestTail?.eventDigest ?? null,
+    lagEvents,
+    rawStreamEventsIncluded: false,
+    authorityCreatedByFreshness: false
+  });
 }
 async function resolveReceiptTimelineDelegationProvenance(store, receipt) {
   const contractRecord = await store.getRecord("action_contract", receipt.actionContractId);
@@ -29833,6 +30955,9 @@ var GatewayCheckInputSchema = exports_external.strictObject({
   actionContractId: exports_external.string().min(1),
   greenlightId: exports_external.string().min(1),
   observedParameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  observedTypedCommitmentRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  observedTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  observedTypedCommitments: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
   surfaceOperationRef: exports_external.string().min(1).optional()
 });
 // src/protocol/areas/policy-greenlight/inputs.ts
@@ -29840,6 +30965,9 @@ var EvaluatePolicyInputSchema = exports_external.strictObject({
   actionContractId: exports_external.string().min(1),
   envelopeId: exports_external.string().min(1),
   policyEvaluatorVersion: exports_external.string().min(1).default("handshake-policy-0.2"),
+  requiredTypedCommitmentRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  requiredTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitments: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
   signingSecret: exports_external.string().min(1).optional(),
   reviewDecisionId: exports_external.string().min(1).optional()
 });
@@ -30266,11 +31394,11 @@ async function transitionAgreementStatus(store, recorder, inputValue) {
   return transition;
 }
 async function currentAgreementStatus(store, agreement) {
-  const transitions12 = await store.listRecordsByType("agreement_status_transition", {
+  const transitions13 = await store.listRecordsByType("agreement_status_transition", {
     tenantId: agreement.tenantId,
     organizationId: agreement.organizationId
   });
-  const ordered = transitions12.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
+  const ordered = transitions13.map((record2, index) => ({ transition: record2.payload, index })).filter((entry2) => entry2.transition.linkedAgreementId === agreement.linkedAgreementId).sort((left, right) => Date.parse(left.transition.createdAt) - Date.parse(right.transition.createdAt) || left.index - right.index);
   return ordered.at(-1)?.transition.toStatus ?? "active";
 }
 async function commitNegotiationRecord(recorder, record2, descriptor) {
@@ -30675,7 +31803,10 @@ async function buildPolicyDecision(input, contract, envelope, decisionValue, pol
     verificationPolicyRef: input.signingSecret ? "local-hmac-only" : null
   });
 }
-function buildGreenlight(contract, decision, now, protectedPathPosture, idempotencyLedgerKeyDigest2, idempotencyKey = contract.idempotencyKey) {
+function buildGreenlight(contract, decision, now, protectedPathPosture, idempotencyLedgerKeyDigest2, idempotencyKey = contract.idempotencyKey, typedCommitmentBinding = {
+  requiredTypedCommitmentRefs: [],
+  requiredTypedCommitmentSetDigest: null
+}) {
   return GreenlightSchema.parse({
     schemaVersion: PROTOCOL_VERSION,
     tenantId: contract.tenantId,
@@ -30702,6 +31833,8 @@ function buildGreenlight(contract, decision, now, protectedPathPosture, idempote
     gatewayCredentialRefDigests: contract.gatewayCredentialRefs.map((ref) => ref.gatewayCredentialRefDigest),
     delegatedAuthorityRefIds: contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefId),
     delegatedAuthorityRefDigests: contract.delegatedAuthorityRefs.map((ref) => ref.delegatedAuthorityRefDigest),
+    requiredTypedCommitmentRefs: typedCommitmentBinding.requiredTypedCommitmentRefs,
+    requiredTypedCommitmentSetDigest: typedCommitmentBinding.requiredTypedCommitmentSetDigest,
     paramsDigest: contract.paramsDigest,
     contractDigest: contract.actionContractDigest,
     idempotencyKey,
@@ -30924,12 +32057,13 @@ async function derivePolicyConstraintEvaluation(store, context) {
   const gatewayCredentialBindingEvaluation = await evaluateGatewayCredentialBindings(store, context.contract, context.now);
   const delegatedAuthorityBindingEvaluation = await evaluateDelegatedAuthorityBindings(store, context.contract, context.now);
   const agreementObligationEvaluation = await evaluateAgreementObligationPolicy(store, context.contract, context.now);
+  const typedCommitmentEvaluation = await evaluateTypedCommitmentPolicyInput(context.input);
   const intentCompilationRecord = await store.getRecord("intent_compilation", context.contract.intentCompilationId);
   const intentCompilation = intentCompilationRecord?.payload ?? null;
   const delegationEvidenceRequired = intentCompilation?.requiredEvidenceRefs.includes(DELEGATION_EVIDENCE_REQUIRED_REF) ?? false;
   const authorityLedger = await effectiveAuthorityLedger(context.contract, agreementObligationEvaluation);
   const idempotencyLedgerEntry = await store.getCurrentIdempotencyLedgerEntry(authorityLedger.ledgerKeyDigest);
-  const policyInput = buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, authorityLedger.ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation);
+  const policyInput = buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, authorityLedger.ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation, typedCommitmentEvaluation);
   const policyInputDigest = await digestCanonical(policyInput);
   return {
     ...context,
@@ -30944,6 +32078,7 @@ async function derivePolicyConstraintEvaluation(store, context) {
     gatewayCredentialBindingEvaluation,
     delegatedAuthorityBindingEvaluation,
     agreementObligationEvaluation,
+    typedCommitmentEvaluation,
     intentCompilation,
     delegationEvidenceRequired,
     policyInput,
@@ -30951,7 +32086,7 @@ async function derivePolicyConstraintEvaluation(store, context) {
     isolationSnapshot: isolationSnapshotRef(isolationStates)
   };
 }
-function buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation) {
+function buildPolicyInput(context, isolationStates, sequenceDependencyStates, protectedPathPosture, ledgerKeyDigest, idempotencyLedgerEntry, gatewayCredentialBindingEvaluation, delegatedAuthorityBindingEvaluation, agreementObligationEvaluation, typedCommitmentEvaluation) {
   return {
     contractDigest: context.contract.actionContractDigest,
     envelopeId: context.envelope.envelopeId,
@@ -30964,6 +32099,7 @@ function buildPolicyInput(context, isolationStates, sequenceDependencyStates, pr
     gatewayCredentialRefs: gatewayCredentialBindingEvaluation.policyInput,
     delegatedAuthorityRefs: delegatedAuthorityBindingEvaluation.policyInput,
     agreementObligation: agreementObligationEvaluation.policyInput,
+    typedCommitments: typedCommitmentEvaluation.policyInput,
     protectedPathPosture: protectedPathPolicyInput(protectedPathPosture, context.now),
     idempotencyLedger: {
       ledgerKeyDigest,
@@ -30983,6 +32119,7 @@ async function resolvePolicyDecisionValue(recorder, constraints) {
   decisionValue = applyDelegatedAuthorityPolicy(decisionValue, constraints);
   decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
   decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
+  decisionValue = applyTypedCommitmentPolicy(decisionValue, constraints);
   decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
   decisionValue = applyDelegationEvidencePolicy(decisionValue, constraints);
   decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
@@ -31003,6 +32140,7 @@ async function resolvePolicyDecisionValue(recorder, constraints) {
     decisionValue = applyDelegatedAuthorityPolicy(decisionValue, constraints);
     decisionValue = applyGatewayCredentialRefPolicy(decisionValue, constraints);
     decisionValue = applyAgreementObligationPolicy(decisionValue, constraints);
+    decisionValue = applyTypedCommitmentPolicy(decisionValue, constraints);
     decisionValue = applyExactProtectedActionPolicy(decisionValue, constraints);
     decisionValue = applyDelegationEvidencePolicy(decisionValue, constraints);
     decisionValue = applyIdempotencyLedgerPolicy(decisionValue, constraints);
@@ -31131,6 +32269,86 @@ function applyAgreementObligationPolicy(decisionValue, constraints) {
     reason: requirePolicyFailureValue(constraints.agreementObligationEvaluation.reason),
     matchedRuleIds: ["agreement_obligation_binding_required"]
   };
+}
+function applyTypedCommitmentPolicy(decisionValue, constraints) {
+  if (decisionValue.decision !== "greenlight" || constraints.typedCommitmentEvaluation.ok) {
+    return decisionValue;
+  }
+  return {
+    decision: constraints.typedCommitmentEvaluation.decision,
+    reasonCode: constraints.typedCommitmentEvaluation.reasonCode,
+    reason: constraints.typedCommitmentEvaluation.reason,
+    matchedRuleIds: ["typed_commitment_required_set"]
+  };
+}
+async function evaluateTypedCommitmentPolicyInput(input) {
+  const summaries = input.typedCommitments.map((summary) => normalizeTypedCommitmentSummary(summary));
+  const policyInput = {
+    requiredTypedCommitmentRefs: [...input.requiredTypedCommitmentRefs].sort(),
+    requiredTypedCommitmentSetDigest: input.requiredTypedCommitmentSetDigest,
+    typedCommitments: [...summaries].sort(compareTypedCommitmentSummaries2)
+  };
+  if (policyInput.requiredTypedCommitmentRefs.length === 0 && policyInput.requiredTypedCommitmentSetDigest === null && policyInput.typedCommitments.length === 0) {
+    return { ok: true, policyInput };
+  }
+  if (policyInput.requiredTypedCommitmentRefs.length === 0 || policyInput.typedCommitments.length === 0) {
+    return {
+      ok: false,
+      decision: "proof_gap",
+      reasonCode: "typed_commitment_required_missing",
+      reason: "Policy required typed commitment evidence, but refs or summaries were missing.",
+      policyInput
+    };
+  }
+  if (!sameStringSet2(policyInput.requiredTypedCommitmentRefs, policyInput.typedCommitments.map(commitmentRef))) {
+    return {
+      ok: false,
+      decision: "proof_gap",
+      reasonCode: "typed_commitment_required_missing",
+      reason: "Policy required typed commitment refs did not match supplied summaries.",
+      policyInput
+    };
+  }
+  if (policyInput.requiredTypedCommitmentSetDigest === null) {
+    return {
+      ok: false,
+      decision: "proof_gap",
+      reasonCode: "typed_commitment_set_digest_mismatch",
+      reason: "Policy required typed commitment set digest was missing.",
+      policyInput
+    };
+  }
+  const computedDigest = await commitmentSetDigest(policyInput.typedCommitments);
+  if (computedDigest !== policyInput.requiredTypedCommitmentSetDigest) {
+    return {
+      ok: false,
+      decision: "refuse",
+      reasonCode: "typed_commitment_set_digest_mismatch",
+      reason: "Policy required typed commitment set digest did not match supplied summaries.",
+      policyInput
+    };
+  }
+  const unsafeSummary = policyInput.typedCommitments.find((summary) => summary.verificationStatus !== "verified");
+  if (unsafeSummary) {
+    return {
+      ok: false,
+      decision: unsafeSummary.verificationStatus === "proof_gap" ? "proof_gap" : "refuse",
+      reasonCode: unsafeSummary.verificationStatus === "proof_gap" || unsafeSummary.verificationStatus === "unverified" ? "typed_commitment_verification_unavailable" : "typed_commitment_verification_refused",
+      reason: `Typed commitment ${unsafeSummary.typedActionCommitmentId} is not verified.`,
+      policyInput
+    };
+  }
+  const replayUnsafe = policyInput.typedCommitments.find((summary) => summary.replayStatus !== "fresh");
+  if (replayUnsafe) {
+    return {
+      ok: false,
+      decision: replayUnsafe.replayStatus === "missing" ? "proof_gap" : "refuse",
+      reasonCode: replayUnsafe.replayStatus === "missing" ? "typed_commitment_replay_posture_missing" : "typed_commitment_replay_window_expired",
+      reason: `Typed commitment ${replayUnsafe.typedActionCommitmentId} does not have fresh replay posture.`,
+      policyInput
+    };
+  }
+  return { ok: true, policyInput };
 }
 async function effectiveAuthorityLedger(contract, agreementObligationEvaluation) {
   const key = idempotencyLedgerKey(contract);
@@ -31291,7 +32509,7 @@ function evaluateExactProtectedActionPolicyContract(contract) {
   return null;
 }
 function buildGreenlightFromDecision(decision, constraints) {
-  return buildGreenlight(constraints.contract, decision, constraints.now, constraints.protectedPathPosture, constraints.policyInput.idempotencyLedger.ledgerKeyDigest);
+  return buildGreenlight(constraints.contract, decision, constraints.now, constraints.protectedPathPosture, constraints.policyInput.idempotencyLedger.ledgerKeyDigest, constraints.contract.idempotencyKey, constraints.policyInput.typedCommitments);
 }
 function exactProtectedActionPolicyInput(contract) {
   if (!exactProtectedActionPolicyApplies(contract))
@@ -31318,6 +32536,19 @@ function exactProtectedActionPolicyInput(contract) {
 }
 function exactProtectedActionPolicyApplies(contract) {
   return contract.actionClass === "x402_payment.exact" || hasParameter(contract.parameters, "gatewayReadinessRef") || hasParameter(contract.parameters, "gatewayReadinessDigest") || hasParameter(contract.parameters, "policyVersionRef") || hasParameter(contract.parameters, "policyVersionDigest") || hasParameter(contract.parameters, "paymentRequirementsDigest") || hasParameter(contract.parameters, "selectedPaymentRequirementIndex") || hasParameter(contract.parameters, "selectedPaymentRequirementDigest");
+}
+function commitmentRef(summary) {
+  return `typed_action_commitment:${summary.typedActionCommitmentId}`;
+}
+function compareTypedCommitmentSummaries2(left, right) {
+  return left.typedActionCommitmentId.localeCompare(right.typedActionCommitmentId) || left.commitmentDigest.localeCompare(right.commitmentDigest) || left.purpose.localeCompare(right.purpose);
+}
+function sameStringSet2(left, right) {
+  if (left.length !== right.length)
+    return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
 }
 function hasParameter(parameters, key) {
   return Object.prototype.hasOwnProperty.call(parameters, key);
@@ -31747,7 +32978,7 @@ function assertTransition3(result) {
   }
 }
 // src/protocol/areas/gateway-gate/gateway-policy.ts
-function gateRefusalReason(contract, greenlight, observedParamsDigest, idempotencyLedgerKeyDigest2, isolationStates, now, gatewayPolicyDriftReasonCode, delegatedAuthorityBindingReasonCode, gatewayCredentialBindingReasonCode, protectedPathReasonCode, sequenceDependencyReasonCode) {
+function gateRefusalReason(contract, greenlight, observedParamsDigest, idempotencyLedgerKeyDigest2, isolationStates, now, gatewayPolicyDriftReasonCode, delegatedAuthorityBindingReasonCode, gatewayCredentialBindingReasonCode, protectedPathReasonCode, sequenceDependencyReasonCode, typedCommitmentReasonCode = null) {
   if (greenlight.actionContractId !== contract.actionContractId)
     return "contract_mismatch";
   if (greenlight.gatewayRegistryEntryId !== contract.gatewayRegistryEntryId)
@@ -31804,6 +33035,8 @@ function gateRefusalReason(contract, greenlight, observedParamsDigest, idempoten
     return gatewayCredentialBindingReasonCode;
   if (protectedPathReasonCode)
     return protectedPathReasonCode;
+  if (typedCommitmentReasonCode)
+    return typedCommitmentReasonCode;
   const blockingIsolation = isolationStates.find((state) => ["review_only", "quarantined", "halted", "revoked", "state_suspect"].includes(state.state));
   if (blockingIsolation)
     return `current_isolation_${blockingIsolation.state}`;
@@ -32053,6 +33286,9 @@ function buildGateAttempt(input, gateDecision, reasonCode, mutationAttempt) {
     protectedPathPostureIdSeen: input.protectedPathPosture?.payload.protectedPathPostureId ?? null,
     protectedPathPostureDigestSeen: input.protectedPathPosture?.payload.postureDigest ?? null,
     protectedPathPostureStateSeen: input.protectedPathPosture?.payload.postureState ?? null,
+    observedTypedCommitmentRefs: input.typedCommitmentObservation.observedTypedCommitmentRefs,
+    observedTypedCommitmentSetDigest: input.typedCommitmentObservation.observedTypedCommitmentSetDigest,
+    typedCommitmentRefusalReasonCodes: input.typedCommitmentObservation.refusalReasonCode ? [input.typedCommitmentObservation.refusalReasonCode] : [],
     gateDecision,
     gateDecisionReasonCode: reasonCode,
     consumedGreenlight: !input.refusal,
@@ -32281,8 +33517,9 @@ async function deriveGatewayConstraintEvaluation(store, context) {
   const gatewayCredentialBindingEvaluation = await evaluateGatewayCredentialBindings(store, contract, now);
   const sequenceDependencyStates = await loadGatewayCheckSequenceDependencyStates(store, contract);
   const sequenceDependencyReasonCode = gatewayCheckSequenceDependencyRefusalReason(sequenceDependencyStates);
+  const typedCommitmentObservation = await evaluateGatewayTypedCommitmentObservation(context.input, greenlight);
   const gateAttemptId = createId("gat");
-  const refusal2 = gateRefusalReason(contract, greenlight, observedParamsDigest, ledgerKeyDigest, isolationStates, now, gatewayPolicyDrift.reasonCode, delegatedAuthorityBindingEvaluation.ok ? null : delegatedAuthorityBindingEvaluation.reasonCode, gatewayCredentialBindingEvaluation.ok ? null : gatewayCredentialBindingEvaluation.reasonCode, protectedPathEvaluation.ok ? null : protectedPathEvaluation.reasonCode, sequenceDependencyReasonCode);
+  const refusal2 = gateRefusalReason(contract, greenlight, observedParamsDigest, ledgerKeyDigest, isolationStates, now, gatewayPolicyDrift.reasonCode, delegatedAuthorityBindingEvaluation.ok ? null : delegatedAuthorityBindingEvaluation.reasonCode, gatewayCredentialBindingEvaluation.ok ? null : gatewayCredentialBindingEvaluation.reasonCode, protectedPathEvaluation.ok ? null : protectedPathEvaluation.reasonCode, sequenceDependencyReasonCode, typedCommitmentObservation.refusalReasonCode);
   return {
     input: context.input,
     contract,
@@ -32297,7 +33534,30 @@ async function deriveGatewayConstraintEvaluation(store, context) {
     delegatedAuthorityBindingEvaluation,
     gatewayCredentialBindingEvaluation,
     idempotencyLedgerEntry,
+    typedCommitmentObservation,
     refusal: refusal2
+  };
+}
+async function evaluateGatewayTypedCommitmentObservation(input, greenlight) {
+  const observedTypedCommitments = input.observedTypedCommitments.map((summary) => normalizeTypedCommitmentSummary(summary)).sort(compareTypedCommitmentSummaries3);
+  const computedObservedDigest = observedTypedCommitments.length > 0 ? await commitmentSetDigest(observedTypedCommitments) : null;
+  const observedTypedCommitmentSetDigest = input.observedTypedCommitmentSetDigest ?? computedObservedDigest;
+  const observedTypedCommitmentRefs = input.observedTypedCommitmentRefs.length > 0 ? [...input.observedTypedCommitmentRefs].sort() : observedTypedCommitments.map(commitmentRef2).sort();
+  let refusalReasonCode = null;
+  if (input.observedTypedCommitmentSetDigest && computedObservedDigest && input.observedTypedCommitmentSetDigest !== computedObservedDigest) {
+    refusalReasonCode = "typed_commitment_set_digest_mismatch";
+  } else if (greenlight.requiredTypedCommitmentSetDigest && !observedTypedCommitmentSetDigest) {
+    refusalReasonCode = "typed_commitment_gateway_observed_set_missing";
+  } else if (greenlight.requiredTypedCommitmentSetDigest && observedTypedCommitmentSetDigest !== greenlight.requiredTypedCommitmentSetDigest) {
+    refusalReasonCode = "typed_commitment_gateway_observed_set_mismatch";
+  } else if (greenlight.requiredTypedCommitmentRefs.length > 0 && !sameStringSet3(greenlight.requiredTypedCommitmentRefs, observedTypedCommitmentRefs)) {
+    refusalReasonCode = "typed_commitment_gateway_observed_set_mismatch";
+  }
+  return {
+    observedTypedCommitmentRefs,
+    observedTypedCommitmentSetDigest,
+    observedTypedCommitments,
+    refusalReasonCode
   };
 }
 async function buildGatewayCommitPlan(recorder, evaluation) {
@@ -32428,6 +33688,19 @@ function receiptMutationAttemptIndexEntriesFor(result) {
       createdAt: result.receipt.createdAt
     }
   ];
+}
+function commitmentRef2(summary) {
+  return `typed_action_commitment:${summary.typedActionCommitmentId}`;
+}
+function compareTypedCommitmentSummaries3(left, right) {
+  return left.typedActionCommitmentId.localeCompare(right.typedActionCommitmentId) || left.commitmentDigest.localeCompare(right.commitmentDigest) || left.purpose.localeCompare(right.purpose);
+}
+function sameStringSet3(left, right) {
+  if (left.length !== right.length)
+    return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
 }
 async function currentGatewayPolicyDrift(store, contract, greenlight) {
   const currentGatewayRecord = await store.getRecord("gateway_registry_entry", contract.gatewayRegistryEntryId);
@@ -33408,6 +34681,9 @@ class HandshakeKernel {
   recordGatewayCustodyProofPacket(input) {
     return recordGatewayCustodyProofPacket(this.recorder, input);
   }
+  recordTypedActionCommitment(input) {
+    return recordTypedActionCommitment(this.recorder, input);
+  }
   createAuthorityCertificate(input) {
     return createAuthorityCertificate(this.store, this.recorder, input);
   }
@@ -33807,21 +35083,9 @@ class D1ProtocolStore {
       await this.db.batch(this.statements.protocolCommitStatements(commit.records, commit.events, commit));
       return "committed";
     } catch (error51) {
-      if (isRecordDigestConflict(error51)) {
-        return "record_digest_conflict";
-      }
-      if (isGreenlightIssuanceConflict(error51)) {
-        return "greenlight_issuance_conflict";
-      }
-      if (isIdempotencyLedgerConflict(error51)) {
-        return "idempotency_ledger_conflict";
-      }
-      if (isRecoveryTerminalConflict3(error51)) {
-        return "recovery_terminal_conflict";
-      }
-      if (isStreamConflict(error51)) {
-        return "stream_conflict";
-      }
+      const classified = classifyD1ProtocolCommitError(error51);
+      if (classified)
+        return classified;
       throw error51;
     }
   }
@@ -33847,15 +35111,9 @@ class D1ProtocolStore {
       if (commit.consumption && await this.hasGreenlightConsumption(commit.consumption.greenlightId)) {
         return "already_consumed";
       }
-      if (isProtectedSurfaceOperationClaimConflict(error51)) {
-        return "operation_claim_conflict";
-      }
-      if (isReceiptMutationAttemptIndexConflict(error51)) {
-        return "receipt_index_conflict";
-      }
-      if (isStreamConflict(error51)) {
-        return "stream_conflict";
-      }
+      const classified = classifyD1GatewayCheckError(error51);
+      if (classified)
+        return classified;
       throw error51;
     }
   }
@@ -33870,15 +35128,12 @@ class D1ProtocolStore {
       await this.db.batch(statements);
       return "committed";
     } catch (error51) {
-      if (isEndpointAccessLeaseClaimConflict(error51) || await this.hasEndpointAccessLeaseClaim(commit.leaseClaim.greenlightId)) {
+      const classified = classifyD1EndpointAccessLeaseError(error51);
+      if (classified === "greenlight_already_leased" || await this.hasEndpointAccessLeaseClaim(commit.leaseClaim.greenlightId)) {
         return "greenlight_already_leased";
       }
-      if (isRecordDigestConflict(error51)) {
-        return "record_digest_conflict";
-      }
-      if (isStreamConflict(error51)) {
-        return "stream_conflict";
-      }
+      if (classified)
+        return classified;
       throw error51;
     }
   }
@@ -33903,15 +35158,9 @@ class D1ProtocolStore {
       await this.db.batch(statements);
       return "committed";
     } catch (error51) {
-      if (isEndpointAccessUsageCounterConflict(error51)) {
-        return "counter_conflict";
-      }
-      if (isRecordDigestConflict(error51)) {
-        return "record_digest_conflict";
-      }
-      if (isStreamConflict(error51)) {
-        return "stream_conflict";
-      }
+      const classified = classifyD1EndpointAccessUsageError(error51);
+      if (classified)
+        return classified;
       throw error51;
     }
   }
@@ -33922,6 +35171,39 @@ class D1ProtocolStore {
   async hasEndpointAccessLeaseClaim(greenlightId) {
     const row = await this.db.prepare("SELECT greenlight_id FROM agentic_endpoint_access_lease_claims WHERE greenlight_id = ?").bind(greenlightId).first();
     return row !== null;
+  }
+  async getEndpointAccessLeaseByGreenlightId(greenlightId, scope2) {
+    const row = await this.db.prepare(`SELECT lease_id
+         FROM agentic_endpoint_access_lease_claims
+         WHERE greenlight_id = ?
+           AND tenant_id = ?
+           AND organization_id = ?
+         LIMIT 1`).bind(greenlightId, scope2.tenantId, scope2.organizationId).first();
+    if (!row)
+      return null;
+    const record2 = await this.getRecord("agentic_endpoint_access_lease", row.lease_id);
+    return record2 && sameEndpointAccessScope2(record2, scope2) ? record2 : null;
+  }
+  async getEndpointAccessClearanceBindingByAttemptId(attemptId, scope2) {
+    const row = await this.db.prepare(`SELECT object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id
+         FROM protocol_records
+         WHERE object_type = 'agentic_endpoint_access_clearance_binding'
+           AND tenant_id = ?
+           AND organization_id = ?
+           AND json_extract(payload_json, '$.attemptId') = ?
+         ORDER BY created_at DESC, object_id DESC
+         LIMIT 1`).bind(scope2.tenantId, scope2.organizationId, attemptId).first();
+    return row ? rowToRecord(row) : null;
+  }
+  async listEndpointAccessUsageEventsByLeaseId(leaseId, scope2) {
+    const result = await this.db.prepare(`SELECT object_id, object_type, tenant_id, organization_id, schema_version, canonical_digest, payload_json, created_at, source_event_id
+         FROM protocol_records
+         WHERE object_type = 'agentic_endpoint_access_usage_event'
+           AND tenant_id = ?
+           AND organization_id = ?
+           AND json_extract(payload_json, '$.leaseId') = ?
+         ORDER BY created_at ASC, object_id ASC`).bind(scope2.tenantId, scope2.organizationId, leaseId).all();
+    return result.results.map(rowToRecord);
   }
 }
 function rowToRecord(row) {
@@ -33936,6 +35218,49 @@ function rowToRecord(row) {
     createdAt: row.created_at,
     sourceEventId: row.source_event_id
   };
+}
+function sameEndpointAccessScope2(value, scope2) {
+  return value.tenantId === scope2.tenantId && value.organizationId === scope2.organizationId;
+}
+function classifyD1ProtocolCommitError(error51) {
+  if (isRecordDigestConflict(error51))
+    return "record_digest_conflict";
+  if (isGreenlightIssuanceConflict(error51))
+    return "greenlight_issuance_conflict";
+  if (isIdempotencyLedgerConflict(error51))
+    return "idempotency_ledger_conflict";
+  if (isRecoveryTerminalConflict3(error51))
+    return "recovery_terminal_conflict";
+  if (isStreamConflict(error51))
+    return "stream_conflict";
+  return null;
+}
+function classifyD1GatewayCheckError(error51) {
+  if (isProtectedSurfaceOperationClaimConflict(error51))
+    return "operation_claim_conflict";
+  if (isReceiptMutationAttemptIndexConflict(error51))
+    return "receipt_index_conflict";
+  if (isStreamConflict(error51))
+    return "stream_conflict";
+  return null;
+}
+function classifyD1EndpointAccessLeaseError(error51) {
+  if (isEndpointAccessLeaseClaimConflict(error51))
+    return "greenlight_already_leased";
+  if (isRecordDigestConflict(error51))
+    return "record_digest_conflict";
+  if (isStreamConflict(error51))
+    return "stream_conflict";
+  return null;
+}
+function classifyD1EndpointAccessUsageError(error51) {
+  if (isEndpointAccessUsageCounterConflict(error51))
+    return "counter_conflict";
+  if (isRecordDigestConflict(error51))
+    return "record_digest_conflict";
+  if (isStreamConflict(error51))
+    return "stream_conflict";
+  return null;
 }
 function uniqueIsolationScopeRefs2(scopeRefs) {
   const seen = new Set;
@@ -34087,7 +35412,7 @@ async function handleEvidenceRead(c, options, fallbackStore, route) {
         if (!contractRecord || !callerCanReadRecord(admission.hostedIdentity, contractRecord)) {
           return recordNotFound(c, errorContext);
         }
-        const projection = await projectOperationReadback(await assembleAgentTransactionEnvelopeInput(store, contractRecord.payload));
+        const projection = await projectOperationReadback(await assembleOperationReadbackInput(store, contractRecord.payload));
         return c.json(projection);
       }
       case "getOperationCorrelationIndex": {
@@ -34240,6 +35565,7 @@ async function buildHostedReadinessReportAsync(env, options, fallbackStore) {
     secrets: config2.secretNames.map((name) => ({ name, present: Boolean(env?.[name]) })),
     publicVars: config2.publicVarNames.map((name) => ({ name, present: Boolean(env?.[name]) })),
     rawReadPosture: config2.rawReadPosture,
+    rawReadAudit: config2.rawReadAudit,
     redactionProfileRefs: [...config2.redactionProfileRefs],
     retentionPosture: config2.retentionPosture,
     exportPosture: config2.exportPosture,
@@ -34298,6 +35624,7 @@ function missingReadinessReport(serverVerifierConfigured) {
     secrets: [],
     publicVars: [],
     rawReadPosture: null,
+    rawReadAudit: null,
     redactionProfileRefs: [],
     retentionPosture: null,
     exportPosture: null,
@@ -34570,7 +35897,67 @@ function throwVerifierBodyTooLarge() {
     commitState: "not_started"
   });
 }
-
+// src/protocol/areas/raw-read-audit/transitions.ts
+async function recordRawRecordReadAudit(recorder, input) {
+  const requestedAt = nowIso();
+  const rawReadPurposeDigest = await digestCanonical({
+    purpose: input.rawReadPurpose,
+    expiresAt: input.rawReadExpiresAt,
+    targetObjectType: input.targetRecord.objectType,
+    targetObjectId: input.targetRecord.objectId,
+    callerIdentityRef: input.callerIdentity.callerIdentityRef
+  });
+  const audit = RawRecordReadAuditSchema.parse({
+    schemaVersion: PROTOCOL_VERSION,
+    tenantId: input.targetRecord.tenantId,
+    organizationId: input.targetRecord.organizationId,
+    createdAt: requestedAt,
+    rawRecordReadAuditId: createId("raw_read_audit"),
+    targetObjectType: input.targetRecord.objectType,
+    targetObjectId: input.targetRecord.objectId,
+    targetRecordDigest: input.targetRecord.canonicalDigest,
+    targetRecordSchemaVersion: input.targetRecord.schemaVersion,
+    targetRecordCreatedAt: input.targetRecord.createdAt,
+    callerIdentityRef: input.callerIdentity.callerIdentityRef,
+    callerSubjectDigest: input.callerIdentity.callerSubjectDigest,
+    authProviderRef: input.callerIdentity.authProviderRef,
+    authSessionDigest: input.callerIdentity.authSessionDigest,
+    serviceCredentialDigest: input.callerIdentity.serviceCredentialDigest,
+    projectId: input.callerIdentity.projectId,
+    workspaceId: input.callerIdentity.workspaceId,
+    custodyRoles: [...input.callerIdentity.custodyRoles],
+    hostedRoles: [...input.callerIdentity.hostedRoles],
+    hostedScopes: [...input.callerIdentity.hostedScopes],
+    rawReadPurposeDigest,
+    purposeRedactionPolicyId: "hosted-raw-read-purpose-digest.v1",
+    rawReadExpiresAt: input.rawReadExpiresAt,
+    routeId: "readProtocolRecord",
+    requestMethod: "GET",
+    requestedAt,
+    rawRecordReturned: true,
+    rawRecordPayloadIncludedInAudit: false,
+    authorityBoundary: rawRecordReadAuditAuthorityBoundary
+  });
+  await recorder.commitRecordsWithEvents([{ objectType: "raw_record_read_audit", payload: audit }], [
+    {
+      source: audit,
+      eventType: "raw_evidence_read_audited",
+      objectRefs: [audit.rawRecordReadAuditId, input.targetRecord.objectId],
+      payload: {
+        rawRecordReadAuditId: audit.rawRecordReadAuditId,
+        targetObjectType: audit.targetObjectType,
+        targetObjectId: audit.targetObjectId,
+        targetRecordDigest: audit.targetRecordDigest,
+        rawReadPurposeDigest: audit.rawReadPurposeDigest,
+        callerIdentityRef: audit.callerIdentityRef,
+        rawRecordReturned: true,
+        rawRecordPayloadIncludedInAudit: false,
+        authorityCreated: false
+      }
+    }
+  ], { recordConflictMode: "absent_or_same" });
+  return audit;
+}
 // src/http/handlers/internal-record-read.ts
 async function handleInternalRecordRead(c, options, fallbackStore) {
   const errorContext = {
@@ -34599,6 +35986,14 @@ async function handleInternalRecordRead(c, options, fallbackStore) {
   const record2 = await storeFor(c, fallbackStore).getRecord(objectTypeResult.data, objectId);
   if (!record2 || admission.hostedIdentity && (admission.hostedIdentity.tenantId !== record2.tenantId || admission.hostedIdentity.organizationId !== record2.organizationId)) {
     return recordNotFound2(c, errorContext);
+  }
+  if (admission.hostedIdentity) {
+    await recordRawRecordReadAudit(new ProtocolRecorder(storeFor(c, fallbackStore)), {
+      targetRecord: record2,
+      callerIdentity: admission.hostedIdentity,
+      rawReadPurpose: c.req.raw.headers.get("x-handshake-raw-read-purpose") ?? "",
+      rawReadExpiresAt: c.req.raw.headers.get("x-handshake-raw-read-expires-at") ?? ""
+    });
   }
   return c.json(record2);
 }
@@ -36824,8 +38219,8 @@ var openApiDocument = {
     "/v0.2/hosted/readiness": {
       get: {
         summary: "Read hosted admission and redacted evidence readiness posture",
-        description: "Readiness posture only; not hosted mutation authority, payment management, settlement, provider custody, or compliance certification.",
-        security: transitionSecurity("control_plane"),
+        description: "Readiness posture only. Local mode admits control-plane fixture custody; hosted mode admits review-custody hosted identities with hosted:readiness:read entitlement. This is not production org auth, hosted mutation authority, payment management, settlement, provider custody, or compliance certification.",
+        security: transitionSecurity(["control_plane", "review_custody"]),
         responses: {
           "200": jsonResponse("Hosted readiness posture report", HostedReadinessReportSchema),
           "401": errorResponse2,
@@ -36902,7 +38297,8 @@ function jsonResponse(description, schema) {
   };
 }
 function transitionSecurity(role) {
-  return [{ [transitionCallerSecuritySchemeName(role)]: [] }];
+  const roles = Array.isArray(role) ? role : [role];
+  return roles.map((entry2) => ({ [transitionCallerSecuritySchemeName(entry2)]: [] }));
 }
 function transitionHeaderParameters() {
   return [

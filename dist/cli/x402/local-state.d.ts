@@ -368,8 +368,8 @@ export declare const LocalX402ReadinessReportSchema: z.ZodObject<{
     }, z.core.$strict>>;
     checks: z.ZodObject<{
         projectConfig: z.ZodEnum<{
-            present: "present";
             missing: "missing";
+            present: "present";
         }>;
         installCompilation: z.ZodEnum<{
             refused: "refused";
@@ -408,11 +408,14 @@ export declare const LocalX402ReadinessReportSchema: z.ZodObject<{
         }>;
         probeFreshness: z.ZodEnum<{
             stale: "stale";
-            missing: "missing";
             fresh: "fresh";
+            missing: "missing";
         }>;
     }, z.core.$strict>;
     proofGapPostures: z.ZodArray<z.ZodEnum<{
+        custody_proof_missing: "custody_proof_missing";
+        custody_proof_stale: "custody_proof_stale";
+        custody_proof_unverified: "custody_proof_unverified";
         project_config_missing: "project_config_missing";
         install_missing: "install_missing";
         install_refused: "install_refused";
@@ -423,9 +426,6 @@ export declare const LocalX402ReadinessReportSchema: z.ZodObject<{
         trusted_gateway_posture_invalid: "trusted_gateway_posture_invalid";
         trusted_gateway_posture_missing: "trusted_gateway_posture_missing";
         trusted_gateway_posture_stale: "trusted_gateway_posture_stale";
-        custody_proof_missing: "custody_proof_missing";
-        custody_proof_unverified: "custody_proof_unverified";
-        custody_proof_stale: "custody_proof_stale";
     }>>;
     proofGapReasonCodes: z.ZodArray<z.ZodString>;
     nonClaims: z.ZodArray<z.ZodString>;

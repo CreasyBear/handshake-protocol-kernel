@@ -24218,6 +24218,22 @@ var protocolReasonCodes = [
   code2("gateway_custody_proof_customer_evidence_missing", "transition_error", "credential_custody"),
   code2("gateway_custody_proof_drifted", "transition_error", "credential_custody"),
   code2("gateway_custody_proof_redaction_failed", "transition_error", "credential_custody"),
+  code2("typed_commitment_required_missing", "proof_gap", "policy"),
+  code2("typed_commitment_subject_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_params_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_idempotency_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_domain_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_set_digest_mismatch", "policy_decision", "policy"),
+  code2("typed_commitment_verification_unavailable", "proof_gap", "policy"),
+  code2("typed_commitment_verification_refused", "policy_decision", "policy"),
+  code2("typed_commitment_replay_posture_missing", "proof_gap", "policy"),
+  code2("typed_commitment_replay_window_expired", "policy_decision", "policy"),
+  code2("typed_commitment_display_binding_drifted", "policy_decision", "policy"),
+  code2("typed_commitment_provider_downgrade_refused", "policy_decision", "policy"),
+  code2("typed_commitment_gateway_observed_set_missing", "gateway_decision", "gateway"),
+  code2("typed_commitment_gateway_observed_set_mismatch", "gateway_decision", "gateway"),
+  code2("typed_commitment_profile_unsupported", "policy_decision", "policy"),
+  code2("typed_commitment_ed25519_unsupported", "policy_decision", "policy"),
   code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
@@ -24243,6 +24259,15 @@ var protocolReasonCodes = [
   code2("protected_action_policy_readiness_binding_mismatch", "policy_decision", "policy"),
   code2("protected_action_policy_version_binding_missing", "proof_gap", "policy"),
   code2("protected_action_policy_version_binding_mismatch", "policy_decision", "policy"),
+  code2("ambiguous_runtime_graph", "recovery", "recovery"),
+  code2("idempotency_or_replay_conflict", "recovery", "recovery"),
+  code2("proof_gap_only_evidence", "recovery", "recovery"),
+  code2("raw_sibling_bypass_detected", "recovery", "recovery"),
+  code2("raw_sibling_posture_named_not_controlled", "recovery", "recovery"),
+  code2("unsafe_salvage_attempted", "recovery", "recovery"),
+  code2("x402_credential_custody_unsafe", "recovery", "recovery"),
+  code2("x402_gateway_posture_unknown", "recovery", "recovery"),
+  code2("x402_provider_environment_untrusted", "recovery", "recovery"),
   code2("idempotency_recovery_missing", "recovery", "recovery"),
   code2("idempotency_result_reusable", "recovery", "recovery"),
   code2("idempotency_terminal_unknown_recovery_required", "recovery", "recovery"),
@@ -24333,8 +24358,25 @@ var protocolReasonCodes = [
   }),
   code2("agentic_endpoint_access_schema_version_unsupported", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_delegation_evidence_kind_unsupported", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_not_registered", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_scope_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_digest_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_sync_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_config_invalidated", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_config_revision_stale", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_cloud_config_hmac_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_kernel_sync_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_local_fail_closed", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_local_resync_required", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_scheme_unsupported", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_signature_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_timestamp_expired", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_hmac_timestamp_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_callback_payload_unknown", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_callback_delivery_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_cloud_ingest_unavailable", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_outbox_commit_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_middleware_version_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_readiness_unknown", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_capability_report_missing", "proof_gap", "agentic_endpoint_access"),
@@ -24375,11 +24417,21 @@ var protocolReasonCodes = [
   code2("agentic_endpoint_access_isolation_state_stale", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_subject_quarantined", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_missing_clearance_proof", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_idempotency_key_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_idempotency_replay", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_delegation_evidence_missing", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_runtime_posture_missing", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_ingress_contains_raw_authority_material", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_ingress_context_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_body_digest_mismatch", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_budget_exhausted", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_lease_ref_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_counter_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_commit_conflict", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_outcome_store_conflict", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_expired", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_revoked", "refusal", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_handler_failed", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_downstream_fresh_contract_missing", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_validator_transcript_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_dry_run_transcript_missing", "proof_gap", "agentic_endpoint_access"),
@@ -28197,6 +28249,204 @@ var mcpProposalTools = [
   }
 ];
 
+// src/surfaces/protected-action-recovery-guidance.ts
+var PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION = "handshake.surface.protected-action-recovery-guidance.v1";
+var sha256DigestSchema2 = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var nonEmptyStringSchema = exports_external.string().min(1);
+var ProtectedActionRecoveryGuidanceSourceKindSchema = exports_external.enum([
+  "protocol_recovery_projection",
+  "pre_contract_surface_guidance"
+]);
+var ProtectedActionRecoveryGuidanceOutcomeSchema = exports_external.enum([
+  "draft_available",
+  "reload_required",
+  "recraft_required",
+  "read_evidence",
+  "abandon_required",
+  "stop"
+]);
+var ProtectedActionRecoveryGuidanceFindingCategorySchema = exports_external.enum([
+  "x402_metadata_stale",
+  "x402_policy_or_readiness_stale",
+  "x402_install_not_ready",
+  "x402_gateway_offline",
+  "x402_gateway_posture_unknown",
+  "x402_amount_over_bound",
+  "x402_request_body_unsupported",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "x402_custody_proof_unverified",
+  "x402_selected_requirement_mismatch",
+  "runtime_dynamic_tool_construction",
+  "runtime_late_bound_parameters",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_posture_named_not_controlled",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "proof_gap_only_evidence",
+  "isolation_or_quarantine_active",
+  "draft_stale_or_intent_changed",
+  "draft_superseded_by_stricter_draft",
+  "draft_guidance_stale",
+  "surface_next_action_projection",
+  "protocol_recovery_recommendation_present"
+]);
+var ProtectedActionRecoveryAbandonQualityClassSchema = exports_external.enum([
+  "good_abandon",
+  "avoidable_abandon",
+  "ambiguous_abandon",
+  "stale_abandon",
+  "operator_abandon"
+]);
+var ProtectedActionRecoveryFindingSchema = exports_external.strictObject({
+  category: ProtectedActionRecoveryGuidanceFindingCategorySchema,
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  affectedFields: exports_external.array(nonEmptyStringSchema),
+  guidanceOutcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  draftEligible: exports_external.boolean()
+});
+var ProtectedActionRecoveryCandidateDraftSchema = exports_external.strictObject({
+  draftId: nonEmptyStringSchema,
+  draftDigest: sha256DigestSchema2,
+  sourceRefs: exports_external.array(nonEmptyStringSchema),
+  digestInputsToPreserve: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  requiredFreshProposalPath: nonEmptyStringSchema,
+  supersedesDraftRefs: exports_external.array(nonEmptyStringSchema),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  redactionProfile: nonEmptyStringSchema
+});
+var ProtectedActionRecoveryAgentHandoffSchema = exports_external.strictObject({
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  readback: nonEmptyStringSchema,
+  requiredRefs: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  allowedNextMechanism: exports_external.enum([
+    "submit_fresh_proposal",
+    "reload_evidence",
+    "recraft_request",
+    "read_evidence",
+    "abandon_current_material",
+    "stop_and_escalate"
+  ]),
+  disallowedActions: exports_external.array(nonEmptyStringSchema),
+  stopReasons: exports_external.array(nonEmptyStringSchema),
+  nonClaims: exports_external.array(nonEmptyStringSchema)
+});
+var ProtectedActionRecoverySourceErrorSchema = exports_external.strictObject({
+  code: nonEmptyStringSchema,
+  failureClass: nonEmptyStringSchema,
+  failurePhase: nonEmptyStringSchema.nullable(),
+  requiresNewContract: exports_external.boolean(),
+  status: exports_external.number().int().min(100).max(599)
+});
+var ProtectedActionRecoveryGuidanceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION),
+  guidanceId: nonEmptyStringSchema,
+  sourceKind: ProtectedActionRecoveryGuidanceSourceKindSchema,
+  protectedSurfaceKind: nonEmptyStringSchema,
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  sourceReceiptRef: nonEmptyStringSchema.nullable(),
+  sourceProofGapRef: nonEmptyStringSchema.nullable(),
+  sourceRefusalRef: nonEmptyStringSchema.nullable(),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  recommendationDigest: sha256DigestSchema2.nullable(),
+  sourceTerminalEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  findings: exports_external.array(ProtectedActionRecoveryFindingSchema),
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  abandonQuality: ProtectedActionRecoveryAbandonQualityClassSchema.nullable(),
+  unsafeSalvageAttemptPrevented: exports_external.boolean(),
+  sourceError: ProtectedActionRecoverySourceErrorSchema.nullable(),
+  mustCreateNewActionContract: exports_external.literal(true),
+  mayReuseGreenlight: exports_external.literal(false),
+  authorityCreated: exports_external.literal(false),
+  authorityCertificateMinted: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  gatewayCheckPerformed: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false),
+  mutationAttempted: exports_external.literal(false),
+  mutationCommandIncluded: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  receiptExportCreated: exports_external.literal(false),
+  policyDecisionRef: exports_external.null(),
+  greenlightRef: exports_external.null(),
+  gatewayCheckRef: exports_external.null(),
+  receiptRef: exports_external.null(),
+  authorityCertificateRef: exports_external.null(),
+  mutationAttemptRef: exports_external.null(),
+  agentHandoff: ProtectedActionRecoveryAgentHandoffSchema,
+  candidateDraft: ProtectedActionRecoveryCandidateDraftSchema.optional()
+}).superRefine((guidance, ctx) => {
+  if (guidance.sourceKind === "protocol_recovery_projection") {
+    if (!guidance.recoveryRecommendationId) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "protocol recovery projections require recoveryRecommendationId"
+      });
+    }
+    if (!guidance.recommendationDigest) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "protocol recovery projections require recommendationDigest"
+      });
+    }
+    if (guidance.sourceTerminalEvidenceRefs.length === 0) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["sourceTerminalEvidenceRefs"],
+        message: "protocol recovery projections require source terminal evidence refs"
+      });
+    }
+  }
+  if (guidance.sourceKind === "pre_contract_surface_guidance") {
+    if (guidance.recoveryRecommendationId !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "pre-contract guidance cannot claim a recovery recommendation"
+      });
+    }
+    if (guidance.recommendationDigest !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "pre-contract guidance cannot claim a recovery recommendation digest"
+      });
+    }
+  }
+  if (guidance.candidateDraft && guidance.outcome !== "draft_available") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["candidateDraft"],
+      message: "candidateDraft is legal only when outcome is draft_available"
+    });
+  }
+  if (guidance.outcome === "abandon_required" && guidance.abandonQuality === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["abandonQuality"],
+      message: "abandon_required requires abandonQuality"
+    });
+  }
+});
+function parseProtectedActionRecoveryGuidance(value) {
+  return ProtectedActionRecoveryGuidanceSchema.parse(value);
+}
+var candidateDraftBlockingFindingCategories = new Set([
+  "x402_gateway_posture_unknown",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "isolation_or_quarantine_active",
+  "draft_guidance_stale"
+]);
+
 // src/mcp/reference-transcript-fixtures.ts
 var MCP_REFERENCE_METADATA_URI = "handshake://metadata/actions/x402_payment.exact";
 var MCP_REFERENCE_RECEIPT_TIMELINE_URI = "handshake://evidence/receipts/rcp_mcp_gap/timeline";
@@ -28309,9 +28559,158 @@ function referenceEvidenceClient() {
         actionContractId,
         installPosture: "reference_only"
       };
+    },
+    async getRecoveryGuidanceProjection(guidanceId) {
+      return referenceRecoveryGuidance(guidanceId);
+    },
+    async getRecentRecoveryGuidanceProjection(scopeRef) {
+      return [referenceRecoveryGuidance(`recent:${scopeRef}`)];
+    },
+    async getRecoveryDraftDiffProjection(guidanceId) {
+      return {
+        projection: "recovery_draft_diff",
+        guidanceId,
+        redactionProfileRef: "reference-transcript-redacted"
+      };
     }
   };
 }
+function referenceRecoveryGuidance(guidanceId) {
+  return parseProtectedActionRecoveryGuidance({
+    schemaVersion: "handshake.surface.protected-action-recovery-guidance.v1",
+    guidanceId,
+    sourceKind: "pre_contract_surface_guidance",
+    protectedSurfaceKind: "x402_payment.exact",
+    sourceEvidenceRefs: ["evidence:reference-guidance"],
+    sourceReceiptRef: null,
+    sourceProofGapRef: null,
+    sourceRefusalRef: null,
+    recoveryRecommendationId: null,
+    recommendationDigest: null,
+    sourceTerminalEvidenceRefs: [],
+    reasonCodes: ["proof_gap_only_evidence"],
+    findings: [
+      {
+        category: "proof_gap_only_evidence",
+        reasonCodes: ["proof_gap_only_evidence"],
+        sourceEvidenceRefs: ["evidence:reference-guidance"],
+        affectedFields: [],
+        guidanceOutcome: "read_evidence",
+        draftEligible: false
+      }
+    ],
+    outcome: "read_evidence",
+    abandonQuality: null,
+    unsafeSalvageAttemptPrevented: false,
+    sourceError: null,
+    mustCreateNewActionContract: true,
+    mayReuseGreenlight: false,
+    authorityCreated: false,
+    authorityCertificateMinted: false,
+    credentialMaterialIncluded: false,
+    gatewayCheckPerformed: false,
+    greenlightCreated: false,
+    mutationAttempted: false,
+    mutationCommandIncluded: false,
+    rawInternalRecordIncluded: false,
+    receiptExportCreated: false,
+    policyDecisionRef: null,
+    greenlightRef: null,
+    gatewayCheckRef: null,
+    receiptRef: null,
+    authorityCertificateRef: null,
+    mutationAttemptRef: null,
+    agentHandoff: {
+      outcome: "read_evidence",
+      readback: "Read reference recovery guidance evidence.",
+      requiredRefs: ["evidence:reference-guidance"],
+      missingInputs: [],
+      allowedNextMechanism: "read_evidence",
+      disallowedActions: ["reuse_greenlight"],
+      stopReasons: [],
+      nonClaims: ["not_permission"]
+    }
+  });
+}
+
+// src/mcp/recovery-guidance/index.ts
+var MCP_RECOVERY_GUIDANCE_READBACK_VERSION = "handshake.mcp.recovery-guidance-readback.v1";
+var MCP_RECENT_RECOVERY_GUIDANCE_READBACK_VERSION = "handshake.mcp.recent-recovery-guidance-readback.v1";
+var MCP_RECOVERY_DRAFT_DIFF_READBACK_VERSION = "handshake.mcp.recovery-draft-diff-readback.v1";
+function mcpRecoveryGuidanceReadbackPayload(guidance) {
+  const parsedGuidance = parseProtectedActionRecoveryGuidance(guidance);
+  return {
+    ...mcpReadOnlyNonAuthorityFields(),
+    resourceVersion: MCP_RECOVERY_GUIDANCE_READBACK_VERSION,
+    guidanceId: parsedGuidance.guidanceId,
+    guidance: parsedGuidance,
+    redactionProfile: "mcp_recovery_guidance_redacted_v1",
+    nonClaims: mcpRecoveryGuidanceNonClaims
+  };
+}
+function mcpRecentRecoveryGuidanceReadbackPayload(scopeRef, guidance) {
+  const parsedGuidance = guidance.map((entry) => parseProtectedActionRecoveryGuidance(entry));
+  return {
+    ...mcpReadOnlyNonAuthorityFields(),
+    resourceVersion: MCP_RECENT_RECOVERY_GUIDANCE_READBACK_VERSION,
+    scopeRef,
+    guidance: parsedGuidance,
+    redactionProfile: "mcp_recovery_guidance_redacted_v1",
+    nonClaims: mcpRecoveryGuidanceNonClaims
+  };
+}
+function mcpRecoveryDraftDiffReadbackPayload(guidanceId, diff) {
+  const parsedDiff = McpRecoveryDraftDiffSchema.parse(diff);
+  return {
+    ...mcpReadOnlyNonAuthorityFields(),
+    resourceVersion: MCP_RECOVERY_DRAFT_DIFF_READBACK_VERSION,
+    guidanceId,
+    diff: parsedDiff,
+    redactionProfile: "mcp_recovery_guidance_redacted_v1",
+    nonClaims: mcpRecoveryGuidanceNonClaims
+  };
+}
+function mcpReadOnlyNonAuthorityFields() {
+  return {
+    readOnly: true,
+    authorityCreated: false,
+    authorityCertificateMinted: false,
+    credentialMaterialIncluded: false,
+    gatewayCheckPerformed: false,
+    greenlightCreated: false,
+    mutationAttempted: false,
+    mutationCommandIncluded: false,
+    rawInternalRecordIncluded: false,
+    receiptExportCreated: false
+  };
+}
+var mcpRecoveryGuidanceNonClaims = [
+  "recovery guidance is readback, not permission",
+  "recovery guidance is not a policy decision",
+  "recovery guidance is not a greenlight",
+  "recovery guidance is not gateway enforcement",
+  "recovery guidance is not a protected-surface mutation"
+];
+var nonEmptyStringSchema2 = exports_external.string().min(1);
+var McpRecoveryDraftDiffSchema = exports_external.strictObject({
+  projection: exports_external.literal("draft_diff"),
+  guidanceId: nonEmptyStringSchema2,
+  draftId: nonEmptyStringSchema2.optional(),
+  draftDigest: exports_external.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+  supersedesDraftRefs: exports_external.array(nonEmptyStringSchema2).optional(),
+  digestInputsToPreserve: exports_external.array(nonEmptyStringSchema2).optional(),
+  missingInputs: exports_external.array(nonEmptyStringSchema2).optional(),
+  requiredFreshProposalPath: nonEmptyStringSchema2.optional(),
+  redactionProfile: nonEmptyStringSchema2.optional(),
+  notCandidateAction: exports_external.literal(true).optional(),
+  notToolCallDraft: exports_external.literal(true).optional(),
+  notActionContract: exports_external.literal(true).optional(),
+  notMcpSubmissionPayload: exports_external.literal(true).optional(),
+  notPaymentRequest: exports_external.literal(true).optional(),
+  notSignerInput: exports_external.literal(true).optional(),
+  notGatewayCheckInput: exports_external.literal(true).optional(),
+  notMutationCommand: exports_external.literal(true).optional()
+});
 
 // src/mcp/resources.ts
 var McpResourceReadSchema = exports_external.strictObject({
@@ -28385,6 +28784,15 @@ function parseMcpResourceUri(uri) {
   if (parsed.hostname === "certificates" && segments[0]) {
     return { kind: "certificateRef", authorityCertificateId: segments[0] };
   }
+  if (parsed.hostname === "guidance" && segments[0] === "recovery" && segments[1] === "recent" && segments[2]) {
+    return { kind: "recentRecoveryGuidance", scopeRef: segments[2] };
+  }
+  if (parsed.hostname === "guidance" && segments[0] === "recovery" && segments[1] && segments[2] === "draft-diff") {
+    return { kind: "recoveryDraftDiff", guidanceId: segments[1] };
+  }
+  if (parsed.hostname === "guidance" && segments[0] === "recovery" && segments[1]) {
+    return { kind: "recoveryGuidance", guidanceId: segments[1] };
+  }
   throw new Error("Unsupported MCP resource URI.");
 }
 async function readPayload(parsed, evidenceClient) {
@@ -28435,6 +28843,12 @@ async function readPayload(parsed, evidenceClient) {
         authorityCreated: false,
         verificationPosture: "cli_first_reference_only"
       };
+    case "recoveryGuidance":
+      return mcpRecoveryGuidanceReadbackPayload(await evidenceClient.getRecoveryGuidanceProjection(parsed.guidanceId));
+    case "recentRecoveryGuidance":
+      return mcpRecentRecoveryGuidanceReadbackPayload(parsed.scopeRef, await evidenceClient.getRecentRecoveryGuidanceProjection(parsed.scopeRef));
+    case "recoveryDraftDiff":
+      return mcpRecoveryDraftDiffReadbackPayload(parsed.guidanceId, await evidenceClient.getRecoveryDraftDiffProjection(parsed.guidanceId));
   }
 }
 async function withMetadataDigest(metadata) {

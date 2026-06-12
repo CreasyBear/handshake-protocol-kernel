@@ -14364,6 +14364,7 @@ var ActionAttemptLifecycleStateSchema = exports_external.enum([
   "generated_graph_recorded",
   "bypass_risk_recorded",
   "credential_custody_recorded",
+  "typed_commitment_recorded",
   "authority_scope_recorded",
   "authority_status_recorded",
   "draft_recorded",
@@ -14751,6 +14752,214 @@ function decodeBase64Like(token) {
     return null;
   }
 }
+// src/protocol/foundation/authority-safe-reference/index.ts
+var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "authority references must carry opaque refs or digests, not raw authority material"
+});
+function looksLikeEndpointAccessSecret(value) {
+  return endpointAccessStringVariants(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /PAYMENT-SIGNATURE\s*:/i,
+    /raw[_-]?payment[_-]?signature/i,
+    /private[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/.*\/secret/i,
+    /infisical:\/\/.*\/secret/i
+  ].some((pattern) => pattern.test(variant)));
+}
+function endpointAccessStringVariants(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like2(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like2(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/protocol/areas/typed-action-commitment/schemas.ts
+var TypedActionCommitmentProfileSchema = exports_external.enum(["handshake_jcs_typed", "eip712"]);
+var TypedActionCommitmentPurposeSchema = exports_external.enum([
+  "external_commitment_evidence",
+  "policy_required_evidence",
+  "service_workflow_readback",
+  "post_gateway_payment_evidence",
+  "display_binding_evidence"
+]);
+var TypedActionCommitmentProjectionClassSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_export"
+]);
+var TypedActionCommitmentVerificationStatusSchema = exports_external.enum([
+  "unverified",
+  "verified",
+  "refused",
+  "proof_gap",
+  "unsupported"
+]);
+var TypedActionCommitmentReplayStatusSchema = exports_external.enum([
+  "fresh",
+  "stale",
+  "replayed",
+  "missing",
+  "not_applicable"
+]);
+var TypedActionCommitmentSafetyPostureSchema = exports_external.enum([
+  "display_bound",
+  "digest_bound",
+  "verifier_bound",
+  "provider_observed",
+  "proof_gap",
+  "refused"
+]);
+var TypedCommitmentSafeReferenceSchema = AuthoritySafeReferenceSchema;
+var TypedActionCommitmentSubjectSchema = exports_external.strictObject({
+  kind: exports_external.enum([
+    "action_contract",
+    "service_workflow",
+    "x402_payment",
+    "agentic_endpoint_access",
+    "protected_surface",
+    "external_evidence"
+  ]),
+  ref: ResourceRefSchema,
+  digest: DigestSchema
+});
+var TypedActionCommitmentDomainSchema = exports_external.strictObject({
+  domainRef: TypedCommitmentSafeReferenceSchema,
+  domainDigest: DigestSchema.nullable().default(null),
+  tenantId: IdSchema.nullable().default(null),
+  organizationId: IdSchema.nullable().default(null),
+  gatewayId: IdSchema.nullable().default(null),
+  actionClass: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  providerEnvironmentRef: TypedCommitmentSafeReferenceSchema.nullable().default(null)
+});
+var TypedActionCommitmentTypedPayloadSchema = exports_external.record(exports_external.string(), JsonValueSchema).superRefine((payload, ctx) => {
+  for (const issue2 of rawMaterialIssues(payload)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: issue2
+    });
+  }
+});
+var TypedActionCommitmentReplayPostureSchema = exports_external.strictObject({
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceDigest: DigestSchema.nullable().default(null),
+  issuedAt: IsoDateSchema.nullable().default(null),
+  expiresAt: IsoDateSchema.nullable().default(null),
+  replayWindowSeconds: exports_external.number().int().positive().nullable().default(null)
+});
+var TypedActionCommitmentSignerOrVerifierSchema = exports_external.strictObject({
+  verifierRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  keyId: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureDigest: DigestSchema.nullable().default(null),
+  providerNativeDigest: DigestSchema.nullable().default(null),
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable().default(null)
+});
+var TypedActionCommitmentAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  authorizesMutation: exports_external.literal(false),
+  createsReceipt: exports_external.literal(false),
+  mintsCertificate: exports_external.literal(false),
+  provesPrincipalConsent: exports_external.literal(false),
+  provesSignerCustody: exports_external.literal(false),
+  provesPaymentCustody: exports_external.literal(false),
+  createsEndpointLease: exports_external.literal(false),
+  provesDownstreamSuccess: exports_external.literal(false)
+});
+var typedActionCommitmentAuthorityBoundary = {
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  authorizesMutation: false,
+  createsReceipt: false,
+  mintsCertificate: false,
+  provesPrincipalConsent: false,
+  provesSignerCustody: false,
+  provesPaymentCustody: false,
+  createsEndpointLease: false,
+  provesDownstreamSuccess: false
+};
+var TypedActionCommitmentSummarySchema = exports_external.strictObject({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  subjectDigest: DigestSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema
+});
+var TypedActionCommitmentRecordSchema = ProtocolBaseSchema.extend({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema,
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema,
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  proofGapRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  evidenceRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  recordedAt: IsoDateSchema
+});
+function rawMaterialIssues(value, path = []) {
+  if (value === null || value === undefined)
+    return [];
+  if (typeof value === "string") {
+    return looksLikeEndpointAccessSecret(value) ? [`typed action commitments must store refs or digests, not raw authority material at ${path.join(".")}`] : [];
+  }
+  if (typeof value !== "object")
+    return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => rawMaterialIssues(item, [...path, String(index)]));
+  }
+  const issues = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (isForbiddenRawMaterialKey(key)) {
+      issues.push(`typed action commitments must not store raw material field ${[...path, key].join(".")}`);
+    }
+    issues.push(...rawMaterialIssues(nested, [...path, key]));
+  }
+  return issues;
+}
+function isForbiddenRawMaterialKey(key) {
+  return /raw.*(secret|credential|payment|private.*key|signature)|private.*key|secret.*material/i.test(key);
+}
 // src/protocol/areas/delegated-authority/schemas.ts
 var AtomicAmountSchema = exports_external.string().regex(/^(?:0|[1-9]\d*)$/);
 var AuthoritySafeStringSchema = exports_external.string().min(1).refine((value) => !looksLikeAuthoritySecret(value), {
@@ -14828,13 +15037,13 @@ function authorityStringVariants(value) {
     variants.add(decodeURIComponent(value));
   } catch {}
   for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
-    const decoded = decodeBase64Like2(token);
+    const decoded = decodeBase64Like3(token);
     if (decoded)
       variants.add(decoded);
   }
   return [...variants];
 }
-function decodeBase64Like2(token) {
+function decodeBase64Like3(token) {
   const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
     return null;
@@ -15364,6 +15573,9 @@ var GatewayCheckAttemptSchema = ProtocolBaseSchema.extend({
   protectedPathPostureIdSeen: IdSchema.nullable(),
   protectedPathPostureDigestSeen: DigestSchema.nullable(),
   protectedPathPostureStateSeen: ProtectedPathStateSchema.nullable(),
+  observedTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  observedTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentRefusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
   gateDecision: GateDecisionSchema,
   gateDecisionReasonCode: ReasonCodeSchema,
   consumedGreenlight: exports_external.boolean(),
@@ -15522,6 +15734,8 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   gatewayCredentialRefDigests: exports_external.array(DigestSchema).default([]),
   delegatedAuthorityRefIds: exports_external.array(IdSchema).default([]),
   delegatedAuthorityRefDigests: exports_external.array(DigestSchema).default([]),
+  requiredTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  requiredTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
   paramsDigest: DigestSchema,
   contractDigest: DigestSchema,
   idempotencyKey: IdSchema.nullable().default(null),
@@ -15778,7 +15992,131 @@ var ReceiptExportSchema = ProtocolBaseSchema.extend({
   exportDigest: DigestSchema,
   delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
 });
-
+// src/protocol/areas/typed-action-commitment/inputs.ts
+var RecordTypedActionCommitmentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  typedActionCommitmentId: exports_external.string().min(1).optional(),
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema.default({
+    domainRef: "typed-action-commitment:default-domain",
+    domainDigest: null,
+    tenantId: null,
+    organizationId: null,
+    gatewayId: null,
+    actionClass: null,
+    providerEnvironmentRef: null
+  }),
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema.default({
+    replayStatus: "not_applicable",
+    idempotencyKey: null,
+    nonceRef: null,
+    nonceDigest: null,
+    issuedAt: null,
+    expiresAt: null,
+    replayWindowSeconds: null
+  }),
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema.default({
+    verifierRef: null,
+    verifierContextDigest: null,
+    keyId: null,
+    signatureRef: null,
+    signatureDigest: null,
+    providerNativeDigest: null,
+    verificationStatus: "unverified",
+    verificationReasonCode: null
+  }),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema.default("digest_bound"),
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema.default(typedActionCommitmentAuthorityBoundary),
+  refusalRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  recordedAt: exports_external.string().datetime({ offset: true }).optional()
+});
+// src/protocol/areas/typed-action-commitment/profiles.ts
+var typedActionCommitmentProfiles = TypedActionCommitmentProfileSchema.options;
+// src/protocol/areas/typed-action-commitment/projections.ts
+var TypedActionCommitmentProjectionRedactionPostureSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_signature_digest_only"
+]);
+var TypedActionCommitmentSignatureEvidenceProjectionSchema = exports_external.strictObject({
+  signatureRef: ResourceRefSchema.nullable(),
+  signatureDigest: DigestSchema.nullable()
+});
+var TypedActionCommitmentRawReadAuditLinkSchema = exports_external.strictObject({
+  rawRecordReadAuditRef: ResourceRefSchema,
+  rawRecordReadAuditDigest: DigestSchema,
+  redactionPosture: exports_external.literal("auditor_signature_digest_only")
+});
+var TypedActionCommitmentProjectionSchema = exports_external.strictObject({
+  typedActionCommitmentRef: IdSchema,
+  actionContractRef: IdSchema.nullable(),
+  projectionClass: TypedActionCommitmentProjectionClassSchema,
+  commitmentDigest: DigestSchema,
+  subject: TypedActionCommitmentSubjectSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable(),
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: ResourceRefSchema.nullable(),
+  nonceRef: ResourceRefSchema.nullable(),
+  nonceDigest: DigestSchema.nullable(),
+  replayWindowSeconds: exports_external.number().int().positive().nullable(),
+  verifierRef: ResourceRefSchema.nullable(),
+  verifierContextDigest: DigestSchema.nullable(),
+  keyId: ResourceRefSchema.nullable(),
+  providerNativeDigest: DigestSchema.nullable(),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  displayBindingStatus: TypedActionCommitmentSafetyPostureSchema,
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  signatureEvidence: TypedActionCommitmentSignatureEvidenceProjectionSchema.nullable(),
+  rawReadAudit: TypedActionCommitmentRawReadAuditLinkSchema.nullable(),
+  rawTypedPayloadIncluded: exports_external.literal(false),
+  rawSignatureIncluded: exports_external.literal(false),
+  rawCredentialMaterialIncluded: exports_external.literal(false),
+  rawPaymentMaterialIncluded: exports_external.literal(false),
+  rawRequestBodyIncluded: exports_external.literal(false),
+  commandMaterialIncluded: exports_external.literal(false),
+  redactionProfileRef: TypedActionCommitmentProjectionRedactionPostureSchema,
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+}).superRefine((projection, ctx) => {
+  if (projection.projectionClass === "auditor_export") {
+    if (!projection.rawReadAudit) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "auditor_export typed commitment projection requires raw-read audit linkage",
+        path: ["rawReadAudit"]
+      });
+    }
+    return;
+  }
+  if (projection.signatureEvidence) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include signature evidence",
+      path: ["signatureEvidence"]
+    });
+  }
+  if (projection.rawReadAudit) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include raw-read audit linkage",
+      path: ["rawReadAudit"]
+    });
+  }
+});
 // src/protocol/events/schemas.ts
 var ContractStreamEventSchema = ProtocolBaseSchema.extend({
   streamEventId: IdSchema,
@@ -15797,6 +16135,7 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "delegated_authority_status_changed",
     "gateway_custody_proof_packet_recorded",
     "credential_resolution_recorded",
+    "typed_action_commitment_recorded",
     "idempotency_ledger_recorded",
     "bypass_probe_recorded",
     "tool_call_draft_recorded",
@@ -15824,6 +16163,7 @@ var ContractStreamEventSchema = ProtocolBaseSchema.extend({
     "receipt_emitted",
     "authority_certificate_emitted",
     "receipt_exported",
+    "raw_evidence_read_audited",
     "recovery_recommended",
     "recovery_status_changed",
     "proof_gap_recorded",
@@ -15996,6 +16336,13 @@ var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
   gatewayCredentialEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   delegatedAuthorityEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   credentialResolutionEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
   signerInvocationEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   downstreamEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   authMdEvidenceRefs: AuthMdEvidenceRefsProjectionSchema,
@@ -16112,6 +16459,27 @@ var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
   "replayed_or_unusable",
   "unknown"
 ]);
+var OperationReadbackProjectionFreshnessStatusSchema = exports_external.enum([
+  "current",
+  "stale_or_concurrent_update",
+  "stream_tail_missing",
+  "not_observed"
+]);
+var OperationReadbackProjectionFreshnessSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback-freshness.v0.1"),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  readModelKind: exports_external.literal("direct_protocol_store_projection"),
+  status: OperationReadbackProjectionFreshnessStatusSchema,
+  streamId: IdSchema.nullable(),
+  partitionKey: exports_external.string().min(1).nullable(),
+  observedOffset: exports_external.number().int().nonnegative().nullable(),
+  observedEventDigest: DigestSchema.nullable(),
+  latestOffset: exports_external.number().int().nonnegative().nullable(),
+  latestEventDigest: DigestSchema.nullable(),
+  lagEvents: exports_external.number().int().nonnegative().nullable(),
+  rawStreamEventsIncluded: exports_external.literal(false),
+  authorityCreatedByFreshness: exports_external.literal(false)
+});
 var OperationSupportContextSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
   supportContextRef: exports_external.string().min(1),
@@ -16175,12 +16543,20 @@ var OperationReadbackProjectionSchema = exports_external.strictObject({
   rawInternalRecordIncluded: exports_external.literal(false),
   credentialMaterialIncluded: exports_external.literal(false),
   paymentMaterialIncluded: exports_external.literal(false),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
   evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
   proofGapRefs: exports_external.array(IdSchema).default([]),
   refusalRefs: exports_external.array(IdSchema).default([]),
   recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
   isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
   authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  projectionFreshness: OperationReadbackProjectionFreshnessSchema,
   providerRequestRef: exports_external.string().min(1).nullable(),
   providerOperationRef: exports_external.string().min(1).nullable(),
   traceRef: exports_external.string().min(1).nullable(),
@@ -16335,6 +16711,7 @@ var AuthorityCertificateArtifactKindSchema = exports_external.enum([
   "receipt_export",
   "surface_operation_reconciliation",
   "credential_resolution_evidence",
+  "typed_action_commitment",
   "idempotency_ledger_entry",
   "recovery_recommendation",
   "recovery_recommendation_status_transition",
@@ -16859,50 +17236,6 @@ var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
   supersededByActionContractId: IdSchema.nullable(),
   transitionDigest: DigestSchema
 });
-// src/protocol/foundation/authority-safe-reference/index.ts
-var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
-  message: "authority references must carry opaque refs or digests, not raw authority material"
-});
-function looksLikeEndpointAccessSecret(value) {
-  return endpointAccessStringVariants(value).some((variant) => [
-    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
-    /PAYMENT-SIGNATURE\s*:/i,
-    /raw[_-]?payment[_-]?signature/i,
-    /private[_-]?key/i,
-    /api[_-]?key\s*=/i,
-    /access[_-]?token\s*=/i,
-    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
-    /secret\s*=/i,
-    /password\s*=/i,
-    /vault:\/\/.*\/secret/i,
-    /infisical:\/\/.*\/secret/i
-  ].some((pattern) => pattern.test(variant)));
-}
-function endpointAccessStringVariants(value) {
-  const variants = new Set([value]);
-  try {
-    variants.add(decodeURIComponent(value));
-  } catch {}
-  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
-    const decoded = decodeBase64Like3(token);
-    if (decoded)
-      variants.add(decoded);
-  }
-  return [...variants];
-}
-function decodeBase64Like3(token) {
-  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
-    return null;
-  const paddingLength = (4 - normalized.length % 4) % 4;
-  try {
-    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
-    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
 // src/protocol/areas/agentic-endpoint-access/schemas.ts
 var agenticEndpointAccessSchemaVersion = "handshake.agentic-endpoint-access.v0.3.0";
 var AgenticEndpointAccessSafeReferenceSchema = AuthoritySafeReferenceSchema.describe("Rejects raw authority material such as PAYMENT-SIGNATURE, private keys, API keys, access tokens, and bearer tokens.");
@@ -16969,6 +17302,15 @@ var AgenticEndpointAccessClearanceStatusSchema = exports_external.enum(["leased"
 var AgenticEndpointAccessFailClosedBehaviorSchema = exports_external.enum(["refuse", "proof_gap", "quarantine"]);
 var AgenticEndpointAccessUsageKindSchema = exports_external.enum(["request", "token", "tool_call", "cost_unit"]);
 var AgenticEndpointAccessCapabilityStatusSchema = exports_external.enum(["supported", "unsupported", "stale", "unknown"]);
+var AgenticEndpointAccessRequestEvidenceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  requestMethod: AuthoritySafeStringSchema2,
+  requestUrlDigest: DigestSchema,
+  requestHeaderDigest: DigestSchema,
+  requestBodyDigest: DigestSchema,
+  redactionPolicyId: AuthoritySafeStringSchema2,
+  requestEvidenceDigest: DigestSchema
+});
 var AgenticEndpointAccessPolicySchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
   tenantId: IdSchema,
@@ -17026,6 +17368,7 @@ var AgenticEndpointAccessAttemptSchema = exports_external.strictObject({
   siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
   gatewayRegistryEntryId: IdSchema,
   gatewayId: IdSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
   requestedLeaseTtlSeconds: PositiveLimitSchema,
   requestedBudget: BudgetSchema,
   kernelVersion: AuthoritySafeStringSchema2,
@@ -17123,6 +17466,7 @@ var AgenticEndpointAccessReadbackSchema = exports_external.strictObject({
   attemptId: IdSchema,
   candidateActionId: IdSchema,
   attemptDigest: DigestSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
   protectedSurfaceBindingId: IdSchema,
   protectedSurfaceBindingDigest: DigestSchema,
   protectedSurfaceRef: ResourceRefSchema,
@@ -17421,6 +17765,43 @@ function requireReconstructionRefs(kind) {
   };
 }
 
+// src/protocol/areas/raw-read-audit/schemas.ts
+var RawRecordReadAuditAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  createsMutationAuthority: exports_external.literal(false),
+  createsRawReadAuthority: exports_external.literal(false),
+  exposesRawRecordInAudit: exports_external.literal(false)
+});
+var RawRecordReadAuditSchema = ProtocolBaseSchema.extend({
+  rawRecordReadAuditId: IdSchema,
+  targetObjectType: exports_external.string().min(1).max(120),
+  targetObjectId: IdSchema,
+  targetRecordDigest: DigestSchema,
+  targetRecordSchemaVersion: exports_external.string().min(1).max(100),
+  targetRecordCreatedAt: IsoDateSchema,
+  callerIdentityRef: exports_external.string().min(1).max(500),
+  callerSubjectDigest: DigestSchema,
+  authProviderRef: exports_external.string().min(1).max(500),
+  authSessionDigest: DigestSchema.nullable(),
+  serviceCredentialDigest: DigestSchema.nullable(),
+  projectId: IdSchema.nullable(),
+  workspaceId: IdSchema.nullable(),
+  custodyRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedScopes: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  rawReadPurposeDigest: DigestSchema,
+  purposeRedactionPolicyId: exports_external.literal("hosted-raw-read-purpose-digest.v1"),
+  rawReadExpiresAt: IsoDateSchema,
+  routeId: exports_external.literal("readProtocolRecord"),
+  requestMethod: exports_external.literal("GET"),
+  requestedAt: IsoDateSchema,
+  rawRecordReturned: exports_external.literal(true),
+  rawRecordPayloadIncludedInAudit: exports_external.literal(false),
+  authorityBoundary: RawRecordReadAuditAuthorityBoundarySchema
+});
+
 // src/protocol/areas/object-registry/schemas.ts
 var ProtocolObjectTypeSchema = exports_external.enum([
   "tool_capability",
@@ -17440,6 +17821,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "delegated_authority_status_transition",
   "gateway_custody_proof_packet",
   "credential_resolution_evidence",
+  "typed_action_commitment",
   "transition_request_context",
   "runtime_execution",
   "generated_execution_graph",
@@ -17471,6 +17853,7 @@ var ProtocolObjectTypeSchema = exports_external.enum([
   "refusal",
   "receipt",
   "receipt_export",
+  "raw_record_read_audit",
   "recovery_recommendation",
   "recovery_recommendation_status_transition",
   "contract_stream_event"
@@ -17526,6 +17909,10 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
     objectType: exports_external.literal("credential_resolution_evidence"),
     payload: CredentialResolutionEvidenceSchema
   }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("typed_action_commitment"),
+    payload: TypedActionCommitmentRecordSchema
+  }),
   exports_external.strictObject({ objectType: exports_external.literal("transition_request_context"), payload: TransitionRequestContextSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("runtime_execution"), payload: RuntimeExecutionRecordSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("generated_execution_graph"), payload: GeneratedExecutionGraphSchema }),
@@ -17572,6 +17959,7 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("refusal"), payload: RefusalSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("receipt"), payload: ReceiptSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("receipt_export"), payload: ReceiptExportSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("raw_record_read_audit"), payload: RawRecordReadAuditSchema }),
   exports_external.strictObject({ objectType: exports_external.literal("recovery_recommendation"), payload: RecoveryRecommendationSchema }),
   exports_external.strictObject({
     objectType: exports_external.literal("recovery_recommendation_status_transition"),
@@ -17936,14 +18324,14 @@ var surfaceIds = [
   "sdk.gateway",
   "cli.operator",
   "cli.evidence",
-  "cli.process",
   "mcp.runtime",
   "x402.protected_tool",
   "surfaces.a2a_negotiation",
   "surfaces.a2a_readback",
   "surfaces.service_workflow_admission",
   "surfaces.hosted_admission",
-  "surfaces.agentic_endpoint_access_readback"
+  "surfaces.agentic_endpoint_access_readback",
+  "surfaces.recovery_guidance"
 ];
 var surfaceRouteFamilies = [
   "action_contract_proposal_write",
@@ -18416,7 +18804,6 @@ var cliSurfaceBoundaryManifest = {
     authorityPosture: "setup_only",
     sourceRoots: [
       "src/cli/command-manifest.ts",
-      "src/cli/demo/x402.ts",
       "src/cli/host/doctor.ts",
       "src/cli/local-project/doctor.ts",
       "src/cli/local-project/index.ts",
@@ -18424,10 +18811,8 @@ var cliSurfaceBoundaryManifest = {
       "src/cli/mcp/doctor.ts",
       "src/cli/output.ts",
       "src/cli/quickstart/x402.ts",
-      "src/cli/state/inspect.ts",
       "src/cli/x402/index.ts",
-      "src/cli/x402/local-state.ts",
-      "src/cli/x402/readiness.ts"
+      "src/cli/x402/local-state.ts"
     ],
     allowedRouteFamilies: ["catalog_install_write", "install_health_read"],
     forbiddenRouteFamilies: [
@@ -18478,7 +18863,6 @@ var cliSurfaceBoundaryManifest = {
       "src/cli/main.ts",
       "src/cli/output.ts",
       "src/cli/projection-evidence.ts",
-      "src/cli/quality/report.ts",
       "src/cli/simulate/x402-payment.ts",
       "src/cli/support-bundle.ts"
     ],
@@ -18512,30 +18896,6 @@ var cliSurfaceBoundaryManifest = {
     forbiddenOutputFields: [...cliAuthorityOutputFields, "downstreamSuccess"],
     requiredNonAuthorityFlags: evidenceNonAuthorityFlags,
     claimBoundaryLabels: [...sharedClaimBoundaries, "cli_evidence_is_not_clearance"]
-  },
-  "cli.process": {
-    id: "cli.process",
-    status: "deferred",
-    plane: "process",
-    custodyRole: "none",
-    authorityPosture: "transport_only",
-    sourceRoots: ["src/cli/process"],
-    allowedRouteFamilies: ["local_process_supervision"],
-    forbiddenRouteFamilies: [
-      ...forbiddenAuthorityRouteFamilies,
-      "action_contract_proposal_write",
-      "catalog_install_write",
-      "gateway_check_write",
-      "runtime_evidence_write",
-      "surface_reconciliation_write",
-      "tool_call_draft_write"
-    ],
-    allowedImportRoots: ["src/cli", "src/sdk", "src/surfaces"],
-    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "storage/"],
-    forbiddenCredentialShapes: [...authorityCredentialShapes],
-    forbiddenOutputFields: [...cliAuthorityOutputFields, "greenlightId", "greenlightRef", "gatewayCheckInput"],
-    requiredNonAuthorityFlags: proposalNonAuthorityFlags,
-    claimBoundaryLabels: [...sharedClaimBoundaries, "process_start_is_not_gateway_custody"]
   }
 };
 var runtimeSurfaceBoundaryManifest = {
@@ -18827,6 +19187,41 @@ var productSurfaceBoundaryManifest = {
       "endpoint_access_lease_is_endpoint_entry_only",
       "fresh_action_contract_required"
     ]
+  },
+  "surfaces.recovery_guidance": {
+    id: "surfaces.recovery_guidance",
+    status: "active",
+    plane: "evidence",
+    custodyRole: "review_custody",
+    authorityPosture: "evidence_only",
+    sourceRoots: ["src/surfaces/protected-action-recovery-guidance.ts"],
+    allowedRouteFamilies: ["evidence_projection_read", "install_health_read"],
+    forbiddenRouteFamilies: [
+      ...forbiddenAuthorityRouteFamilies,
+      "action_contract_proposal_write",
+      "bypass_probe_write",
+      "catalog_install_write",
+      "certificate_verify_local",
+      "delegated_authority_write",
+      "gateway_check_write",
+      "gateway_credential_write",
+      "protected_path_posture_write",
+      "runtime_evidence_write",
+      "runtime_ingress_proposal_write",
+      "surface_reconciliation_write",
+      "tool_call_draft_write"
+    ],
+    allowedImportRoots: ["src/surfaces", "src/protocol/public"],
+    forbiddenImportFragments: [...forbiddenAuthorityImports, "adapters/", "runtime/", "storage/"],
+    forbiddenCredentialShapes: [...authorityCredentialShapes],
+    forbiddenOutputFields: [...cliAuthorityOutputFields, "downstreamSuccess"],
+    requiredNonAuthorityFlags: evidenceNonAuthorityFlags,
+    claimBoundaryLabels: [
+      ...sharedClaimBoundaries,
+      "recovery_guidance_is_not_recovery_authority",
+      "candidate_draft_is_not_action_contract",
+      "fresh_action_contract_required"
+    ]
   }
 };
 var surfaceBoundaryManifest = {
@@ -18960,6 +19355,859 @@ function surfaceOutcomeBase(input) {
     nextAction: input.nextAction
   });
 }
+// src/surfaces/protected-action-recovery-guidance.ts
+var PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION = "handshake.surface.protected-action-recovery-guidance.v1";
+var sha256DigestSchema = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var nonEmptyStringSchema = exports_external.string().min(1);
+var ProtectedActionRecoveryGuidanceSourceKindSchema = exports_external.enum([
+  "protocol_recovery_projection",
+  "pre_contract_surface_guidance"
+]);
+var ProtectedActionRecoveryGuidanceOutcomeSchema = exports_external.enum([
+  "draft_available",
+  "reload_required",
+  "recraft_required",
+  "read_evidence",
+  "abandon_required",
+  "stop"
+]);
+var ProtectedActionRecoveryGuidanceFindingCategorySchema = exports_external.enum([
+  "x402_metadata_stale",
+  "x402_policy_or_readiness_stale",
+  "x402_install_not_ready",
+  "x402_gateway_offline",
+  "x402_gateway_posture_unknown",
+  "x402_amount_over_bound",
+  "x402_request_body_unsupported",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "x402_custody_proof_unverified",
+  "x402_selected_requirement_mismatch",
+  "runtime_dynamic_tool_construction",
+  "runtime_late_bound_parameters",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_posture_named_not_controlled",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "proof_gap_only_evidence",
+  "isolation_or_quarantine_active",
+  "draft_stale_or_intent_changed",
+  "draft_superseded_by_stricter_draft",
+  "draft_guidance_stale",
+  "surface_next_action_projection",
+  "protocol_recovery_recommendation_present"
+]);
+var ProtectedActionRecoveryAbandonQualityClassSchema = exports_external.enum([
+  "good_abandon",
+  "avoidable_abandon",
+  "ambiguous_abandon",
+  "stale_abandon",
+  "operator_abandon"
+]);
+var ProtectedActionRecoveryFindingSchema = exports_external.strictObject({
+  category: ProtectedActionRecoveryGuidanceFindingCategorySchema,
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  affectedFields: exports_external.array(nonEmptyStringSchema),
+  guidanceOutcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  draftEligible: exports_external.boolean()
+});
+var ProtectedActionRecoveryCandidateDraftSchema = exports_external.strictObject({
+  draftId: nonEmptyStringSchema,
+  draftDigest: sha256DigestSchema,
+  sourceRefs: exports_external.array(nonEmptyStringSchema),
+  digestInputsToPreserve: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  requiredFreshProposalPath: nonEmptyStringSchema,
+  supersedesDraftRefs: exports_external.array(nonEmptyStringSchema),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  redactionProfile: nonEmptyStringSchema
+});
+var ProtectedActionRecoveryAgentHandoffSchema = exports_external.strictObject({
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  readback: nonEmptyStringSchema,
+  requiredRefs: exports_external.array(nonEmptyStringSchema),
+  missingInputs: exports_external.array(nonEmptyStringSchema),
+  allowedNextMechanism: exports_external.enum([
+    "submit_fresh_proposal",
+    "reload_evidence",
+    "recraft_request",
+    "read_evidence",
+    "abandon_current_material",
+    "stop_and_escalate"
+  ]),
+  disallowedActions: exports_external.array(nonEmptyStringSchema),
+  stopReasons: exports_external.array(nonEmptyStringSchema),
+  nonClaims: exports_external.array(nonEmptyStringSchema)
+});
+var ProtectedActionRecoverySourceErrorSchema = exports_external.strictObject({
+  code: nonEmptyStringSchema,
+  failureClass: nonEmptyStringSchema,
+  failurePhase: nonEmptyStringSchema.nullable(),
+  requiresNewContract: exports_external.boolean(),
+  status: exports_external.number().int().min(100).max(599)
+});
+var ProtectedActionRecoveryGuidanceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION),
+  guidanceId: nonEmptyStringSchema,
+  sourceKind: ProtectedActionRecoveryGuidanceSourceKindSchema,
+  protectedSurfaceKind: nonEmptyStringSchema,
+  sourceEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  sourceReceiptRef: nonEmptyStringSchema.nullable(),
+  sourceProofGapRef: nonEmptyStringSchema.nullable(),
+  sourceRefusalRef: nonEmptyStringSchema.nullable(),
+  recoveryRecommendationId: nonEmptyStringSchema.nullable(),
+  recommendationDigest: sha256DigestSchema.nullable(),
+  sourceTerminalEvidenceRefs: exports_external.array(nonEmptyStringSchema),
+  reasonCodes: exports_external.array(nonEmptyStringSchema),
+  findings: exports_external.array(ProtectedActionRecoveryFindingSchema),
+  outcome: ProtectedActionRecoveryGuidanceOutcomeSchema,
+  abandonQuality: ProtectedActionRecoveryAbandonQualityClassSchema.nullable(),
+  unsafeSalvageAttemptPrevented: exports_external.boolean(),
+  sourceError: ProtectedActionRecoverySourceErrorSchema.nullable(),
+  mustCreateNewActionContract: exports_external.literal(true),
+  mayReuseGreenlight: exports_external.literal(false),
+  authorityCreated: exports_external.literal(false),
+  authorityCertificateMinted: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  gatewayCheckPerformed: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false),
+  mutationAttempted: exports_external.literal(false),
+  mutationCommandIncluded: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  receiptExportCreated: exports_external.literal(false),
+  policyDecisionRef: exports_external.null(),
+  greenlightRef: exports_external.null(),
+  gatewayCheckRef: exports_external.null(),
+  receiptRef: exports_external.null(),
+  authorityCertificateRef: exports_external.null(),
+  mutationAttemptRef: exports_external.null(),
+  agentHandoff: ProtectedActionRecoveryAgentHandoffSchema,
+  candidateDraft: ProtectedActionRecoveryCandidateDraftSchema.optional()
+}).superRefine((guidance, ctx) => {
+  if (guidance.sourceKind === "protocol_recovery_projection") {
+    if (!guidance.recoveryRecommendationId) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "protocol recovery projections require recoveryRecommendationId"
+      });
+    }
+    if (!guidance.recommendationDigest) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "protocol recovery projections require recommendationDigest"
+      });
+    }
+    if (guidance.sourceTerminalEvidenceRefs.length === 0) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["sourceTerminalEvidenceRefs"],
+        message: "protocol recovery projections require source terminal evidence refs"
+      });
+    }
+  }
+  if (guidance.sourceKind === "pre_contract_surface_guidance") {
+    if (guidance.recoveryRecommendationId !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recoveryRecommendationId"],
+        message: "pre-contract guidance cannot claim a recovery recommendation"
+      });
+    }
+    if (guidance.recommendationDigest !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["recommendationDigest"],
+        message: "pre-contract guidance cannot claim a recovery recommendation digest"
+      });
+    }
+  }
+  if (guidance.candidateDraft && guidance.outcome !== "draft_available") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["candidateDraft"],
+      message: "candidateDraft is legal only when outcome is draft_available"
+    });
+  }
+  if (guidance.outcome === "abandon_required" && guidance.abandonQuality === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["abandonQuality"],
+      message: "abandon_required requires abandonQuality"
+    });
+  }
+});
+function parseProtectedActionRecoveryGuidance(value) {
+  return ProtectedActionRecoveryGuidanceSchema.parse(value);
+}
+function buildProtectedActionRecoveryGuidance(input) {
+  return ProtectedActionRecoveryGuidanceSchema.parse({
+    ...input,
+    schemaVersion: PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION,
+    sourceEvidenceRefs: sortedUnique(input.sourceEvidenceRefs),
+    sourceTerminalEvidenceRefs: sortedUnique(input.sourceTerminalEvidenceRefs),
+    reasonCodes: sortedUnique(input.reasonCodes),
+    findings: sortFindings(input.findings),
+    candidateDraft: input.candidateDraft ? normalizeCandidateDraft(input.candidateDraft) : undefined,
+    agentHandoff: normalizeAgentHandoff(input.agentHandoff),
+    mustCreateNewActionContract: true,
+    mayReuseGreenlight: false,
+    authorityCreated: false,
+    authorityCertificateMinted: false,
+    credentialMaterialIncluded: false,
+    gatewayCheckPerformed: false,
+    greenlightCreated: false,
+    mutationAttempted: false,
+    mutationCommandIncluded: false,
+    rawInternalRecordIncluded: false,
+    receiptExportCreated: false,
+    policyDecisionRef: null,
+    greenlightRef: null,
+    gatewayCheckRef: null,
+    receiptRef: null,
+    authorityCertificateRef: null,
+    mutationAttemptRef: null
+  });
+}
+function classifyProtectedActionRecoveryGuidance(input) {
+  const posture = input.posture ?? {};
+  const reasonCodes = sortedUnique(input.reasonCodes ?? []);
+  const sourceEvidenceRefs = sortedUnique(input.sourceEvidenceRefs ?? []);
+  const affectedFields = sortedUnique(input.affectedFields ?? []);
+  const findings = sortFindings([
+    ...reasonCodeFindingsForClassifier({ reasonCodes, sourceEvidenceRefs, affectedFields, posture, input }),
+    ...postureFindingsForClassifier({ posture, sourceEvidenceRefs, affectedFields })
+  ]);
+  const fallbackFinding = {
+    category: "surface_next_action_projection",
+    reasonCodes: ["surface_guidance_requested"],
+    sourceEvidenceRefs,
+    affectedFields,
+    guidanceOutcome: "read_evidence",
+    draftEligible: false
+  };
+  const effectiveFindings = findings.length > 0 ? findings : [fallbackFinding];
+  const outcome = guidanceOutcomeForClassifier(effectiveFindings);
+  const draftBlocked = candidateDraftBlocked(effectiveFindings, posture);
+  const candidateDraft = outcome === "draft_available" && !draftBlocked && input.candidateDraft ? input.candidateDraft : undefined;
+  return buildProtectedActionRecoveryGuidance({
+    guidanceId: input.guidanceId,
+    sourceKind: input.sourceKind ?? "pre_contract_surface_guidance",
+    protectedSurfaceKind: input.protectedSurfaceKind,
+    sourceEvidenceRefs,
+    sourceReceiptRef: input.sourceReceiptRef ?? null,
+    sourceProofGapRef: input.sourceProofGapRef ?? null,
+    sourceRefusalRef: input.sourceRefusalRef ?? null,
+    recoveryRecommendationId: input.recoveryRecommendationId ?? null,
+    recommendationDigest: input.recommendationDigest ?? null,
+    sourceTerminalEvidenceRefs: sortedUnique(input.sourceTerminalEvidenceRefs ?? []),
+    reasonCodes: sortedUnique([...reasonCodes, ...effectiveFindings.flatMap((finding) => finding.reasonCodes)]),
+    findings: effectiveFindings,
+    outcome,
+    abandonQuality: outcome === "abandon_required" ? input.abandonQuality ?? abandonQualityForClassifier(effectiveFindings) : input.abandonQuality ?? null,
+    unsafeSalvageAttemptPrevented: posture.unsafeSalvageAttempted === true || draftBlocked || outcome === "stop" || outcome === "abandon_required",
+    sourceError: input.sourceError ?? null,
+    agentHandoff: {
+      outcome,
+      readback: input.readback ?? readbackForClassifierOutcome(outcome),
+      requiredRefs: sourceEvidenceRefs,
+      missingInputs: sortedUnique(input.missingInputs ?? []),
+      allowedNextMechanism: handoffMechanismForOutcome(outcome),
+      disallowedActions: defaultDisallowedActions(),
+      stopReasons: outcome === "stop" || outcome === "abandon_required" ? effectiveFindings.flatMap((finding) => finding.reasonCodes) : [],
+      nonClaims: defaultNonClaims()
+    },
+    ...candidateDraft ? { candidateDraft } : {}
+  });
+}
+function recoveryGuidanceFromRecoveryRecommendation(recommendation) {
+  const outcome = guidanceOutcomeForRecoveryPath(recommendation.recommendedPath);
+  const terminalRefs = sortedUnique([
+    recommendation.sourceReceiptId,
+    recommendation.sourceRefusalOrGapRef,
+    ...recommendation.proofGapIds
+  ]);
+  return buildProtectedActionRecoveryGuidance({
+    guidanceId: `guidance:${recommendation.recoveryRecommendationId}`,
+    sourceKind: "protocol_recovery_projection",
+    protectedSurfaceKind: recommendation.actionClass,
+    sourceEvidenceRefs: terminalRefs,
+    sourceReceiptRef: recommendation.sourceReceiptId,
+    sourceProofGapRef: recommendation.proofGapIds[0] ?? null,
+    sourceRefusalRef: recommendation.proofGapIds.length === 0 ? recommendation.sourceRefusalOrGapRef : null,
+    recoveryRecommendationId: recommendation.recoveryRecommendationId,
+    recommendationDigest: recommendation.recommendationDigest,
+    sourceTerminalEvidenceRefs: terminalRefs,
+    reasonCodes: [recommendation.reasonCode],
+    findings: [
+      {
+        category: "protocol_recovery_recommendation_present",
+        reasonCodes: [recommendation.reasonCode],
+        sourceEvidenceRefs: terminalRefs,
+        affectedFields: sortedUnique([
+          ...recommendation.allowedNextActionClasses,
+          ...recommendation.requiredNewEvidence
+        ]),
+        guidanceOutcome: outcome,
+        draftEligible: outcome === "draft_available"
+      }
+    ],
+    outcome,
+    abandonQuality: outcome === "abandon_required" || outcome === "stop" ? "good_abandon" : null,
+    unsafeSalvageAttemptPrevented: outcome === "abandon_required" || outcome === "stop",
+    sourceError: null,
+    agentHandoff: {
+      outcome,
+      readback: recoveryReadbackForPath(recommendation.recommendedPath),
+      requiredRefs: terminalRefs,
+      missingInputs: recommendation.requiredNewEvidence,
+      allowedNextMechanism: handoffMechanismForOutcome(outcome),
+      disallowedActions: defaultDisallowedActions(),
+      stopReasons: outcome === "stop" || outcome === "abandon_required" ? [recommendation.reasonCode] : [],
+      nonClaims: defaultNonClaims()
+    }
+  });
+}
+function recoveryGuidanceFromSurfaceOutcome(surfaceOutcome) {
+  const outcome = guidanceOutcomeForSurfaceNextAction(surfaceOutcome.nextAction);
+  const sourceEvidenceRefs = sortedUnique([
+    ...surfaceOutcome.evidenceRefs,
+    ...surfaceOutcome.proofRef ? [surfaceOutcome.proofRef] : [],
+    ...surfaceOutcome.refusalRef ? [surfaceOutcome.refusalRef] : [],
+    ...surfaceOutcome.challengeRef ? [surfaceOutcome.challengeRef] : []
+  ]);
+  return buildProtectedActionRecoveryGuidance({
+    guidanceId: `guidance:surface:${surfaceOutcome.outcome}:${surfaceOutcome.correlationRef ?? "local"}`,
+    sourceKind: "pre_contract_surface_guidance",
+    protectedSurfaceKind: surfaceOutcome.outcome,
+    sourceEvidenceRefs,
+    sourceReceiptRef: null,
+    sourceProofGapRef: surfaceOutcome.proofRef,
+    sourceRefusalRef: surfaceOutcome.refusalRef,
+    recoveryRecommendationId: null,
+    recommendationDigest: null,
+    sourceTerminalEvidenceRefs: [],
+    reasonCodes: surfaceOutcome.reasonCodes,
+    findings: [
+      {
+        category: "surface_next_action_projection",
+        reasonCodes: surfaceOutcome.reasonCodes,
+        sourceEvidenceRefs,
+        affectedFields: [surfaceOutcome.phase, surfaceOutcome.outcome],
+        guidanceOutcome: outcome,
+        draftEligible: outcome === "draft_available"
+      }
+    ],
+    outcome,
+    abandonQuality: outcome === "abandon_required" ? "ambiguous_abandon" : null,
+    unsafeSalvageAttemptPrevented: outcome === "stop" || outcome === "abandon_required",
+    sourceError: null,
+    agentHandoff: {
+      outcome,
+      readback: `Surface outcome ${surfaceOutcome.outcome} requires ${outcome}.`,
+      requiredRefs: sourceEvidenceRefs,
+      missingInputs: [],
+      allowedNextMechanism: handoffMechanismForOutcome(outcome),
+      disallowedActions: defaultDisallowedActions(),
+      stopReasons: outcome === "stop" ? surfaceOutcome.reasonCodes : [],
+      nonClaims: defaultNonClaims()
+    }
+  });
+}
+function recoveryGuidanceFromHandshakeError(error51) {
+  const source = handshakeErrorSource(error51);
+  if (!source)
+    return null;
+  const requiresNewContract = source.requiresNewContract ?? failureClassRequiresNewContract(source.failureClass);
+  const outcome = guidanceOutcomeForFailureClass(source.failureClass, requiresNewContract);
+  const sourceEvidenceRefs = sortedUnique([
+    ...source.proofRef ? [source.proofRef] : [],
+    ...source.refusalRef ? [source.refusalRef] : []
+  ]);
+  return buildProtectedActionRecoveryGuidance({
+    guidanceId: `guidance:error:${source.code}`,
+    sourceKind: "pre_contract_surface_guidance",
+    protectedSurfaceKind: "handshake_client_error",
+    sourceEvidenceRefs,
+    sourceReceiptRef: null,
+    sourceProofGapRef: source.proofRef ?? null,
+    sourceRefusalRef: source.refusalRef ?? null,
+    recoveryRecommendationId: null,
+    recommendationDigest: null,
+    sourceTerminalEvidenceRefs: [],
+    reasonCodes: [source.code],
+    findings: [
+      {
+        category: source.proofRef ? "proof_gap_only_evidence" : "surface_next_action_projection",
+        reasonCodes: [source.code],
+        sourceEvidenceRefs,
+        affectedFields: [source.failureClass, source.failurePhase ?? "unknown_phase"],
+        guidanceOutcome: outcome,
+        draftEligible: false
+      }
+    ],
+    outcome,
+    abandonQuality: outcome === "abandon_required" ? "ambiguous_abandon" : null,
+    unsafeSalvageAttemptPrevented: outcome === "stop" || outcome === "abandon_required",
+    sourceError: {
+      code: source.code,
+      failureClass: source.failureClass,
+      failurePhase: source.failurePhase,
+      requiresNewContract,
+      status: source.status
+    },
+    agentHandoff: {
+      outcome,
+      readback: source.message ?? `Handshake error ${source.code} requires ${outcome}.`,
+      requiredRefs: sourceEvidenceRefs,
+      missingInputs: [],
+      allowedNextMechanism: handoffMechanismForOutcome(outcome),
+      disallowedActions: defaultDisallowedActions(),
+      stopReasons: outcome === "stop" ? [source.code] : [],
+      nonClaims: defaultNonClaims()
+    }
+  });
+}
+var reasonCodeFindingRules = [
+  {
+    category: "x402_metadata_stale",
+    affectedFields: ["metadataDigest"],
+    matches: (code) => code.includes("metadata_stale") || code === "mcp_tools_list_changed" || code === "mcp_metadata_digest_stale" || code === "host_fixture_manifest_stale",
+    outcome: (context) => context.posture.refreshSufficient ? "reload_required" : "stop"
+  },
+  {
+    category: "x402_policy_or_readiness_stale",
+    affectedFields: ["policyDigest", "readinessDigest"],
+    matches: (code) => code.includes("policy_stale") || code.includes("readiness_proof_stale") || code.includes("readiness_binding_mismatch") || code.includes("readiness_binding_missing") || code === "mcp_policy_version_binding_missing" || code === "mcp_trusted_readiness_binding_missing",
+    outcome: (context) => context.posture.refreshSufficient ? "reload_required" : "stop"
+  },
+  {
+    category: "x402_install_not_ready",
+    affectedFields: ["installReadiness"],
+    matches: (code) => code.includes("install_not_ready") || code === "mcp_install_missing" || code === "mcp_install_stale" || code === "mcp_install_unknown",
+    outcome: () => "reload_required"
+  },
+  {
+    category: "x402_gateway_offline",
+    affectedFields: ["gatewayPosture"],
+    matches: (code) => code.includes("gateway_offline") || code.includes("provider_unavailable"),
+    outcome: () => "stop"
+  },
+  {
+    category: "x402_gateway_posture_unknown",
+    affectedFields: ["gatewayPosture"],
+    matches: (code) => code.includes("gateway_posture_unknown") || code.includes("posture_missing") || code.includes("gateway_unbound") || code === "gateway_registry_not_enforcing",
+    outcome: () => "stop"
+  },
+  {
+    category: "x402_amount_over_bound",
+    affectedFields: ["atomicAmount", "maxAmountAtomic"],
+    matches: (code) => code.includes("amount_exceeds") || code.includes("amount_over"),
+    outcome: proposalRecoveryOutcome,
+    draftEligible: draftEligibleForProposalRecovery
+  },
+  {
+    category: "x402_request_body_unsupported",
+    affectedFields: ["intendedRequestBodyDigest", "intendedRequestBodyPosture"],
+    matches: (code) => code.includes("request_body_posture") || code.includes("request_body_digest") || code.includes("body_digest_mismatch"),
+    outcome: proposalRecoveryOutcome,
+    draftEligible: draftEligibleForProposalRecovery
+  },
+  {
+    category: "x402_provider_environment_untrusted",
+    affectedFields: ["providerEnvironmentPosture"],
+    matches: (code) => code.includes("provider_environment_not_sandboxed") || code.includes("provider_environment_untrusted") || code.includes("provider_drift"),
+    outcome: () => "stop"
+  },
+  {
+    category: "x402_credential_custody_unsafe",
+    affectedFields: ["credentialCustodyPosture"],
+    matches: (code) => code.includes("credential_custody_unsafe") || code.includes("unsafe_custody"),
+    outcome: () => "stop"
+  },
+  {
+    category: "x402_custody_proof_unverified",
+    affectedFields: ["custodyProof"],
+    matches: (code) => code.includes("custody_proof_missing") || code.includes("custody_proof_stale") || code.includes("custody_proof_unverified") || code.includes("external_verification_required") || code.includes("customer_evidence_missing"),
+    outcome: () => "read_evidence"
+  },
+  {
+    category: "x402_selected_requirement_mismatch",
+    affectedFields: ["selectedPaymentRequirementIndex", "selectedPaymentRequirementDigest"],
+    matches: (code) => code.includes("selected_payment_requirement"),
+    outcome: proposalRecoveryOutcome,
+    draftEligible: draftEligibleForProposalRecovery
+  },
+  {
+    category: "runtime_late_bound_parameters",
+    affectedFields: ["paramsDigest", "runtimeGraphRefs"],
+    matches: (code) => code.includes("params_digest_mismatch") || code.includes("params_missing") || code.includes("late_bound") || code.includes("dynamic_params") || code === "runtime_unobserved_regions_present",
+    outcome: proposalRecoveryOutcome,
+    draftEligible: draftEligibleForProposalRecovery
+  },
+  {
+    category: "runtime_dynamic_tool_construction",
+    affectedFields: ["runtimeGraphRefs", "toolCapabilityId"],
+    matches: (code) => code.includes("runtime_dynamic_tool_construction") || code.includes("dynamic_tool_construction") || code.includes("dynamic_tool"),
+    outcome: proposalRecoveryOutcome,
+    draftEligible: draftEligibleForProposalRecovery
+  },
+  {
+    category: "runtime_graph_coverage_gap",
+    affectedFields: ["runtimeGraphRefs"],
+    matches: (code) => code.includes("generated_execution_graph_missing") || code.includes("generated_execution_graph_not_contractable") || code.includes("generated_execution_graph_truncated") || code.includes("generated_execution_graph_over_limit") || code.includes("generated_execution_graph_truncation_unknown") || code.includes("generated_execution_node_ambiguous"),
+    outcome: () => "stop"
+  },
+  {
+    category: "raw_sibling_posture_named_not_controlled",
+    affectedFields: ["rawSiblingPosture"],
+    matches: (code) => code === "protected_path_raw_sibling_tool_present" || code === "host_raw_sibling_mutation_possible" || code.includes("raw_bypass_posture_unknown") || code.includes("sibling_bypass_posture_unknown"),
+    outcome: () => "read_evidence"
+  },
+  {
+    category: "raw_sibling_bypass_detected",
+    affectedFields: ["rawSiblingBypassPosture"],
+    matches: (code) => code === "bypass_probe_passed" || code === "generated_execution_block_sibling_refused" || code === "generated_execution_command_risk_bypass_detected" || code.includes("raw_bypass_posture_unblocked") || code.includes("sibling_bypass_posture_unblocked"),
+    outcome: () => "stop"
+  },
+  {
+    category: "idempotency_or_replay_conflict",
+    affectedFields: ["idempotencyKey", "replayPosture"],
+    matches: (code) => code.includes("replay") || code.includes("idempotency") || code === "already_consumed",
+    outcome: () => "abandon_required"
+  },
+  {
+    category: "proof_gap_only_evidence",
+    affectedFields: ["evidenceRefs"],
+    matches: (code) => code.includes("proof_gap") || code.includes("downstream_status_unknown") || code.includes("evidence_missing") || code.includes("not_verified"),
+    outcome: () => "read_evidence"
+  },
+  {
+    category: "isolation_or_quarantine_active",
+    affectedFields: ["isolationState"],
+    matches: (code) => code.includes("isolation") || code.includes("quarantine") || code.includes("breaker_trip") || code.includes("subject_quarantined"),
+    outcome: () => "stop"
+  }
+];
+var postureFindingRules = [
+  {
+    flag: "proofGapOnly",
+    category: "proof_gap_only_evidence",
+    reasonCode: "proof_gap_only_evidence",
+    affectedFields: ["evidenceRefs"],
+    outcome: "read_evidence"
+  },
+  {
+    flag: "rawSiblingPostureNamedNotControlled",
+    category: "raw_sibling_posture_named_not_controlled",
+    reasonCode: "raw_sibling_posture_named_not_controlled",
+    affectedFields: ["rawSiblingPosture"],
+    outcome: "read_evidence"
+  },
+  {
+    flag: "rawSiblingBypassDetected",
+    category: "raw_sibling_bypass_detected",
+    reasonCode: "raw_sibling_bypass_detected",
+    affectedFields: ["rawSiblingBypassPosture"],
+    outcome: "stop"
+  },
+  {
+    flag: "unsafeCredentialCustody",
+    category: "x402_credential_custody_unsafe",
+    reasonCode: "x402_credential_custody_unsafe",
+    affectedFields: ["credentialCustodyPosture"],
+    outcome: "abandon_required"
+  },
+  {
+    flag: "replayOrIdempotencyConflict",
+    category: "idempotency_or_replay_conflict",
+    reasonCode: "idempotency_or_replay_conflict",
+    affectedFields: ["idempotencyKey", "replayPosture"],
+    outcome: "abandon_required"
+  },
+  {
+    flag: "activeIsolationOrQuarantine",
+    category: "isolation_or_quarantine_active",
+    reasonCode: "isolation_or_quarantine_active",
+    affectedFields: ["isolationState"],
+    outcome: "stop"
+  },
+  {
+    flag: "ambiguousRuntimeGraph",
+    category: "runtime_graph_coverage_gap",
+    reasonCode: "ambiguous_runtime_graph",
+    affectedFields: ["runtimeGraphRefs"],
+    outcome: "abandon_required"
+  },
+  {
+    flag: "unknownGatewayPosture",
+    category: "x402_gateway_posture_unknown",
+    reasonCode: "x402_gateway_posture_unknown",
+    affectedFields: ["gatewayPosture"],
+    outcome: "stop"
+  },
+  {
+    flag: "liveOrUnknownProviderPosture",
+    category: "x402_provider_environment_untrusted",
+    reasonCode: "x402_provider_environment_untrusted",
+    affectedFields: ["providerEnvironmentPosture"],
+    outcome: "stop"
+  },
+  {
+    flag: "unsafeSalvageAttempted",
+    category: "draft_guidance_stale",
+    reasonCode: "unsafe_salvage_attempted",
+    affectedFields: ["candidateDraft"],
+    outcome: "stop"
+  }
+];
+var candidateDraftBlockingFindingCategories = new Set([
+  "x402_gateway_posture_unknown",
+  "x402_provider_environment_untrusted",
+  "x402_credential_custody_unsafe",
+  "runtime_graph_coverage_gap",
+  "raw_sibling_bypass_detected",
+  "idempotency_or_replay_conflict",
+  "isolation_or_quarantine_active",
+  "draft_guidance_stale"
+]);
+function reasonCodeFindingsForClassifier(context) {
+  return reasonCodeFindingRules.flatMap((rule) => {
+    const matchingReasonCodes = context.reasonCodes.filter(rule.matches);
+    if (matchingReasonCodes.length === 0)
+      return [];
+    const outcome = rule.outcome(context);
+    return [
+      {
+        category: rule.category,
+        reasonCodes: matchingReasonCodes,
+        sourceEvidenceRefs: sortedUnique(context.sourceEvidenceRefs),
+        affectedFields: sortedUnique([...context.affectedFields, ...rule.affectedFields]),
+        guidanceOutcome: outcome,
+        draftEligible: rule.draftEligible?.(context) ?? false
+      }
+    ];
+  });
+}
+function postureFindingsForClassifier(context) {
+  return postureFindingRules.flatMap((rule) => {
+    if (context.posture[rule.flag] !== true)
+      return [];
+    return [
+      {
+        category: rule.category,
+        reasonCodes: [rule.reasonCode],
+        sourceEvidenceRefs: sortedUnique(context.sourceEvidenceRefs),
+        affectedFields: sortedUnique([...context.affectedFields, ...rule.affectedFields]),
+        guidanceOutcome: rule.outcome,
+        draftEligible: rule.draftEligible ?? false
+      }
+    ];
+  });
+}
+function proposalRecoveryOutcome(context) {
+  if (!context.posture.exactRequiredFieldsKnown)
+    return "stop";
+  if (context.input.candidateDraft && !candidateDraftBlockedByPosture(context.posture)) {
+    return "draft_available";
+  }
+  return "recraft_required";
+}
+function draftEligibleForProposalRecovery(context) {
+  return Boolean(context.posture.exactRequiredFieldsKnown && context.input.candidateDraft && !candidateDraftBlockedByPosture(context.posture));
+}
+function guidanceOutcomeForClassifier(findings) {
+  const outcomes = findings.map((finding) => finding.guidanceOutcome);
+  if (outcomes.includes("abandon_required"))
+    return "abandon_required";
+  if (outcomes.includes("stop"))
+    return "stop";
+  if (outcomes.includes("draft_available"))
+    return "draft_available";
+  if (outcomes.includes("recraft_required"))
+    return "recraft_required";
+  if (outcomes.includes("reload_required"))
+    return "reload_required";
+  return "read_evidence";
+}
+function candidateDraftBlocked(findings, posture) {
+  return candidateDraftBlockedByPosture(posture) || findings.some((finding) => candidateDraftBlockingFindingCategories.has(finding.category));
+}
+function candidateDraftBlockedByPosture(posture) {
+  return Boolean(posture.rawSiblingBypassDetected || posture.unsafeCredentialCustody || posture.replayOrIdempotencyConflict || posture.activeIsolationOrQuarantine || posture.ambiguousRuntimeGraph || posture.unknownGatewayPosture || posture.liveOrUnknownProviderPosture || posture.unsafeSalvageAttempted);
+}
+function abandonQualityForClassifier(findings) {
+  if (findings.some((finding) => finding.category === "idempotency_or_replay_conflict"))
+    return "stale_abandon";
+  if (findings.some((finding) => finding.category === "runtime_graph_coverage_gap"))
+    return "ambiguous_abandon";
+  if (findings.some((finding) => finding.category === "x402_credential_custody_unsafe" || finding.category === "raw_sibling_bypass_detected" || finding.category === "isolation_or_quarantine_active")) {
+    return "good_abandon";
+  }
+  return "operator_abandon";
+}
+function readbackForClassifierOutcome(outcome) {
+  switch (outcome) {
+    case "draft_available":
+      return "A redacted draft template is available; submit it through the fresh proposal path.";
+    case "reload_required":
+      return "Reload trusted evidence before preparing any fresh proposal.";
+    case "recraft_required":
+      return "Recraft the request into a fresh action contract proposal.";
+    case "read_evidence":
+      return "Read the referenced evidence before preparing any fresh proposal.";
+    case "abandon_required":
+      return "Abandon the current material; it cannot safely produce a fresh proposal.";
+    case "stop":
+      return "Stop and escalate; this guidance is not permission to retry or mutate.";
+  }
+}
+function sortFindings(findings) {
+  return findings.map((finding) => ({
+    ...finding,
+    reasonCodes: sortedUnique(finding.reasonCodes),
+    sourceEvidenceRefs: sortedUnique(finding.sourceEvidenceRefs),
+    affectedFields: sortedUnique(finding.affectedFields)
+  })).sort((left, right) => [
+    left.category.localeCompare(right.category),
+    left.guidanceOutcome.localeCompare(right.guidanceOutcome),
+    left.reasonCodes.join("|").localeCompare(right.reasonCodes.join("|")),
+    left.sourceEvidenceRefs.join("|").localeCompare(right.sourceEvidenceRefs.join("|"))
+  ].find((comparison) => comparison !== 0) ?? 0);
+}
+function normalizeCandidateDraft(candidateDraft) {
+  return {
+    ...candidateDraft,
+    sourceRefs: sortedUnique(candidateDraft.sourceRefs),
+    digestInputsToPreserve: sortedUnique(candidateDraft.digestInputsToPreserve),
+    missingInputs: sortedUnique(candidateDraft.missingInputs),
+    supersedesDraftRefs: sortedUnique(candidateDraft.supersedesDraftRefs)
+  };
+}
+function normalizeAgentHandoff(agentHandoff) {
+  return {
+    ...agentHandoff,
+    requiredRefs: sortedUnique(agentHandoff.requiredRefs),
+    missingInputs: sortedUnique(agentHandoff.missingInputs),
+    disallowedActions: sortedUnique(agentHandoff.disallowedActions),
+    stopReasons: sortedUnique(agentHandoff.stopReasons),
+    nonClaims: sortedUnique(agentHandoff.nonClaims)
+  };
+}
+function sortedUnique(values) {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+function guidanceOutcomeForRecoveryPath(recommendedPath) {
+  switch (recommendedPath) {
+    case "narrower_action_contract_required":
+      return "recraft_required";
+    case "compensating_action_contract_required":
+      return "recraft_required";
+    case "gateway_reconciliation_required":
+      return "read_evidence";
+    case "human_review_required":
+      return "read_evidence";
+    case "halt_without_retry":
+      return "stop";
+  }
+}
+function recoveryReadbackForPath(recommendedPath) {
+  switch (recommendedPath) {
+    case "narrower_action_contract_required":
+      return "The existing recovery recommendation requires a narrower fresh action contract.";
+    case "compensating_action_contract_required":
+      return "The existing recovery recommendation requires a compensating fresh action contract.";
+    case "gateway_reconciliation_required":
+      return "The existing recovery recommendation requires gateway reconciliation evidence.";
+    case "human_review_required":
+      return "The existing recovery recommendation requires human review evidence.";
+    case "halt_without_retry":
+      return "The existing recovery recommendation requires halting without retry.";
+  }
+}
+function guidanceOutcomeForSurfaceNextAction(nextAction) {
+  switch (nextAction) {
+    case "reload_metadata":
+    case "fix_install":
+      return "reload_required";
+    case "recraft_request":
+    case "request_review":
+      return "recraft_required";
+    case "read_evidence":
+    case "wait_for_gateway":
+      return "read_evidence";
+    case "stop":
+      return "stop";
+  }
+}
+function guidanceOutcomeForFailureClass(failureClass, requiresNewContract) {
+  if (failureClass === "auth" || failureClass === "hosted_admission" || failureClass === "stale_admission") {
+    return "reload_required";
+  }
+  if (failureClass === "proof_gap")
+    return "read_evidence";
+  if (requiresNewContract)
+    return "recraft_required";
+  return "stop";
+}
+function handoffMechanismForOutcome(outcome) {
+  switch (outcome) {
+    case "draft_available":
+      return "submit_fresh_proposal";
+    case "reload_required":
+      return "reload_evidence";
+    case "recraft_required":
+      return "recraft_request";
+    case "read_evidence":
+      return "read_evidence";
+    case "abandon_required":
+      return "abandon_current_material";
+    case "stop":
+      return "stop_and_escalate";
+  }
+}
+function failureClassRequiresNewContract(failureClass) {
+  return failureClass === "stale_admission" || failureClass === "replay_refusal" || failureClass === "proof_gap";
+}
+function handshakeErrorSource(error51) {
+  if (!error51 || typeof error51 !== "object")
+    return null;
+  const candidate = error51;
+  if (typeof candidate.code !== "string" || typeof candidate.failureClass !== "string" || typeof candidate.status !== "number") {
+    return null;
+  }
+  return {
+    code: candidate.code,
+    failureClass: candidate.failureClass,
+    failurePhase: typeof candidate.failurePhase === "string" ? candidate.failurePhase : null,
+    status: candidate.status,
+    proofRef: typeof candidate.proofRef === "string" ? candidate.proofRef : null,
+    refusalRef: typeof candidate.refusalRef === "string" ? candidate.refusalRef : null,
+    ...typeof candidate.message === "string" ? { message: candidate.message } : {},
+    ...typeof candidate.requiresNewContract === "boolean" ? { requiresNewContract: candidate.requiresNewContract } : {}
+  };
+}
+function defaultDisallowedActions() {
+  return sortedUnique([
+    "approve_policy",
+    "create_greenlight",
+    "perform_gateway_check",
+    "reuse_greenlight",
+    "reuse_payment_material",
+    "retry_mutation"
+  ]);
+}
+function defaultNonClaims() {
+  return sortedUnique([
+    "not_authority",
+    "not_gateway_enforcement",
+    "not_permission",
+    "not_receipt",
+    "not_safe_to_retry"
+  ]);
+}
 // src/surfaces/product-launch-gate-resolution.ts
 var NonEmptyStringSchema2 = exports_external.string().min(1);
 var ProductLaunchGateResolutionStatusSchema = exports_external.enum([
@@ -18988,12 +20236,20 @@ var ProductLaunchGateResolutionSchema = exports_external.strictObject({
   blockerReasonCodes: exports_external.array(NonEmptyStringSchema2),
   nonClaims: exports_external.array(NonEmptyStringSchema2).min(1)
 });
+var currentProductLaunchPackage = {
+  name: "handshake-protocol-kernel",
+  version: "0.4.0",
+  mcpName: "io.github.CreasyBear/handshake-protocol-kernel"
+};
+var currentPackageRef = `${currentProductLaunchPackage.name}@${currentProductLaunchPackage.version}`;
+var currentExpectedVersionRef = `expected_version=${currentProductLaunchPackage.version}`;
+var lastVerifiedPublishedPackageRef = `${currentProductLaunchPackage.name}@0.3.0`;
 var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().length(ProductLaunchGateIdSchema.options.length).parse([
   {
     gateId: "first_external_runtime_transcript",
     status: "resolved_selected",
-    decision: "Codex-local is the first live runtime target, and run-local evidence now shows a fresh Codex host attempted handshake.actions.x402_payment.propose through a handshake_x402 MCP server entry pinned to the current 0.2.8 local artifact.",
-    launchLanguageBoundary: "Codex-local host-origin MCP tool invocation may be claimed for the pinned artifact. Do not claim native certification, host-wide containment, policy authority, gateway checks, signer use, payment material, customer gateway custody, live paid execution, or registry discovery.",
+    decision: "Codex-local is the first live runtime target, and historical run-local evidence shows a fresh Codex host attempted handshake.actions.x402_payment.propose through a handshake_x402 MCP server entry pinned to an older 0.2.8 local artifact.",
+    launchLanguageBoundary: "Codex-local host-origin MCP tool invocation may be claimed only as historical host-activation evidence unless a current-version host transcript is captured. Do not claim native certification, host-wide containment, policy authority, gateway checks, signer use, payment material, customer gateway custody, live paid execution, or registry discovery.",
     requiredEvidence: [
       "read /Users/joelchan/.codex/config.toml",
       "observe mcp_servers.handshake_x402 in Codex config",
@@ -19001,8 +20257,8 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "record proposal/readback transcript and raw sibling posture"
     ],
     currentEvidence: [
-      "live /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to handshake-protocol-kernel@0.2.8 artifact sha256 c80c3985a9c695c6008c9c9eb5323085e2dcfa262f9c090aab2a78056e6bcf42",
-      "fresh Codex host observed and attempted handshake.actions.x402_payment.propose; empty-object input failed schema validation before authority or mutation"
+      "historical /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to handshake-protocol-kernel@0.2.8 artifact sha256 c80c3985a9c695c6008c9c9eb5323085e2dcfa262f9c090aab2a78056e6bcf42",
+      "historical Codex host observed and attempted handshake.actions.x402_payment.propose; empty-object input failed schema validation before authority or mutation"
     ],
     blockerReasonCodes: [],
     nonClaims: ["not_authority_by_host_invocation", "not_host_wide_containment", "not_native_codex_certification"]
@@ -19037,9 +20293,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "search endpoint returns the server by package or MCP name"
     ],
     currentEvidence: [
-      "npm registry latest returned handshake-protocol-kernel@0.2.8 with registry signatures",
-      "trusted-publish workflow completed successfully for expected_version=0.2.8 and published GitHub Actions provenance",
-      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.8",
+      `npm registry latest returned ${lastVerifiedPublishedPackageRef}; current source release target is ${currentPackageRef}`,
+      `trusted-publish workflow must complete for ${currentExpectedVersionRef} before current-surface npm availability is claimable`,
+      `clean installed-artifact smoke must pass for ${currentPackageRef}`,
       "official MCP Registry GET by io.github.CreasyBear/handshake-protocol-kernel returned 404 Server not found",
       "official MCP Registry search for handshake-protocol-kernel returned an empty server list"
     ],
@@ -19119,9 +20375,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   },
   {
     gateId: "package_provenance_npm_attestation",
-    status: "resolved_selected",
-    decision: "Package provenance for 0.2.8 is satisfied by npm trusted publishing through the public artifact repository workflow.",
-    launchLanguageBoundary: "Published 0.2.8 can be described as npm-available with registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.",
+    status: "resolved_blocked",
+    decision: `Package provenance for ${currentProductLaunchPackage.version} is the current release target and is blocked until npm trusted publishing and remote registry readback pass for the exact version.`,
+    launchLanguageBoundary: `Published ${currentProductLaunchPackage.version} can be described as npm-available only after registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke are verified for the exact version. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.`,
     requiredEvidence: [
       "npm latest returns the intended product version",
       "npm dist.integrity and dist.signatures are recorded",
@@ -19129,12 +20385,12 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "clean install smoke passes against the newly published artifact"
     ],
     currentEvidence: [
-      "npm latest returned 0.2.8 with dist.integrity and dist.signatures",
-      "trusted-publish workflow succeeded for expected_version=0.2.8",
-      "npm publish logged GitHub Actions provenance and Sigstore transparency log index 1628227940",
-      "clean installed-artifact smoke passed for handshake-protocol-kernel@0.2.8"
+      `npm latest currently returns ${lastVerifiedPublishedPackageRef}, not ${currentPackageRef}`,
+      `trusted-publish workflow has not yet succeeded for ${currentExpectedVersionRef}`,
+      "npm publish provenance and SLSA readback remain pending for the current release target",
+      `clean installed-artifact smoke remains pending for ${currentPackageRef}`
     ],
-    blockerReasonCodes: [],
+    blockerReasonCodes: ["npm_current_release_not_published", "trusted_publish_current_version_not_verified"],
     nonClaims: ["not_authority_by_publication", "not_supply_chain_safety", "not_npm_audit_replacement"]
   }
 ]);
@@ -22520,12 +23776,12 @@ class ZodTuple2 extends ZodType2 {
     });
   }
 }
-ZodTuple2.create = (schemas44, params) => {
-  if (!Array.isArray(schemas44)) {
+ZodTuple2.create = (schemas47, params) => {
+  if (!Array.isArray(schemas47)) {
     throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
   }
   return new ZodTuple2({
-    items: schemas44,
+    items: schemas47,
     typeName: ZodFirstPartyTypeKind2.ZodTuple,
     rest: null,
     ...processCreateParams(params)
@@ -23704,6 +24960,74 @@ function assertProductCompletionGateIds(gateIds) {
 }
 
 // src/surfaces/proof-packets/product-completion.ts
+function productCompletionReadbackInputFromSourceEvidence(input) {
+  const source = input.sourceEvidence ?? {};
+  return {
+    generatedAt: input.generatedAt,
+    commandRefs: input.commandRefs ?? ["node scripts/check-product-completion.mjs"],
+    qualityGate: {
+      command: "npm run check:repo",
+      passed: input.qualityGate?.passed ?? false,
+      evidenceRef: input.qualityGate?.evidenceRef ?? "source-evidence:quality-gate:not-run"
+    },
+    gates: {
+      codexLocalHostActivation: {
+        status: "blocked",
+        artifactVersion: input.localPackage.version,
+        artifactSha256: null,
+        observesHostToolInvocation: false,
+        authorityCreated: false,
+        evidenceRefs: ["source-evidence:codex-local-host-activation:current-version-not-captured"],
+        ...source.codexLocalHostActivation
+      },
+      publicDistributionAndRegistry: {
+        status: "blocked",
+        localVersion: input.localPackage.version,
+        npmLatestVersion: input.localPackage.version,
+        currentSurfacePublished: true,
+        mcpRegistryAccepted: false,
+        mcpRegistryDiscoverable: false,
+        provenanceAttempted: true,
+        provenanceSupported: true,
+        proofGapReasonCodes: ["mcp_registry_discoverability_not_verified"],
+        evidenceRefs: [
+          `source-evidence:npm:${input.localPackage.name}@${input.localPackage.version}:published`,
+          `source-evidence:mcp-registry:${input.localPackage.mcpName}:not-discoverable`
+        ],
+        ...source.publicDistributionAndRegistry
+      },
+      customerGatewayLiveX402PaidProof: {
+        status: "blocked",
+        customerGatewayCustodyPresent: false,
+        livePaidRetryPerformed: false,
+        terminalReadbackPresent: false,
+        signerInvocationPosture: "not_observed",
+        proofGapReasonCodes: ["customer_gateway_custody_packet_absent", "live_paid_retry_not_performed"],
+        evidenceRefs: ["source-evidence:live-x402-paid-proof:not-captured"],
+        ...source.customerGatewayLiveX402PaidProof
+      },
+      authMdX402AdmissionPacket: {
+        packetVersion: "v0",
+        packetProjectorPresent: false,
+        refusalFirstTestsPassed: false,
+        redactedReadbackTestsPassed: false,
+        createsAuthority: false,
+        evidenceRefs: ["source-evidence:auth-md-x402-admission:not-completed"],
+        ...source.authMdX402AdmissionPacket
+      },
+      dualEnforcementPosture: source.dualEnforcementPosture ?? {
+        dualEnforcementPostureTestPassed: false,
+        mutationManifestGatingTestPassed: false,
+        evidenceRefs: ["source-evidence:dual-enforcement:structural-tests-not-completed"]
+      },
+      perCustomerBypassScaffold: source.perCustomerBypassScaffold ?? {
+        customerOnboardingRef: null,
+        firstPartyDogfoodCustomerId: null,
+        evidenceRefs: ["source-evidence:per-customer-bypass-scaffold:not-onboarded"]
+      }
+    }
+  };
+}
 function projectProductCompletionReadback(input) {
   const gateResults = [
     productCompletionGateResult({
@@ -23802,7 +25126,7 @@ function perCustomerBypassScaffoldGateResult(input) {
   return productCompletionGateResult({
     gateId: "per_customer_bypass_scaffold",
     title: "Per-customer service-workflow-admission bypass scaffold (first-party dogfood only)",
-    completed: false,
+    completed: dogfoodReady,
     hardBlocked: !dogfoodReady && gate?.customerOnboardingRef === null,
     blockers: dogfoodReady ? [] : ["per_customer_bypass_scaffold_incomplete", "customer_onboarding_ref_absent"],
     evidenceRefs: gate?.evidenceRefs ?? ["evidence:phase-04:D-25-scaffold"]
@@ -23839,7 +25163,7 @@ function productCompletionOverclaimViolations(input) {
   return violations.sort();
 }
 // src/surfaces/service-workflow-admission/index.ts
-var sha256DigestSchema = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
+var sha256DigestSchema2 = exports_external.string().regex(/^sha256:[a-f0-9]{64}$/);
 var serviceWorkflowAdmissionSchemaVersion = "handshake.service-workflow-admission.v0.1";
 var principalAgentLinkSchemaVersion = "handshake.principal-agent-link.v0.1";
 var serviceWorkflowClaimStatuses = ["accepted", "refused", "stale", "proof_gap", "quarantined"];
@@ -23881,24 +25205,24 @@ var serviceWorkflowAuthorityBoundary = {
   freshActionContractRequired: true
 };
 var ServiceWorkflowContextRefsSchema = exports_external.strictObject({
-  passportPackageDigest: sha256DigestSchema,
+  passportPackageDigest: sha256DigestSchema2,
   passportPresentationId: exports_external.string().min(1),
   admissionId: exports_external.string().min(1),
   serviceWorkflowHandleId: exports_external.string().min(1),
-  serviceWorkflowHandleDigest: sha256DigestSchema
+  serviceWorkflowHandleDigest: sha256DigestSchema2
 });
 var PrincipalAgentLinkSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(principalAgentLinkSchemaVersion),
   principalAgentLinkId: exports_external.string().min(1),
-  principalAgentLinkDigest: sha256DigestSchema,
+  principalAgentLinkDigest: sha256DigestSchema2,
   tenantId: exports_external.string().min(1),
   organizationId: exports_external.string().min(1),
   projectId: exports_external.string().min(1).nullable(),
   workspaceId: exports_external.string().min(1).nullable(),
   principalId: exports_external.string().min(1),
   agentId: exports_external.string().min(1),
-  principalSubjectDigest: sha256DigestSchema,
-  agentSubjectDigest: sha256DigestSchema,
+  principalSubjectDigest: sha256DigestSchema2,
+  agentSubjectDigest: sha256DigestSchema2,
   authProviderRef: exports_external.string().min(1),
   linkEvidenceRefs: exports_external.array(exports_external.string().min(1)),
   scopeRefs: exports_external.array(exports_external.string().min(1)),
@@ -23923,7 +25247,7 @@ var PrincipalAgentLinkSchema = exports_external.strictObject({
 });
 var ServiceWorkflowClaimResultSchema = exports_external.strictObject({
   claimRef: exports_external.string().min(1),
-  claimDigest: sha256DigestSchema.nullable(),
+  claimDigest: sha256DigestSchema2.nullable(),
   status: exports_external.enum(serviceWorkflowClaimStatuses),
   reasonCodes: exports_external.array(exports_external.string().min(2)),
   evidenceRefs: exports_external.array(exports_external.string().min(1)),
@@ -23938,26 +25262,26 @@ var ServiceWorkflowRuntimePostureSchema = exports_external.strictObject({
 });
 var ServiceWorkflowHandleSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(serviceWorkflowAdmissionSchemaVersion),
-  passportPackageDigest: sha256DigestSchema,
+  passportPackageDigest: sha256DigestSchema2,
   passportPresentationId: exports_external.string().min(1),
   admissionId: exports_external.string().min(1),
   serviceWorkflowHandleId: exports_external.string().min(1),
-  serviceWorkflowHandleDigest: sha256DigestSchema,
+  serviceWorkflowHandleDigest: sha256DigestSchema2,
   issuedAt: exports_external.string().datetime({ offset: true }),
   expiresAt: exports_external.string().datetime({ offset: true }).nullable(),
-  workflowBoundsDigest: sha256DigestSchema,
-  sourceAdmissionDigest: sha256DigestSchema,
-  runtimePostureDigest: sha256DigestSchema.nullable(),
+  workflowBoundsDigest: sha256DigestSchema2,
+  sourceAdmissionDigest: sha256DigestSchema2,
+  runtimePostureDigest: sha256DigestSchema2.nullable(),
   authorityBoundary: ServiceWorkflowAuthorityBoundarySchema,
   nextProtectedActionRequirement: exports_external.literal("fresh_action_contract_required"),
   allowedUse: exports_external.literal("correlation_and_readback_context_only")
 });
 var ServiceWorkflowAdmissionSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(serviceWorkflowAdmissionSchemaVersion),
-  passportPackageDigest: sha256DigestSchema,
+  passportPackageDigest: sha256DigestSchema2,
   passportPresentationId: exports_external.string().min(1),
   admissionId: exports_external.string().min(1),
-  admissionDigest: sha256DigestSchema,
+  admissionDigest: sha256DigestSchema2,
   serviceRef: exports_external.string().min(1),
   presentedAt: exports_external.string().datetime({ offset: true }),
   evaluatedAt: exports_external.string().datetime({ offset: true }),
@@ -24335,6 +25659,16 @@ var protocolNavigation = [
     eventsEmitted: ["credential_resolution_recorded"],
     authorityBoundary: "post-gate credential resolution evidence only",
     evidenceObligation: "bind credential resolution/use evidence to exact contract, greenlight, and passed gateway check without exposing secret material"
+  },
+  {
+    transitionId: "recordTypedActionCommitment",
+    kernelMethod: "recordTypedActionCommitment",
+    phase: "typed_action_commitment",
+    outcomeClasses: ["recorded", "refusal", "proof_gap"],
+    recordsWritten: ["typed_action_commitment", "contract_stream_event"],
+    eventsEmitted: ["typed_action_commitment_recorded"],
+    authorityBoundary: "typed action commitment non-authority evidence only",
+    evidenceObligation: "record digest-bound external commitment evidence without creating authority, policy, greenlight, gateway check, mutation, receipt, certificate, endpoint lease, signer custody, payment custody, or downstream-success proof"
   },
   {
     transitionId: "createBypassProbe",
@@ -24809,6 +26143,24 @@ var actionAttemptLifecycleMatrix = {
     authorityEffect: "evidence_only",
     terminalOutcome: "proof_gap"
   }, "credential resolution uncertainty remains proof-gap evidence instead of execution proof"),
+  "recordTypedActionCommitment:recorded": entry({
+    phase: "observation",
+    state: "typed_commitment_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "evidence_only"
+  }, "typed action commitment records digest-bound external commitment evidence without minting policy, greenlight, gateway, or mutation authority"),
+  "recordTypedActionCommitment:refusal": entry({
+    phase: "observation",
+    state: "typed_commitment_recorded",
+    authorityEffect: "none",
+    terminalOutcome: "refusal"
+  }, "typed commitment verification or binding failures are refusal evidence before downstream authority"),
+  "recordTypedActionCommitment:proof_gap": entry({
+    phase: "observation",
+    state: "typed_commitment_recorded",
+    authorityEffect: "evidence_only",
+    terminalOutcome: "proof_gap"
+  }, "typed commitment uncertainty remains proof-gap evidence instead of signer custody or downstream-success proof"),
   "createBypassProbe:recorded": entry({
     phase: "observation",
     state: "bypass_risk_recorded",
@@ -25566,6 +26918,9 @@ export {
   serviceWorkflowClaimStatuses,
   serviceWorkflowAuthorityBoundary,
   serviceWorkflowAdmissionSchemaVersion,
+  recoveryGuidanceFromSurfaceOutcome,
+  recoveryGuidanceFromRecoveryRecommendation,
+  recoveryGuidanceFromHandshakeError,
   projectProductCompletionReadback,
   projectPerCustomerBypassScaffoldReadback,
   projectPackageReleaseProof,
@@ -25577,7 +26932,9 @@ export {
   projectActivationGateReport,
   productLaunchGateResolutions,
   productLaunchGateResolutionFor,
+  productCompletionReadbackInputFromSourceEvidence,
   principalAgentLinkSchemaVersion,
+  parseProtectedActionRecoveryGuidance,
   parseCodexMcpServerRecords,
   parseCodexMcpServerNames,
   packageReleaseAuthorityBoundary,
@@ -25586,6 +26943,9 @@ export {
   gap,
   forbiddenServiceWorkflowAuthorityNouns,
   escapeRegExp,
+  currentProductLaunchPackage,
+  classifyProtectedActionRecoveryGuidance,
+  buildProtectedActionRecoveryGuidance,
   buildCodexMcpServerTomlBlock,
   assertProductCompletionGateIds,
   arrayEquals,
@@ -25604,6 +26964,15 @@ export {
   RegistryDiscoverabilityProofSchema,
   PublishOperationProofSchema,
   ProvenanceProofSchema,
+  ProtectedActionRecoverySourceErrorSchema,
+  ProtectedActionRecoveryGuidanceSourceKindSchema,
+  ProtectedActionRecoveryGuidanceSchema,
+  ProtectedActionRecoveryGuidanceOutcomeSchema,
+  ProtectedActionRecoveryGuidanceFindingCategorySchema,
+  ProtectedActionRecoveryFindingSchema,
+  ProtectedActionRecoveryCandidateDraftSchema,
+  ProtectedActionRecoveryAgentHandoffSchema,
+  ProtectedActionRecoveryAbandonQualityClassSchema,
   ProductLaunchGateResolutionStatusSchema,
   ProductLaunchGateResolutionSchema,
   ProductLaunchGateIdSchema,
@@ -25614,6 +26983,7 @@ export {
   PackageReleaseProofInputSchema,
   PackageReleaseProofGapSchema,
   PackageReleaseAuthorityBoundarySchema,
+  PROTECTED_ACTION_RECOVERY_GUIDANCE_VERSION,
   PROOF_PACKET_VERSION,
   PRODUCT_COMPLETION_STATUSES,
   PRODUCT_COMPLETION_READBACK_KIND,

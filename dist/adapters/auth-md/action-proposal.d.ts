@@ -43,9 +43,9 @@ export declare const AuthMdProtectedApiCallParametersSchema: z.ZodObject<{
     gatewayCredentialRefPosture: z.ZodDefault<z.ZodEnum<{
         unknown: "unknown";
         stale: "stale";
+        fresh: "fresh";
         revoked: "revoked";
         expired: "expired";
-        fresh: "fresh";
     }>>;
     idempotencyMaterialRefPresent: z.ZodBoolean;
     rawAuthorizationHeaderObserved: z.ZodBoolean;
@@ -97,9 +97,9 @@ export declare const AuthMdProtectedApiCallAttemptSchema: z.ZodObject<{
     gatewayCredentialRefPosture: z.ZodDefault<z.ZodEnum<{
         unknown: "unknown";
         stale: "stale";
+        fresh: "fresh";
         revoked: "revoked";
         expired: "expired";
-        fresh: "fresh";
     }>>;
     rawAuthorizationHeaderObserved: z.ZodDefault<z.ZodBoolean>;
     dynamicEndpointConstructionObserved: z.ZodDefault<z.ZodBoolean>;

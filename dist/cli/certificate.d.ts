@@ -2,7 +2,7 @@ export declare function verifyCertificateCommand(input: {
     certificate: unknown;
     trustMaterial: unknown;
 }): Promise<import("./output").CliOutputEnvelope<{
-    verificationOutcome: "proof_gap" | "refused" | "verified";
+    verificationOutcome: "proof_gap" | "verified" | "refused";
     signingInputDigest: string | null;
     actionClass: string | null;
     receiptRef: string | null;

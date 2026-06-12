@@ -47,6 +47,11 @@ export type GatewayCheckArtifactInput = {
     isolationStates: IsolationState[];
     gatewayPolicyDrift: GatewayPolicyDriftCheck;
     protectedPathPosture: StoredProtocolRecord<ProtectedPathPosture> | null;
+    typedCommitmentObservation: {
+        observedTypedCommitmentRefs: string[];
+        observedTypedCommitmentSetDigest: string | null;
+        refusalReasonCode: string | null;
+    };
 };
 export declare function verifiedGatewayCheckFromResult(result: GatewayCheckResult): VerifiedGatewayCheck | null;
 export declare function buildGateArtifacts(input: GatewayCheckArtifactInput): Promise<GatewayCheckArtifacts>;

@@ -74,8 +74,8 @@ export declare function evidenceReceiptTimelineCommand(value: unknown): import("
     gatewayId: string;
     policyDecisionStatus: "review_required" | "proof_gap" | "refuse" | "quarantine" | "greenlight" | "halt";
     gatewayCheckStatus: "proof_gap" | "refused" | "passed" | null;
-    gatewayAdmissionStatus: "proof_gap" | "refused" | "not_requested" | "admitted" | "replayed";
-    greenlightConsumptionStatus: "not_applicable" | "replayed" | "not_consumed" | "consumed";
+    gatewayAdmissionStatus: "proof_gap" | "refused" | "replayed" | "not_requested" | "admitted";
+    greenlightConsumptionStatus: "replayed" | "not_applicable" | "not_consumed" | "consumed";
     mutationAttemptStatus: "unknown" | "failed" | "not_attempted" | "submitted" | "succeeded" | "downstream_refused";
     downstreamExecutionStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
     downstreamOutcomeStatus: "unknown" | "refused" | "failed" | "succeeded" | "pending" | "not_started";
@@ -96,7 +96,7 @@ export declare function evidenceReceiptTimelineCommand(value: unknown): import("
         streamScope: "tenant" | "organization" | "run" | "protected_surface_resource";
         partitionKey: string;
         offset: number;
-        eventType: "protected_path_posture_recorded" | "review_required" | "review_artifact_recorded" | "review_decision_recorded" | "receipt_exported" | "recovery_recommended" | "proof_gap_resolved" | "gateway_checked" | "intent_compiled" | "runtime_execution_recorded" | "generated_execution_graph_recorded" | "install_setup_recorded" | "install_setup_refused" | "gateway_credential_ref_registered" | "delegated_authority_ref_registered" | "delegated_authority_status_changed" | "gateway_custody_proof_packet_recorded" | "credential_resolution_recorded" | "idempotency_ledger_recorded" | "bypass_probe_recorded" | "tool_call_draft_recorded" | "negotiation_session_recorded" | "negotiation_offer_recorded" | "negotiation_decision_recorded" | "linked_agreement_recorded" | "agreement_obligation_binding_recorded" | "agreement_status_transition_recorded" | "action_proposed" | "policy_decision_recorded" | "action_greenlit" | "action_refused" | "mutation_attempted" | "protected_surface_operation_claimed" | "protected_surface_operation_released" | "surface_operation_reconciled" | "gateway_refused" | "breaker_decision_recorded" | "receipt_emitted" | "authority_certificate_emitted" | "recovery_status_changed" | "proof_gap_recorded" | "isolation_changed";
+        eventType: "protected_path_posture_recorded" | "review_required" | "review_artifact_recorded" | "review_decision_recorded" | "receipt_exported" | "recovery_recommended" | "proof_gap_resolved" | "gateway_checked" | "intent_compiled" | "runtime_execution_recorded" | "generated_execution_graph_recorded" | "install_setup_recorded" | "install_setup_refused" | "gateway_credential_ref_registered" | "delegated_authority_ref_registered" | "delegated_authority_status_changed" | "gateway_custody_proof_packet_recorded" | "credential_resolution_recorded" | "typed_action_commitment_recorded" | "idempotency_ledger_recorded" | "bypass_probe_recorded" | "tool_call_draft_recorded" | "negotiation_session_recorded" | "negotiation_offer_recorded" | "negotiation_decision_recorded" | "linked_agreement_recorded" | "agreement_obligation_binding_recorded" | "agreement_status_transition_recorded" | "action_proposed" | "policy_decision_recorded" | "action_greenlit" | "action_refused" | "mutation_attempted" | "protected_surface_operation_claimed" | "protected_surface_operation_released" | "surface_operation_reconciled" | "gateway_refused" | "breaker_decision_recorded" | "receipt_emitted" | "authority_certificate_emitted" | "raw_evidence_read_audited" | "recovery_status_changed" | "proof_gap_recorded" | "isolation_changed";
         eventTime: string;
         eventDigest: string;
         objectRefs: string[];

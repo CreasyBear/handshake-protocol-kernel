@@ -62,7 +62,30 @@ export type ProductCompletionReadbackInput = {
         };
     };
 };
+export type ProductCompletionSourceEvidence = {
+    readonly codexLocalHostActivation?: Partial<ProductCompletionReadbackInput["gates"]["codexLocalHostActivation"]>;
+    readonly publicDistributionAndRegistry?: Partial<ProductCompletionReadbackInput["gates"]["publicDistributionAndRegistry"]>;
+    readonly customerGatewayLiveX402PaidProof?: Partial<ProductCompletionReadbackInput["gates"]["customerGatewayLiveX402PaidProof"]>;
+    readonly authMdX402AdmissionPacket?: Partial<ProductCompletionReadbackInput["gates"]["authMdX402AdmissionPacket"]>;
+    readonly dualEnforcementPosture?: ProductCompletionReadbackInput["gates"]["dualEnforcementPosture"];
+    readonly perCustomerBypassScaffold?: ProductCompletionReadbackInput["gates"]["perCustomerBypassScaffold"];
+};
+export type ProductCompletionSourceEvidenceInput = {
+    readonly generatedAt: string;
+    readonly commandRefs?: readonly string[];
+    readonly localPackage: {
+        readonly name: string;
+        readonly version: string;
+        readonly mcpName: string;
+    };
+    readonly qualityGate?: {
+        readonly passed: boolean;
+        readonly evidenceRef: string;
+    };
+    readonly sourceEvidence?: ProductCompletionSourceEvidence;
+};
 export type ProductCompletionReadback = ReturnType<typeof projectProductCompletionReadback>;
+export declare function productCompletionReadbackInputFromSourceEvidence(input: ProductCompletionSourceEvidenceInput): ProductCompletionReadbackInput;
 export declare function projectProductCompletionReadback(input: ProductCompletionReadbackInput): {
     proofKind: "product_completion_readback";
     proofVersion: "proof-packets.v0.1";

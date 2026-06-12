@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ProtectedActionRecoveryGuidance } from "../surfaces/protected-action-recovery-guidance";
 export declare const McpResourceReadSchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<"handshake.surface-outcome.v0.1">;
     uri: z.ZodString;
@@ -23,6 +24,9 @@ export type McpEvidenceResourceClient = {
     getReceiptTimelineProjection(receiptId: string): Promise<unknown>;
     getIdempotencyRecoveryProjection(actionContractId: string): Promise<unknown>;
     getProtectedPathInstallHealthProjection(actionContractId: string): Promise<unknown>;
+    getRecoveryGuidanceProjection(guidanceId: string): Promise<ProtectedActionRecoveryGuidance>;
+    getRecentRecoveryGuidanceProjection(scopeRef: string): Promise<readonly ProtectedActionRecoveryGuidance[]>;
+    getRecoveryDraftDiffProjection(guidanceId: string): Promise<unknown>;
 };
 export declare function readMcpResource(uri: string, evidenceClient: McpEvidenceResourceClient): Promise<McpResourceRead>;
 type ParsedMcpResourceUri = {
@@ -58,6 +62,15 @@ type ParsedMcpResourceUri = {
 } | {
     kind: "certificateRef";
     authorityCertificateId: string;
+} | {
+    kind: "recoveryGuidance";
+    guidanceId: string;
+} | {
+    kind: "recentRecoveryGuidance";
+    scopeRef: string;
+} | {
+    kind: "recoveryDraftDiff";
+    guidanceId: string;
 };
 export declare function parseMcpResourceUri(uri: string): ParsedMcpResourceUri;
 export {};

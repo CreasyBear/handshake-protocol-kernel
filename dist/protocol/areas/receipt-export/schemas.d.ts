@@ -2,9 +2,9 @@ import { z } from "zod";
 export declare const GatewayAdmissionStatusSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     refused: "refused";
+    replayed: "replayed";
     not_requested: "not_requested";
     admitted: "admitted";
-    replayed: "replayed";
 }>;
 export type GatewayAdmissionStatus = z.infer<typeof GatewayAdmissionStatusSchema>;
 export declare const DownstreamOutcomeStatusSchema: z.ZodEnum<{
@@ -58,13 +58,13 @@ export declare const ReceiptSchema: z.ZodObject<{
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        not_applicable: "not_applicable";
         replayed: "replayed";
+        not_applicable: "not_applicable";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;
@@ -152,14 +152,14 @@ export declare const ReceiptExportSchema: z.ZodObject<{
     gatewayAdmissionStatus: z.ZodEnum<{
         proof_gap: "proof_gap";
         refused: "refused";
+        replayed: "replayed";
         not_requested: "not_requested";
         admitted: "admitted";
-        replayed: "replayed";
     }>;
     gatewayCheckedAt: z.ZodNullable<z.ZodString>;
     greenlightConsumptionStatus: z.ZodEnum<{
-        not_applicable: "not_applicable";
         replayed: "replayed";
+        not_applicable: "not_applicable";
         not_consumed: "not_consumed";
         consumed: "consumed";
     }>;

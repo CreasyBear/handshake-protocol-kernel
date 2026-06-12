@@ -110,6 +110,10 @@ export type EndpointAccessUsageCounterKey = {
     leaseId: string;
     usageKind: string;
 };
+export type EndpointAccessRecordScope = {
+    tenantId: string;
+    organizationId: string;
+};
 export type EndpointAccessUsageCounterReservation = EndpointAccessUsageCounterKey & {
     expectedCounter: number;
     counterAfter: number;
@@ -174,6 +178,9 @@ export interface ProtocolStore {
     commitProtocolRecords(commit: ProtocolCommit): Promise<ProtocolCommitResult>;
     commitGatewayCheck(commit: GatewayCheckCommit): Promise<GatewayCheckCommitResult>;
     commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
+    getEndpointAccessLeaseByGreenlightId<T>(greenlightId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    getEndpointAccessClearanceBindingByAttemptId<T>(attemptId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    listEndpointAccessUsageEventsByLeaseId<T>(leaseId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T>[]>;
     getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
     commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
 }

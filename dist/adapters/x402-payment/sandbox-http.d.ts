@@ -6,8 +6,8 @@ declare const LocalSandboxIntendedRequestSchema: z.ZodObject<{
     url: z.ZodString;
     requestBodyPosture: z.ZodDefault<z.ZodEnum<{
         unsupported: "unsupported";
-        no_body: "no_body";
         digest_bound: "digest_bound";
+        no_body: "no_body";
         omitted: "omitted";
     }>>;
     bodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;

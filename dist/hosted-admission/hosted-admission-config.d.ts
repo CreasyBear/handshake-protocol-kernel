@@ -46,10 +46,20 @@ export declare const HostedRawReadPostureSchema: z.ZodEnum<{
     gated: "gated";
 }>;
 export type HostedRawReadPosture = z.infer<typeof HostedRawReadPostureSchema>;
+export declare const HostedRawReadAuditPostureSchema: z.ZodObject<{
+    sourceOwned: z.ZodBoolean;
+    productionEligible: z.ZodBoolean;
+    auditRecordObjectType: z.ZodLiteral<"raw_record_read_audit">;
+    auditEventType: z.ZodLiteral<"raw_evidence_read_audited">;
+    auditCommitBoundary: z.ZodLiteral<"before_raw_record_response">;
+    auditPayloadIncludesRawRecord: z.ZodLiteral<false>;
+}, z.core.$strict>;
+export type HostedRawReadAuditPosture = z.infer<typeof HostedRawReadAuditPostureSchema>;
+export declare function buildHostedRawReadAuditPosture(overrides?: Partial<Pick<HostedRawReadAuditPosture, "sourceOwned" | "productionEligible">>): HostedRawReadAuditPosture;
 export declare const HostedReadinessStateSchema: z.ZodEnum<{
     read_only: "read_only";
-    active: "active";
     missing: "missing";
+    active: "active";
     disabled: "disabled";
     configured_but_unverified: "configured_but_unverified";
     not_promoted: "not_promoted";
@@ -118,8 +128,8 @@ export declare const HostedAgenticEndpointAccessReadinessReportSchema: z.ZodObje
     configured: z.ZodBoolean;
     readinessState: z.ZodEnum<{
         read_only: "read_only";
-        active: "active";
         missing: "missing";
+        active: "active";
         disabled: "disabled";
         configured_but_unverified: "configured_but_unverified";
         not_promoted: "not_promoted";
@@ -324,6 +334,14 @@ export declare const HostedAdmissionConfigSchema: z.ZodObject<{
         disabled: "disabled";
         gated: "gated";
     }>;
+    rawReadAudit: z.ZodDefault<z.ZodObject<{
+        sourceOwned: z.ZodBoolean;
+        productionEligible: z.ZodBoolean;
+        auditRecordObjectType: z.ZodLiteral<"raw_record_read_audit">;
+        auditEventType: z.ZodLiteral<"raw_evidence_read_audited">;
+        auditCommitBoundary: z.ZodLiteral<"before_raw_record_response">;
+        auditPayloadIncludesRawRecord: z.ZodLiteral<false>;
+    }, z.core.$strict>>;
     redactionProfileRefs: z.ZodArray<z.ZodString>;
     retentionPosture: z.ZodEnum<{
         disabled: "disabled";
@@ -391,8 +409,8 @@ export declare const HostedReadinessReportSchema: z.ZodObject<{
     }>>;
     readinessState: z.ZodEnum<{
         read_only: "read_only";
-        active: "active";
         missing: "missing";
+        active: "active";
         disabled: "disabled";
         configured_but_unverified: "configured_but_unverified";
         not_promoted: "not_promoted";
@@ -487,8 +505,8 @@ export declare const HostedReadinessReportSchema: z.ZodObject<{
                 checked: z.ZodBoolean;
                 status: z.ZodEnum<{
                     error: "error";
-                    present: "present";
                     missing: "missing";
+                    present: "present";
                     not_checked: "not_checked";
                 }>;
                 requiredTableRefs: z.ZodArray<z.ZodString>;
@@ -516,6 +534,14 @@ export declare const HostedReadinessReportSchema: z.ZodObject<{
         disabled: "disabled";
         gated: "gated";
     }>>;
+    rawReadAudit: z.ZodNullable<z.ZodObject<{
+        sourceOwned: z.ZodBoolean;
+        productionEligible: z.ZodBoolean;
+        auditRecordObjectType: z.ZodLiteral<"raw_record_read_audit">;
+        auditEventType: z.ZodLiteral<"raw_evidence_read_audited">;
+        auditCommitBoundary: z.ZodLiteral<"before_raw_record_response">;
+        auditPayloadIncludesRawRecord: z.ZodLiteral<false>;
+    }, z.core.$strict>>;
     redactionProfileRefs: z.ZodArray<z.ZodString>;
     retentionPosture: z.ZodNullable<z.ZodEnum<{
         disabled: "disabled";
@@ -532,8 +558,8 @@ export declare const HostedReadinessReportSchema: z.ZodObject<{
         configured: z.ZodBoolean;
         readinessState: z.ZodEnum<{
             read_only: "read_only";
-            active: "active";
             missing: "missing";
+            active: "active";
             disabled: "disabled";
             configured_but_unverified: "configured_but_unverified";
             not_promoted: "not_promoted";

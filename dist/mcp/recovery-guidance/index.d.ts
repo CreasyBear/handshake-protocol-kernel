@@ -1,0 +1,62 @@
+import { z } from "zod";
+import { type ProtectedActionRecoveryGuidance } from "../../surfaces/protected-action-recovery-guidance";
+export declare const MCP_RECOVERY_GUIDANCE_READBACK_VERSION: "handshake.mcp.recovery-guidance-readback.v1";
+export declare const MCP_RECENT_RECOVERY_GUIDANCE_READBACK_VERSION: "handshake.mcp.recent-recovery-guidance-readback.v1";
+export declare const MCP_RECOVERY_DRAFT_DIFF_READBACK_VERSION: "handshake.mcp.recovery-draft-diff-readback.v1";
+type McpReadOnlyNonAuthorityFields = {
+    readOnly: true;
+    authorityCreated: false;
+    authorityCertificateMinted: false;
+    credentialMaterialIncluded: false;
+    gatewayCheckPerformed: false;
+    greenlightCreated: false;
+    mutationAttempted: false;
+    mutationCommandIncluded: false;
+    rawInternalRecordIncluded: false;
+    receiptExportCreated: false;
+};
+export type McpRecoveryGuidanceReadback = McpReadOnlyNonAuthorityFields & {
+    resourceVersion: typeof MCP_RECOVERY_GUIDANCE_READBACK_VERSION;
+    guidanceId: string;
+    guidance: ProtectedActionRecoveryGuidance;
+    redactionProfile: "mcp_recovery_guidance_redacted_v1";
+    nonClaims: readonly string[];
+};
+export type McpRecentRecoveryGuidanceReadback = McpReadOnlyNonAuthorityFields & {
+    resourceVersion: typeof MCP_RECENT_RECOVERY_GUIDANCE_READBACK_VERSION;
+    scopeRef: string;
+    guidance: readonly ProtectedActionRecoveryGuidance[];
+    redactionProfile: "mcp_recovery_guidance_redacted_v1";
+    nonClaims: readonly string[];
+};
+export type McpRecoveryDraftDiffReadback = McpReadOnlyNonAuthorityFields & {
+    resourceVersion: typeof MCP_RECOVERY_DRAFT_DIFF_READBACK_VERSION;
+    guidanceId: string;
+    diff: McpRecoveryDraftDiff;
+    redactionProfile: "mcp_recovery_guidance_redacted_v1";
+    nonClaims: readonly string[];
+};
+export declare function mcpRecoveryGuidanceReadbackPayload(guidance: unknown): McpRecoveryGuidanceReadback;
+export declare function mcpRecentRecoveryGuidanceReadbackPayload(scopeRef: string, guidance: readonly unknown[]): McpRecentRecoveryGuidanceReadback;
+export declare function mcpRecoveryDraftDiffReadbackPayload(guidanceId: string, diff: unknown): McpRecoveryDraftDiffReadback;
+export declare const McpRecoveryDraftDiffSchema: z.ZodObject<{
+    projection: z.ZodLiteral<"draft_diff">;
+    guidanceId: z.ZodString;
+    draftId: z.ZodOptional<z.ZodString>;
+    draftDigest: z.ZodOptional<z.ZodString>;
+    supersedesDraftRefs: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    digestInputsToPreserve: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    missingInputs: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    requiredFreshProposalPath: z.ZodOptional<z.ZodString>;
+    redactionProfile: z.ZodOptional<z.ZodString>;
+    notCandidateAction: z.ZodOptional<z.ZodLiteral<true>>;
+    notToolCallDraft: z.ZodOptional<z.ZodLiteral<true>>;
+    notActionContract: z.ZodOptional<z.ZodLiteral<true>>;
+    notMcpSubmissionPayload: z.ZodOptional<z.ZodLiteral<true>>;
+    notPaymentRequest: z.ZodOptional<z.ZodLiteral<true>>;
+    notSignerInput: z.ZodOptional<z.ZodLiteral<true>>;
+    notGatewayCheckInput: z.ZodOptional<z.ZodLiteral<true>>;
+    notMutationCommand: z.ZodOptional<z.ZodLiteral<true>>;
+}, z.core.$strict>;
+export type McpRecoveryDraftDiff = z.infer<typeof McpRecoveryDraftDiffSchema>;
+export {};

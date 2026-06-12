@@ -1,4 +1,4 @@
-import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessRecordScope, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
 export declare class D1ProtocolStore implements ProtocolStore {
     private readonly db;
     private readonly statements;
@@ -24,4 +24,11 @@ export declare class D1ProtocolStore implements ProtocolStore {
     commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
     private hasGreenlightConsumption;
     private hasEndpointAccessLeaseClaim;
+    getEndpointAccessLeaseByGreenlightId<T>(greenlightId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    getEndpointAccessClearanceBindingByAttemptId<T>(attemptId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;
+    listEndpointAccessUsageEventsByLeaseId<T>(leaseId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T>[]>;
 }
+export declare function classifyD1ProtocolCommitError(error: unknown): Exclude<ProtocolCommitResult, "committed"> | null;
+export declare function classifyD1GatewayCheckError(error: unknown): Exclude<GatewayCheckCommitResult, "committed" | "already_consumed"> | null;
+export declare function classifyD1EndpointAccessLeaseError(error: unknown): Exclude<EndpointAccessLeaseCommitResult, "committed"> | null;
+export declare function classifyD1EndpointAccessUsageError(error: unknown): Exclude<EndpointAccessUsageCommitResult, "committed"> | null;

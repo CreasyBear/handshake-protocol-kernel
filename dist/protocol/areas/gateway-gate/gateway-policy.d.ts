@@ -10,7 +10,7 @@ export type GatewayPolicyDriftCheck = {
     currentGatewayPolicyVersion: string | null;
     reasonCode: string | null;
 };
-export declare function gateRefusalReason(contract: ActionContract, greenlight: Greenlight, observedParamsDigest: string, idempotencyLedgerKeyDigest: string, isolationStates: IsolationState[], now: string, gatewayPolicyDriftReasonCode: string | null, delegatedAuthorityBindingReasonCode: string | null, gatewayCredentialBindingReasonCode: string | null, protectedPathReasonCode: string | null, sequenceDependencyReasonCode: string | null): string | null;
+export declare function gateRefusalReason(contract: ActionContract, greenlight: Greenlight, observedParamsDigest: string, idempotencyLedgerKeyDigest: string, isolationStates: IsolationState[], now: string, gatewayPolicyDriftReasonCode: string | null, delegatedAuthorityBindingReasonCode: string | null, gatewayCredentialBindingReasonCode: string | null, protectedPathReasonCode: string | null, sequenceDependencyReasonCode: string | null, typedCommitmentReasonCode?: string | null): string | null;
 export declare function checkGatewayPolicyDrift(contract: ActionContract, greenlight: Greenlight, currentGateway: GatewayRegistryEntry | null): GatewayPolicyDriftCheck;
 export declare function mutationOutcomeFor(): string;
 export declare function surfaceOperationRefFor(providedRef: string | undefined): string | null;

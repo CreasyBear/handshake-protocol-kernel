@@ -1,0 +1,57 @@
+import { z } from "zod";
+export declare const RawRecordReadAuditAuthorityBoundarySchema: z.ZodObject<{
+    createsPolicyDecision: z.ZodLiteral<false>;
+    createsGreenlight: z.ZodLiteral<false>;
+    performsGatewayCheck: z.ZodLiteral<false>;
+    createsMutationAuthority: z.ZodLiteral<false>;
+    createsRawReadAuthority: z.ZodLiteral<false>;
+    exposesRawRecordInAudit: z.ZodLiteral<false>;
+}, z.core.$strict>;
+export type RawRecordReadAuditAuthorityBoundary = z.infer<typeof RawRecordReadAuditAuthorityBoundarySchema>;
+export declare const rawRecordReadAuditAuthorityBoundary: {
+    readonly createsPolicyDecision: false;
+    readonly createsGreenlight: false;
+    readonly performsGatewayCheck: false;
+    readonly createsMutationAuthority: false;
+    readonly createsRawReadAuthority: false;
+    readonly exposesRawRecordInAudit: false;
+};
+export declare const RawRecordReadAuditSchema: z.ZodObject<{
+    schemaVersion: z.ZodLiteral<"0.2.4">;
+    tenantId: z.ZodString;
+    organizationId: z.ZodString;
+    createdAt: z.ZodString;
+    rawRecordReadAuditId: z.ZodString;
+    targetObjectType: z.ZodString;
+    targetObjectId: z.ZodString;
+    targetRecordDigest: z.ZodString;
+    targetRecordSchemaVersion: z.ZodString;
+    targetRecordCreatedAt: z.ZodString;
+    callerIdentityRef: z.ZodString;
+    callerSubjectDigest: z.ZodString;
+    authProviderRef: z.ZodString;
+    authSessionDigest: z.ZodNullable<z.ZodString>;
+    serviceCredentialDigest: z.ZodNullable<z.ZodString>;
+    projectId: z.ZodNullable<z.ZodString>;
+    workspaceId: z.ZodNullable<z.ZodString>;
+    custodyRoles: z.ZodArray<z.ZodString>;
+    hostedRoles: z.ZodArray<z.ZodString>;
+    hostedScopes: z.ZodArray<z.ZodString>;
+    rawReadPurposeDigest: z.ZodString;
+    purposeRedactionPolicyId: z.ZodLiteral<"hosted-raw-read-purpose-digest.v1">;
+    rawReadExpiresAt: z.ZodString;
+    routeId: z.ZodLiteral<"readProtocolRecord">;
+    requestMethod: z.ZodLiteral<"GET">;
+    requestedAt: z.ZodString;
+    rawRecordReturned: z.ZodLiteral<true>;
+    rawRecordPayloadIncludedInAudit: z.ZodLiteral<false>;
+    authorityBoundary: z.ZodObject<{
+        createsPolicyDecision: z.ZodLiteral<false>;
+        createsGreenlight: z.ZodLiteral<false>;
+        performsGatewayCheck: z.ZodLiteral<false>;
+        createsMutationAuthority: z.ZodLiteral<false>;
+        createsRawReadAuthority: z.ZodLiteral<false>;
+        exposesRawRecordInAudit: z.ZodLiteral<false>;
+    }, z.core.$strict>;
+}, z.core.$strict>;
+export type RawRecordReadAudit = z.infer<typeof RawRecordReadAuditSchema>;

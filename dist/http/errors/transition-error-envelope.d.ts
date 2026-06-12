@@ -11,10 +11,10 @@ export declare const TransitionErrorRetryabilitySchema: z.ZodEnum<{
 }>;
 export declare const TransitionCommitStateSchema: z.ZodEnum<{
     unknown: "unknown";
+    not_applicable: "not_applicable";
     not_started: "not_started";
     not_committed: "not_committed";
     committed: "committed";
-    not_applicable: "not_applicable";
 }>;
 export declare const TransitionFailureClassSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
@@ -49,10 +49,10 @@ export declare const TransitionErrorEnvelopeSchema: z.ZodObject<{
     }>;
     commitState: z.ZodEnum<{
         unknown: "unknown";
+        not_applicable: "not_applicable";
         not_started: "not_started";
         not_committed: "not_committed";
         committed: "committed";
-        not_applicable: "not_applicable";
     }>;
     requestIdentity: z.ZodNullable<z.ZodString>;
     proofRef: z.ZodNullable<z.ZodString>;
@@ -94,10 +94,10 @@ export declare const TransitionErrorResponseSchema: z.ZodObject<{
         }>;
         commitState: z.ZodEnum<{
             unknown: "unknown";
+            not_applicable: "not_applicable";
             not_started: "not_started";
             not_committed: "not_committed";
             committed: "committed";
-            not_applicable: "not_applicable";
         }>;
         requestIdentity: z.ZodNullable<z.ZodString>;
         proofRef: z.ZodNullable<z.ZodString>;

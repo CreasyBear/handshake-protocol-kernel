@@ -1,4 +1,5 @@
 import type { FailureClass } from "../protocol/foundation/failure-class";
+import { type ProtectedActionRecoveryGuidance } from "../surfaces/protected-action-recovery-guidance";
 export type HandshakeErrorExplanation = {
     code: string;
     failureClass: FailureClass;
@@ -10,3 +11,4 @@ export type HandshakeErrorExplanation = {
 };
 export declare function explainHandshakeError(error: unknown): HandshakeErrorExplanation | null;
 export declare function nextHandshakeCommand(error: unknown): string | null;
+export declare function recoveryGuidanceFromHandshakeError(error: unknown): ProtectedActionRecoveryGuidance | null;
