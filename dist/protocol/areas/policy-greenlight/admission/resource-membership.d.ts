@@ -1,0 +1,70 @@
+import { type ActionContract } from "../../action-contract/schemas";
+import type { ResolvedAuthorityContext } from "../../../authority-context/resolver";
+import type { ProtocolStore, StoredProtocolRecord } from "../../../store/port";
+declare const RESOURCE_MEMBERSHIP_REGISTRY_FORMAT: "resource-membership-registry-1";
+declare const CANONICAL_RESOURCE_MEMBERSHIP_FORMAT: "canonical-resource-membership-1";
+export type ResourceCanonicalizerBinding = Readonly<{
+    inputResourceRef: string;
+    canonicalResourceRef: string;
+    canonicalProtectedResourceScope: string;
+}>;
+export type ResourceMembershipRegistryEntry = Readonly<{
+    actionTypeId: string;
+    actionTypeDigest: `sha256:${string}`;
+    actionTypeAuthorityRef: string;
+    canonicalizerAuthorityRef: string;
+    canonicalizerVersion: string;
+    resourceBindings: readonly ResourceCanonicalizerBinding[];
+}>;
+export type ResourceMembershipRegistryInput = Readonly<{
+    registryFormat: typeof RESOURCE_MEMBERSHIP_REGISTRY_FORMAT;
+    registryRef: string;
+    registryVersion: string;
+    entries: readonly ResourceMembershipRegistryEntry[];
+}>;
+export type ResourceMembershipRegistry = Readonly<{
+    registryFormat: typeof RESOURCE_MEMBERSHIP_REGISTRY_FORMAT;
+    registryRef: string;
+    registryVersion: string;
+}>;
+export type ProtocolRecordReader = Pick<ProtocolStore, "getRecord">;
+export type CanonicalResourceMembership = Readonly<{
+    membershipFormat: typeof CANONICAL_RESOURCE_MEMBERSHIP_FORMAT;
+    tenantId: string;
+    organizationId: string;
+    actionContractId: string;
+    actionContractDigest: `sha256:${string}`;
+    actionContractRecordDigest: `sha256:${string}`;
+    actionContractRecordEnvelopeDigest: `sha256:${string}`;
+    inputResourceRef: string;
+    inputBindingDigest: `sha256:${string}`;
+    canonicalResourceRef: string;
+    canonicalProtectedResourceScope: string;
+    actionTypeId: string;
+    actionTypeAuthorityRef: string;
+    actionTypeDigest: `sha256:${string}`;
+    actionTypeRecordEnvelopeDigest: `sha256:${string}`;
+    actionClass: string;
+    protectedSurfaceKind: string;
+    gatewayRegistryEntryId: string;
+    gatewayRegistryDigest: `sha256:${string}`;
+    gatewayRegistryRecordEnvelopeDigest: `sha256:${string}`;
+    gatewayId: string;
+    gatewayAuthorityRef: string;
+    gatewayVersion: `sha256:${string}`;
+    gatewayResourceNamespaceRef: string;
+    registryRef: string;
+    registryVersion: string;
+    registryDigest: `sha256:${string}`;
+    canonicalizerAuthorityRef: string;
+    canonicalizerVersion: string;
+    canonicalizerProfileDigest: `sha256:${string}`;
+    membershipDigest: `sha256:${string}`;
+}>;
+export declare function createResourceMembershipRegistry(input: ResourceMembershipRegistryInput): ResourceMembershipRegistry;
+export declare function resolveCanonicalResourceMembership(registry: ResourceMembershipRegistry, input: Readonly<{
+    protocolReader: ProtocolRecordReader;
+    authorityContext: ResolvedAuthorityContext;
+    contractRecord: StoredProtocolRecord<ActionContract>;
+}>): Promise<CanonicalResourceMembership>;
+export {};

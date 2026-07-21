@@ -93,7 +93,7 @@ export type AuthMdProtectedApiCallGatewayResult = {
     reconciliation: SurfaceOperationReconciliation;
     apiCallEvidence: AuthMdProtectedApiCallEvidence;
 } | {
-    outcome: "protected_api_call_failed";
+    outcome: "protected_api_call_failed" | "protected_api_call_outcome_unknown";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: CredentialResolutionEvidence | null;
     reconciliation: SurfaceOperationReconciliation;

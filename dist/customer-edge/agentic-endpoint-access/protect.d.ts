@@ -1,4 +1,4 @@
-import { type AgenticEndpointAccessClearanceRefs, type AgenticEndpointAccessHandlerContext, type AgenticEndpointAccessMiddlewareOptions, type AgenticEndpointAccessProtectionOutcome } from "./contracts";
+import { type AgenticEndpointAccessClearanceRefs, type AgenticEndpointAccessHandlerContext, type AgenticEndpointAccessMiddlewareOptionsInput, type AgenticEndpointAccessProtectionOutcome } from "./contracts";
 import type { AgenticEndpointAccessKernelClient } from "./kernel-client";
 import type { AgenticEndpointAccessLocalStore } from "./local-store";
 import { type AgenticEndpointAccessIngressInput } from "./ingress";
@@ -16,8 +16,7 @@ export type AgenticEndpointAccessProtectionResult = {
 export type AgenticEndpointAccessMiddlewareConfig = {
     readonly store: AgenticEndpointAccessLocalStore;
     readonly kernelClient: AgenticEndpointAccessKernelClient;
-    readonly options: AgenticEndpointAccessMiddlewareOptions;
-    readonly recordRequestUsageBeforeHandler?: boolean;
+    readonly options: AgenticEndpointAccessMiddlewareOptionsInput;
 };
 export type AgenticEndpointAccessProtectionInput = {
     readonly request: Request;

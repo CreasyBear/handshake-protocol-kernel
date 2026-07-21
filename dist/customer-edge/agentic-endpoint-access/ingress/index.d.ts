@@ -1,4 +1,4 @@
-import { type AgenticEndpointAccessConfigSnapshot, type AgenticEndpointAccessIngressContext } from "../contracts";
+import { type AgenticEndpointAccessConfigSnapshot, type AgenticEndpointAccessHeaderRedactionPolicy, type AgenticEndpointAccessIngressContext } from "../contracts";
 export declare const agenticEndpointAccessHeaderRedactionPolicyId: "agentic-endpoint-access-header-redaction.v1";
 type AgenticEndpointAccessBypassPosture = "blocked" | "unblocked" | "unknown" | "stale" | "inconclusive";
 export type AgenticEndpointAccessHeaders = Headers | Record<string, string | readonly string[] | undefined>;
@@ -35,7 +35,9 @@ export type AgenticEndpointAccessIngressNormalizationResult = {
 export declare function normalizeAgenticEndpointAccessIngress(input: {
     readonly ingress: AgenticEndpointAccessIngressInput;
     readonly snapshot: AgenticEndpointAccessConfigSnapshot;
+    readonly headerRedactionPolicy?: AgenticEndpointAccessHeaderRedactionPolicy;
+    readonly maxBodyBytes?: number;
     readonly nowIso?: string;
 }): Promise<AgenticEndpointAccessIngressNormalizationResult>;
-export declare function redactAgenticEndpointAccessHeaders(headers: AgenticEndpointAccessHeaders): Record<string, string>;
+export declare function redactAgenticEndpointAccessHeaders(headers: AgenticEndpointAccessHeaders, policyValue?: AgenticEndpointAccessHeaderRedactionPolicy): Record<string, string>;
 export {};

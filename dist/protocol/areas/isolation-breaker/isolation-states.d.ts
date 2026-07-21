@@ -1,7 +1,10 @@
 import { type CreateIsolationInput } from "./types";
 import type { ProtocolRecorder } from "../../events/records";
 import { type IsolationState } from "./types";
-import type { IsolationScopeRef, IsolationStateIndexEntry } from "../../store/port";
-export declare function createIsolationState(recorder: ProtocolRecorder, inputValue: CreateIsolationInput): Promise<IsolationState>;
+import type { IsolationScopeRef, IsolationStateIndexEntry, ProtocolStore } from "../../store/port";
+export declare function createIsolationState(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: CreateIsolationInput): Promise<IsolationState>;
 export declare function isolationStateIndexEntry(state: IsolationState): IsolationStateIndexEntry;
 export declare function isolationScopeKey(scopeRef: IsolationScopeRef): string;
+export declare function currentIsolationState(store: ProtocolStore, scopeRef: IsolationScopeRef): Promise<IsolationState | null>;
+export declare function isolationStateIsWeaker(next: IsolationState["state"], current: IsolationState["state"]): boolean;
+export declare function prepareIsolationEscalation(store: ProtocolStore, scopeRef: IsolationScopeRef, nextState: IsolationState["state"]): Promise<number>;

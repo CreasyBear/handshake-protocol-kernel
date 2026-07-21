@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -15340,36 +15344,125 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   expiresAt: exports_external.string().datetime({ offset: true })
 });
 // src/protocol/foundation/canonical.ts
+var HEX_DIGITS = "0123456789abcdef";
+var trustedArrayIsArray = Array.isArray;
+var trustedArrayPrototype = Array.prototype;
+var trustedArraySort = Array.prototype.sort;
+var trustedArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+var trustedDataView = DataView;
+var trustedDataViewGetUint8 = DataView.prototype.getUint8;
+var trustedJsonStringify = JSON.stringify;
+var trustedNumberIsFinite = Number.isFinite;
+var trustedNumberMaxSafeInteger = Number.MAX_SAFE_INTEGER;
+var trustedObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var trustedObjectKeys = Object.keys;
+var trustedObjectPrototype = Object.prototype;
+var trustedReflectApply = Reflect.apply;
+var trustedSetAdd = Set.prototype.add;
+var trustedSetDelete = Set.prototype.delete;
+var trustedSetHas = Set.prototype.has;
+var trustedString = String;
+var trustedStringCharCodeAt = String.prototype.charCodeAt;
+var trustedSubtle = crypto.subtle;
+var trustedSubtleDigest = trustedSubtle.digest;
+var trustedSubtleImportKey = trustedSubtle.importKey;
+var trustedSubtleSign = trustedSubtle.sign;
+var trustedTextEncoder = new TextEncoder;
+var trustedTextEncoderEncode = TextEncoder.prototype.encode;
 function canonicalize(value) {
   if (value === null)
     return "null";
   if (typeof value === "boolean")
     return value ? "true" : "false";
   if (typeof value === "string")
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value))
+    if (!trustedNumberIsFinite(value))
       throw new Error("Cannot canonicalize non-finite number");
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   }
-  if (Array.isArray(value))
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
-  const keys = Object.keys(value).sort();
-  const fields = keys.map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`);
-  return `{${fields.join(",")}}`;
+  if (trustedArrayIsArray(value)) {
+    let canonical2 = "[";
+    for (let index = 0;index < value.length; index += 1) {
+      const descriptor = trustedObjectGetOwnPropertyDescriptor(value, trustedString(index));
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw new Error("Cannot canonicalize sparse or accessor-backed array");
+      }
+      if (index > 0)
+        canonical2 += ",";
+      canonical2 += canonicalize(descriptor.value);
+    }
+    return `${canonical2}]`;
+  }
+  const keys = trustedObjectKeys(value);
+  trustedReflectApply(trustedArraySort, keys, [compareCodeUnits]);
+  let canonical = "{";
+  for (let index = 0;index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === undefined)
+      throw new Error("Cannot canonicalize an unstable object key set");
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot canonicalize accessor-backed or unstable object data");
+    }
+    if (index > 0)
+      canonical += ",";
+    canonical += `${stringifyCanonicalPrimitive(key)}:${canonicalize(descriptor.value)}`;
+  }
+  return `${canonical}}`;
 }
 async function digestCanonical(value) {
-  const bytes = new TextEncoder().encode(canonicalize(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `sha256:${toHex(digest)}`;
+  const bytes = encodeUtf8(canonicalize(value));
+  const digest = await trustedReflectApply(trustedSubtleDigest, trustedSubtle, ["SHA-256", bytes]);
+  return `sha256:${toHex(digest, 32)}`;
 }
 async function signCanonicalHmac(value, secret) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(canonicalize(value)));
-  return `hmac-sha256:${toHex(signature)}`;
+  const key = await trustedReflectApply(trustedSubtleImportKey, trustedSubtle, [
+    "raw",
+    encodeUtf8(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  ]);
+  const signature = await trustedReflectApply(trustedSubtleSign, trustedSubtle, [
+    "HMAC",
+    key,
+    encodeUtf8(canonicalize(value))
+  ]);
+  return `hmac-sha256:${toHex(signature, 32)}`;
 }
-function toHex(buffer) {
-  return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function toHex(buffer, expectedByteLength) {
+  if (trustedArrayBufferByteLength === undefined) {
+    throw new Error("Cannot inspect cryptographic result bytes");
+  }
+  const byteLength = trustedReflectApply(trustedArrayBufferByteLength, buffer, []);
+  if (byteLength !== expectedByteLength) {
+    throw new Error("Unexpected cryptographic result length");
+  }
+  const bytes = new trustedDataView(buffer);
+  let hex3 = "";
+  for (let index = 0;index < byteLength; index += 1) {
+    const byte = trustedReflectApply(trustedDataViewGetUint8, bytes, [index]);
+    hex3 += HEX_DIGITS[byte >>> 4 & 15];
+    hex3 += HEX_DIGITS[byte & 15];
+  }
+  return hex3;
+}
+function compareCodeUnits(left, right) {
+  if (left < right)
+    return -1;
+  if (left > right)
+    return 1;
+  return 0;
+}
+function stringifyCanonicalPrimitive(value) {
+  const canonical = trustedJsonStringify(value);
+  if (canonical === undefined)
+    throw new Error("Cannot canonicalize an unsupported primitive");
+  return canonical;
+}
+function encodeUtf8(value) {
+  return trustedReflectApply(trustedTextEncoderEncode, trustedTextEncoder, [value]);
 }
 
 // src/protocol/foundation/ids.ts
@@ -18062,6 +18155,7 @@ var httpTransitionErrorCodes = [
   code("hosted_caller_role_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_scope_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_provider_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_fixture_verifier_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_active_org_required", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_active_org_mismatch", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_membership_not_current", "hosted_admission", "terminal", "not_started", true),
@@ -18117,8 +18211,13 @@ var protocolReasonCodes = [
   code2("greenlight_issuance_refusal_commit_conflict", "transition_error", "policy"),
   code2("idempotency_ledger_conflict", "transition_error", "policy"),
   code2("idempotency_refusal_commit_conflict", "transition_error", "policy"),
+  code2("aggregate_configuration_bucket_lineage_limit", "transition_error", "policy", false),
+  code2("aggregate_configuration_commit_ambiguous", "transition_error", "policy", false),
+  code2("aggregate_configuration_commit_incoherent", "transition_error", "policy", false),
+  code2("aggregate_configuration_context_stale", "transition_error", "policy", false),
   code2("stream_append_conflict", "transition_error", "gateway"),
   code2("ambiguous_commit", "transition_error", "gateway", false),
+  code2("gateway_source_admission_not_ready", "transition_error", "gateway", false),
   code2("secret_bearing_param_in_non_secret_params", "transition_error", "intent_compilation"),
   code2("undeclared_secret_ref", "transition_error", "intent_compilation"),
   code2("unwrapped_consequential_tool", "refusal", "intent_compilation"),
@@ -18265,10 +18364,82 @@ var protocolReasonCodes = [
   code2("typed_commitment_provider_downgrade_refused", "policy_decision", "policy"),
   code2("typed_commitment_gateway_observed_set_missing", "gateway_decision", "gateway"),
   code2("typed_commitment_gateway_observed_set_mismatch", "gateway_decision", "gateway"),
+  code2("idempotency_ledger_reservation_missing", "gateway_decision", "gateway"),
+  code2("idempotency_ledger_reservation_mismatch", "gateway_decision", "gateway"),
+  code2("idempotency_terminal_state_regression", "transition_error", "operation_lifecycle"),
   code2("typed_commitment_profile_unsupported", "policy_decision", "policy"),
   code2("typed_commitment_ed25519_unsupported", "policy_decision", "policy"),
+  code2("authority_context_capability_missing", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_root_invalid", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_source_unavailable", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_verification_replayed", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_verified_subject_required", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_verifier_drift", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_policy_evaluator_drift", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_verified_subject_stale", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_binding_missing", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_binding_ambiguous", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_subject_mismatch", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_scope_mismatch", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_binding_stale", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_source_incoherent", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_principal_mismatch", "transition_error", "policy", {
+    classifiedFailure: "protected_action_refusal"
+  }),
+  code2("authority_context_envelope_mismatch", "transition_error", "policy", {
+    classifiedFailure: "protected_action_refusal"
+  }),
+  code2("authority_context_policy_evaluator_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_policy_version_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_readiness_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
   code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("aggregate_capacity_exhausted", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("aggregate_authority_incoherent", "proof_gap", "policy", { decisionPolarity: "proof_gap" }),
+  code2("aggregate_posture_missing", "proof_gap", "policy", { decisionPolarity: "proof_gap" }),
+  code2("policy_admission_prerequisite_drift", "proof_gap", "policy", {
+    decisionPolarity: "proof_gap"
+  }),
+  code2("policy_admission_contention_exhausted", "proof_gap", "policy", {
+    decisionPolarity: "proof_gap"
+  }),
   code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
   code2("envelope_not_active", "policy_decision", "policy", { decisionPolarity: "refusal" }),
   code2("action_class_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
@@ -18456,7 +18627,11 @@ var protocolReasonCodes = [
   code2("agentic_endpoint_access_runtime_posture_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_ingress_contains_raw_authority_material", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_ingress_context_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_header_evidence_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_body_digest_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_body_evidence_not_serializable", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_request_body_read_failed", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_request_body_too_large", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_budget_exhausted", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_ref_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_counter_conflict", "proof_gap", "agentic_endpoint_access"),
@@ -18476,6 +18651,8 @@ var protocolReasonCodes = [
   code2("breaker_watermark_digest_missing", "transition_error", "isolation"),
   code2("breaker_watermark_event_missing", "transition_error", "isolation"),
   code2("breaker_watermark_digest_mismatch", "transition_error", "isolation"),
+  code2("isolation_weakening_requires_explicit_clearance", "transition_error", "isolation"),
+  code2("effect_commit_unknown", "isolation", "isolation", false),
   code2("breaker_trip", "isolation", "isolation"),
   code2("foreign_tenant_breaker", "isolation", "isolation"),
   code2("foreign_org_resource_breaker", "isolation", "isolation"),

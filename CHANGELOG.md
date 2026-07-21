@@ -7,6 +7,38 @@ public artifact repository. It does not claim hosted operation, provider
 custody, settlement finality, marketplace certification, MCP Registry
 discoverability, or Handshake authority from publication alone.
 
+## 0.5.0 - 2026-07-21
+
+### Added
+
+- Source-locked selected-consequence custody with one-use gateway admission,
+  durable cutoff, terminal observation, replay refusal, and reconstruction.
+- Local process-replacement and real SIGKILL recovery falsifiers, plus the
+  named macOS raw-network, sibling-tool, browser, shell, plugin, file, and
+  credential-extraction containment probe.
+- A buyer-side `x402_payment.exact` local canary pinned to x402 v2, Base USDC,
+  EIP-3009, and exact request, payment-requirement, credential, and facilitator binding.
+
+### Boundary Notes
+
+- The selected-consequence host is a private credential-owning execution
+  boundary. Authority and custody types remain unexported; the public package
+  surface is frozen and projections, receipts, runtime metadata, and package
+  availability remain non-authority.
+- Local process and macOS probe evidence does not prove provider custody,
+  host-wide containment, production topology, settlement finality, hosted
+  operation, deployment, or customer value.
+- Omitted or unbound x402 typed observation, differently bound x402 surface
+  observation, and the unbound auth.md caller surface remain explicit TODO
+  proof gaps. They create no authority or release proof.
+
+### Release State
+
+- `ready_to_publish`: candidate only after complete local artifact gates and
+  exact packed-byte readback pass.
+- `actually_published`, `registry_discoverable`, and `hosted_or_deployed` are
+  unverified and not claimed. Distribution never creates Handshake authority.
+
 ## 0.4.0 - 2026-06-12
 
 ### Added

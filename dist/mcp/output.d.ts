@@ -58,10 +58,10 @@ export declare const McpStructuredContentSchema: z.ZodDiscriminatedUnion<[z.ZodO
     phase: z.ZodEnum<{
         metadata: "metadata";
         freshness: "freshness";
+        evidence: "evidence";
+        readiness: "readiness";
         bypass: "bypass";
         replay: "replay";
-        readiness: "readiness";
-        evidence: "evidence";
         proposal: "proposal";
         tool_execution: "tool_execution";
     }>;
@@ -174,10 +174,10 @@ export declare const McpToolResultSchema: z.ZodObject<{
         phase: z.ZodEnum<{
             metadata: "metadata";
             freshness: "freshness";
+            evidence: "evidence";
+            readiness: "readiness";
             bypass: "bypass";
             replay: "replay";
-            readiness: "readiness";
-            evidence: "evidence";
             proposal: "proposal";
             tool_execution: "tool_execution";
         }>;
@@ -288,7 +288,7 @@ export declare function mcpNonContractOutcome(input: SurfaceOutcomeBaseInput, is
         generatedExecutionGraphPosture: "not_exposed_by_role_scoped_runtime_surface";
     } | {
         schemaVersion: "handshake.surface-outcome.v0.1";
-        phase: "metadata" | "freshness" | "bypass" | "replay" | "readiness" | "evidence" | "proposal" | "tool_execution";
+        phase: "metadata" | "freshness" | "evidence" | "readiness" | "bypass" | "replay" | "proposal" | "tool_execution";
         authorityCreated: false;
         authorityCertificateMinted: false;
         credentialMaterialIncluded: false;

@@ -57,7 +57,7 @@ export type RepoWriteGatewayResult = {
     reconciliation: SurfaceOperationReconciliation;
     mutationEvidence: RepoWriteMutationEvidence;
 } | {
-    outcome: "mutation_failed";
+    outcome: "mutation_failed" | "mutation_outcome_unknown";
     gatewayCheck: GatewayCheckResult;
     reconciliation: SurfaceOperationReconciliation;
     mutationEvidence: null;

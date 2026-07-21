@@ -290,7 +290,7 @@ export declare function cliSchemaOutput(): {
     id: "schema" | "init" | "doctor" | "evidence.aps-report" | "evidence.fetch" | "evidence.contract-view" | "evidence.receipt-timeline" | "cert.verify" | "support.bundle" | "install.x402-payment" | "probes.x402-payment" | "register.x402-gateway-readiness" | "install.health" | "host.doctor" | "quickstart.x402" | "quickstart.agent-spine" | "simulate.x402-payment" | "conformance.x402-payment" | "service.bootstrap";
     aliases: readonly ["schema"] | readonly ["init"] | readonly ["doctor"] | readonly ["evidence aps-report"] | readonly ["evidence fetch"] | readonly ["evidence contract-view"] | readonly ["evidence receipt-timeline"] | readonly ["cert verify"] | readonly ["support bundle"] | readonly ["install x402-payment"] | readonly ["probes x402-payment"] | readonly ["register x402-gateway-readiness"] | readonly ["install health"] | readonly ["host doctor"] | readonly ["quickstart x402"] | readonly ["quickstart agent-spine"] | readonly ["simulate x402-payment"] | readonly ["conformance x402-payment"] | readonly ["service bootstrap"];
     status: "active";
-    plane: "operator" | "evidence";
+    plane: "evidence" | "operator";
     custodyRole: "review_custody" | "none";
     outputSchema: "handshake.cli.v1";
     agentSafe: boolean;

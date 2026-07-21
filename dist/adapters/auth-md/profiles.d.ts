@@ -65,9 +65,9 @@ export type AuthMdIdentityFlow = z.infer<typeof AuthMdIdentityFlowSchema>;
 export declare const AuthMdClaimStateSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     not_applicable: "not_applicable";
+    claimed: "claimed";
     pre_claim: "pre_claim";
     pending_user_claim: "pending_user_claim";
-    claimed: "claimed";
     claim_refused: "claim_refused";
 }>;
 export type AuthMdClaimState = z.infer<typeof AuthMdClaimStateSchema>;
@@ -422,9 +422,9 @@ export declare const AuthMdRegistrationEvidenceSchema: z.ZodObject<{
     claimState: z.ZodEnum<{
         proof_gap: "proof_gap";
         not_applicable: "not_applicable";
+        claimed: "claimed";
         pre_claim: "pre_claim";
         pending_user_claim: "pending_user_claim";
-        claimed: "claimed";
         claim_refused: "claim_refused";
     }>;
     idJagIssuer: z.ZodNullable<z.ZodString>;
@@ -504,9 +504,9 @@ export declare const AuthMdClaimEvidenceSchema: z.ZodObject<{
     claimState: z.ZodEnum<{
         proof_gap: "proof_gap";
         not_applicable: "not_applicable";
+        claimed: "claimed";
         pre_claim: "pre_claim";
         pending_user_claim: "pending_user_claim";
-        claimed: "claimed";
         claim_refused: "claim_refused";
     }>;
     scopeTransition: z.ZodEnum<{
@@ -538,9 +538,9 @@ export declare const BuildAuthMdClaimEvidenceInputSchema: z.ZodObject<{
     claimState: z.ZodEnum<{
         proof_gap: "proof_gap";
         not_applicable: "not_applicable";
+        claimed: "claimed";
         pre_claim: "pre_claim";
         pending_user_claim: "pending_user_claim";
-        claimed: "claimed";
         claim_refused: "claim_refused";
     }>;
     scopeTransition: z.ZodEnum<{
@@ -645,9 +645,9 @@ export declare const BuildAuthMdGatewayCredentialIntakeInputSchema: z.ZodObject<
     claimState: z.ZodDefault<z.ZodEnum<{
         proof_gap: "proof_gap";
         not_applicable: "not_applicable";
+        claimed: "claimed";
         pre_claim: "pre_claim";
         pending_user_claim: "pending_user_claim";
-        claimed: "claimed";
         claim_refused: "claim_refused";
     }>>;
     idJagIssuer: z.ZodDefault<z.ZodNullable<z.ZodString>>;

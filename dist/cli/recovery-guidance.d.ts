@@ -1,0 +1,53 @@
+import { type ProtectedActionRecoveryGuidance } from "../surfaces/protected-action-recovery-guidance";
+import type { CliNextAction, CliRetryability } from "./output";
+export declare const cliRecoveryGuidanceRawMaterialOmissions: readonly ["payment_payload_material", "payment_signature_header", "signer_refs", "key_material", "private_keys", "role_token_values", "transition_token_values", "gateway_check_inputs", "raw_request_bodies", "gateway_credential_material", "mutation_commands", "receipt_exports"];
+export declare function cliNextActionForRecoveryGuidance(guidance: ProtectedActionRecoveryGuidance): CliNextAction;
+export declare function cliRetryabilityForRecoveryGuidance(guidance: ProtectedActionRecoveryGuidance): CliRetryability;
+export declare function recoveryGuidanceCliSummary(value: ProtectedActionRecoveryGuidance): {
+    guidanceId: string;
+    guidanceRef: string;
+    sourceKind: "protocol_recovery_projection" | "pre_contract_surface_guidance";
+    protectedSurfaceKind: string;
+    outcome: "read_evidence" | "stop" | "draft_available" | "reload_required" | "recraft_required" | "abandon_required";
+    abandonQuality: "good_abandon" | "avoidable_abandon" | "ambiguous_abandon" | "stale_abandon" | "operator_abandon" | null;
+    unsafeSalvageAttemptPrevented: boolean;
+    sourceRefs: string[];
+    terminalEvidenceRefs: string[];
+    reasonCodes: string[];
+    topFindings: {
+        category: "idempotency_or_replay_conflict" | "proof_gap_only_evidence" | "raw_sibling_bypass_detected" | "raw_sibling_posture_named_not_controlled" | "x402_credential_custody_unsafe" | "x402_gateway_posture_unknown" | "x402_provider_environment_untrusted" | "x402_metadata_stale" | "x402_policy_or_readiness_stale" | "x402_install_not_ready" | "x402_gateway_offline" | "x402_amount_over_bound" | "x402_request_body_unsupported" | "x402_custody_proof_unverified" | "x402_selected_requirement_mismatch" | "runtime_dynamic_tool_construction" | "runtime_late_bound_parameters" | "runtime_graph_coverage_gap" | "isolation_or_quarantine_active" | "draft_stale_or_intent_changed" | "draft_superseded_by_stricter_draft" | "draft_guidance_stale" | "surface_next_action_projection" | "protocol_recovery_recommendation_present";
+        guidanceOutcome: "read_evidence" | "stop" | "draft_available" | "reload_required" | "recraft_required" | "abandon_required";
+        draftEligible: boolean;
+        reasonCodes: string[];
+        affectedFields: string[];
+    }[];
+    agentHandoff: {
+        outcome: "read_evidence" | "stop" | "draft_available" | "reload_required" | "recraft_required" | "abandon_required";
+        allowedNextMechanism: "read_evidence" | "recraft_request" | "submit_fresh_proposal" | "reload_evidence" | "abandon_current_material" | "stop_and_escalate";
+        requiredRefs: string[];
+        missingInputs: string[];
+        stopReasons: string[];
+        nonClaims: string[];
+    };
+    candidateDraft: {
+        draftId: string;
+        draftDigest: string;
+        digestInputsToPreserve: string[];
+        missingInputs: string[];
+        requiredFreshProposalPath: string;
+        supersedesDraftRefs: string[];
+        recoveryRecommendationId: string | null;
+        redactionProfile: string;
+    } | null;
+    redactionProfileRef: string;
+    rawMaterialOmitted: readonly ["payment_payload_material", "payment_signature_header", "signer_refs", "key_material", "private_keys", "role_token_values", "transition_token_values", "gateway_check_inputs", "raw_request_bodies", "gateway_credential_material", "mutation_commands", "receipt_exports"];
+    authorityCreated: boolean;
+    greenlightCreated: boolean;
+    gatewayCheckPerformed: boolean;
+    mutationAttempted: boolean;
+    credentialMaterialIncluded: boolean;
+    mutationCommandIncluded: boolean;
+    rawInternalRecordIncluded: boolean;
+    receiptExportCreated: boolean;
+    authorityCertificateMinted: boolean;
+};

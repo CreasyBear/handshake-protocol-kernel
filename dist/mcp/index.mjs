@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -14301,6 +14305,7 @@ var httpTransitionErrorCodes = [
   code("hosted_caller_role_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_scope_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_provider_forbidden", "hosted_admission", "terminal", "not_started", true),
+  code("hosted_caller_fixture_verifier_forbidden", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_active_org_required", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_active_org_mismatch", "hosted_admission", "terminal", "not_started", true),
   code("hosted_caller_membership_not_current", "hosted_admission", "terminal", "not_started", true),
@@ -14372,8 +14377,13 @@ var protocolReasonCodes = [
   code2("greenlight_issuance_refusal_commit_conflict", "transition_error", "policy"),
   code2("idempotency_ledger_conflict", "transition_error", "policy"),
   code2("idempotency_refusal_commit_conflict", "transition_error", "policy"),
+  code2("aggregate_configuration_bucket_lineage_limit", "transition_error", "policy", false),
+  code2("aggregate_configuration_commit_ambiguous", "transition_error", "policy", false),
+  code2("aggregate_configuration_commit_incoherent", "transition_error", "policy", false),
+  code2("aggregate_configuration_context_stale", "transition_error", "policy", false),
   code2("stream_append_conflict", "transition_error", "gateway"),
   code2("ambiguous_commit", "transition_error", "gateway", false),
+  code2("gateway_source_admission_not_ready", "transition_error", "gateway", false),
   code2("secret_bearing_param_in_non_secret_params", "transition_error", "intent_compilation"),
   code2("undeclared_secret_ref", "transition_error", "intent_compilation"),
   code2("unwrapped_consequential_tool", "refusal", "intent_compilation"),
@@ -14520,10 +14530,82 @@ var protocolReasonCodes = [
   code2("typed_commitment_provider_downgrade_refused", "policy_decision", "policy"),
   code2("typed_commitment_gateway_observed_set_missing", "gateway_decision", "gateway"),
   code2("typed_commitment_gateway_observed_set_mismatch", "gateway_decision", "gateway"),
+  code2("idempotency_ledger_reservation_missing", "gateway_decision", "gateway"),
+  code2("idempotency_ledger_reservation_mismatch", "gateway_decision", "gateway"),
+  code2("idempotency_terminal_state_regression", "transition_error", "operation_lifecycle"),
   code2("typed_commitment_profile_unsupported", "policy_decision", "policy"),
   code2("typed_commitment_ed25519_unsupported", "policy_decision", "policy"),
+  code2("authority_context_capability_missing", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_root_invalid", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_source_unavailable", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_verification_replayed", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_verified_subject_required", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_verifier_drift", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_policy_evaluator_drift", "transition_error", "policy", {
+    publicSafe: false,
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_verified_subject_stale", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_binding_missing", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_binding_ambiguous", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_subject_mismatch", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_scope_mismatch", "transition_error", "policy", {
+    classifiedFailure: "hosted_admission"
+  }),
+  code2("authority_context_binding_stale", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_source_incoherent", "transition_error", "policy", {
+    classifiedFailure: "internal"
+  }),
+  code2("authority_context_principal_mismatch", "transition_error", "policy", {
+    classifiedFailure: "protected_action_refusal"
+  }),
+  code2("authority_context_envelope_mismatch", "transition_error", "policy", {
+    classifiedFailure: "protected_action_refusal"
+  }),
+  code2("authority_context_policy_evaluator_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_policy_version_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
+  code2("authority_context_readiness_mismatch", "transition_error", "policy", {
+    classifiedFailure: "stale_admission"
+  }),
   code2("policy_passed", "policy_decision", "policy", { decisionPolarity: "pass" }),
   code2("isolation_review_only", "policy_decision", "policy", { decisionPolarity: "pass" }),
+  code2("aggregate_capacity_exhausted", "policy_decision", "policy", { decisionPolarity: "refusal" }),
+  code2("aggregate_authority_incoherent", "proof_gap", "policy", { decisionPolarity: "proof_gap" }),
+  code2("aggregate_posture_missing", "proof_gap", "policy", { decisionPolarity: "proof_gap" }),
+  code2("policy_admission_prerequisite_drift", "proof_gap", "policy", {
+    decisionPolarity: "proof_gap"
+  }),
+  code2("policy_admission_contention_exhausted", "proof_gap", "policy", {
+    decisionPolarity: "proof_gap"
+  }),
   code2("contract_expired", "policy_decision", "policy", { decisionPolarity: "refusal" }),
   code2("envelope_not_active", "policy_decision", "policy", { decisionPolarity: "refusal" }),
   code2("action_class_outside_envelope", "policy_decision", "policy", { decisionPolarity: "refusal" }),
@@ -14711,7 +14793,11 @@ var protocolReasonCodes = [
   code2("agentic_endpoint_access_runtime_posture_missing", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_ingress_contains_raw_authority_material", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_ingress_context_invalid", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_header_evidence_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_body_digest_mismatch", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_body_evidence_not_serializable", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_request_body_read_failed", "proof_gap", "agentic_endpoint_access"),
+  code2("agentic_endpoint_access_request_body_too_large", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_budget_exhausted", "refusal", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_lease_ref_invalid", "proof_gap", "agentic_endpoint_access"),
   code2("agentic_endpoint_access_usage_counter_conflict", "proof_gap", "agentic_endpoint_access"),
@@ -14731,6 +14817,8 @@ var protocolReasonCodes = [
   code2("breaker_watermark_digest_missing", "transition_error", "isolation"),
   code2("breaker_watermark_event_missing", "transition_error", "isolation"),
   code2("breaker_watermark_digest_mismatch", "transition_error", "isolation"),
+  code2("isolation_weakening_requires_explicit_clearance", "transition_error", "isolation"),
+  code2("effect_commit_unknown", "isolation", "isolation", false),
   code2("breaker_trip", "isolation", "isolation"),
   code2("foreign_tenant_breaker", "isolation", "isolation"),
   code2("foreign_org_resource_breaker", "isolation", "isolation"),

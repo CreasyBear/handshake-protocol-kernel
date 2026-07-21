@@ -1,0 +1,33 @@
+import { type AuthorityCommitIdentity, type AuthorityCommitMarker, type AuthorityCommitRecordReference, type AuthorityCurrentPointerReadResult, type AuthorityCurrentRecordReadResult, type AuthorityMutationReadbackResult, type AuthorityPointerIdentity, type AuthorityPointerTransitionReadResult, type AuthorityPointerTransition, type AuthorityProjectionIntent, type AuthorityProjectionOutboxReadResult, type AuthorityProjectionOutboxScanQuery, type AuthorityProjectionOutboxScanResult, type AuthorityProjectionOutboxStore, type AuthorityRecordIdentity, type AuthorityRecordWitness, type AuthoritySourceMutation, type AuthoritySourceMutationResult, type AuthoritySourceRecord, type AuthoritySourceScope, type CurrentPolicyAuthorityCommitCapability, type CurrentPolicyAuthoritySourceMutation, type CurrentGatewayAuthorityCommitCapability, type CurrentGatewayAuthoritySourceMutation, type CurrentConsequenceCutoffAuthorityCommitCapability, type CurrentConsequenceCutoffAuthoritySourceMutation, type CurrentTerminalObservationAuthorityCommitCapability, type CurrentTerminalObservationAuthoritySourceMutation, type CurrentIsolationTransitionAuthorityCommitCapability, type CurrentIsolationTransitionAuthoritySourceMutation } from "../../protocol/store/authority-source";
+export declare class MemoryAuthoritySourceStore implements AuthorityProjectionOutboxStore {
+    #private;
+    constructor(authorityClock?: () => number);
+    commitAuthorityMutation(mutation: AuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    commitCurrentPolicyAuthorityMutation(capability: CurrentPolicyAuthorityCommitCapability, mutation: CurrentPolicyAuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    commitCurrentGatewayAuthorityMutation(capability: CurrentGatewayAuthorityCommitCapability, mutation: CurrentGatewayAuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    commitCurrentConsequenceCutoffAuthorityMutation(capability: CurrentConsequenceCutoffAuthorityCommitCapability, mutation: CurrentConsequenceCutoffAuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    commitCurrentTerminalObservationAuthorityMutation(capability: CurrentTerminalObservationAuthorityCommitCapability, mutation: CurrentTerminalObservationAuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    commitCurrentIsolationTransitionAuthorityMutation(capability: CurrentIsolationTransitionAuthorityCommitCapability, mutation: CurrentIsolationTransitionAuthoritySourceMutation): Promise<AuthoritySourceMutationResult>;
+    private commitAuthorityMutationInternal;
+    readAuthorityMutation(mutation: AuthoritySourceMutation): Promise<AuthorityMutationReadbackResult>;
+    readAuthorityCurrentPointers(scope: AuthoritySourceScope, pointers: readonly AuthorityPointerIdentity[]): Promise<AuthorityCurrentPointerReadResult>;
+    readAuthorityCurrentRecords(scope: AuthoritySourceScope, pointers: readonly AuthorityPointerIdentity[]): Promise<AuthorityCurrentRecordReadResult>;
+    readAuthorityPointerTransition(scope: AuthoritySourceScope, pointer: AuthorityPointerIdentity, successorVersion: number): Promise<AuthorityPointerTransitionReadResult>;
+    getAuthorityCommit(scope: AuthoritySourceScope, identity: AuthorityCommitIdentity): Promise<AuthorityCommitMarker | null>;
+    getAuthoritySourceRecord(scope: AuthoritySourceScope, identity: AuthorityRecordIdentity): Promise<AuthoritySourceRecord | null>;
+    listAuthorityRecordCommitRefs(scope: AuthoritySourceScope, identity: AuthorityRecordIdentity): Promise<AuthorityCommitIdentity[]>;
+    listAuthorityCommitRecordRefs(scope: AuthoritySourceScope, identity: AuthorityCommitIdentity): Promise<AuthorityCommitRecordReference[]>;
+    getAuthorityCurrentPointer(scope: AuthoritySourceScope, identity: AuthorityPointerIdentity): Promise<AuthorityRecordWitness | null>;
+    listAuthorityPointerTransitions(scope: AuthoritySourceScope, identity: AuthorityPointerIdentity): Promise<AuthorityPointerTransition[]>;
+    listAuthorityProjectionIntents(scope: AuthoritySourceScope, identity: AuthorityCommitIdentity): Promise<AuthorityProjectionIntent[]>;
+    scanAuthorityProjectionOutbox(scope: AuthoritySourceScope, query: AuthorityProjectionOutboxScanQuery): Promise<AuthorityProjectionOutboxScanResult>;
+    readAuthorityProjectionOutboxItem(scope: AuthoritySourceScope, sourceCommit: AuthorityCommitIdentity, projection: AuthorityProjectionIntent["projection"]): Promise<AuthorityProjectionOutboxReadResult>;
+    private readCommitPointerGuards;
+    private readCommitPointerTransitions;
+    private readCommitProjectionIntents;
+    private isCoherentAuthorityCommit;
+    private withAuthorityMutationLock;
+    private observeTemporalFence;
+    private commitNormalizedAuthorityMutation;
+    private readNormalizedAuthorityMutation;
+}

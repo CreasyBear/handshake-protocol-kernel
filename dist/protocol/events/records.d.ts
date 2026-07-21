@@ -15,6 +15,8 @@ export type CommitRecordsOptions = {
     protectedSurfaceOperationClaimIndexReleases?: string[];
     receiptMutationAttemptIndexEntries?: ReceiptMutationAttemptIndexEntry[];
 };
+export declare function buildStoredProtocolRecord(record: ProtocolRecord): Promise<StoredProtocolRecord>;
+export declare function bindTransitionRequestContextToEventDescriptors(eventDescriptors: readonly EventDescriptor[], contextRecord: ProtocolRecord | null): EventDescriptor[];
 export declare class ProtocolRecorder {
     private readonly store;
     private readonly transitionRequestContext?;
@@ -22,7 +24,7 @@ export declare class ProtocolRecorder {
     requiredRecord<T>(objectType: ProtocolObjectType, objectId: string, code: string): Promise<StoredProtocolRecord<T>>;
     optionalRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
     persistRecord(record: ProtocolRecord): Promise<void>;
-    persistRecordIfAbsentOrSame(record: ProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
+    persistRecordIfAbsentOrSame(record: ProtocolRecord): Promise<"exact" | "conflict">;
     buildRecord(record: ProtocolRecord): Promise<StoredProtocolRecord>;
     commitRecordsWithEvents(protocolRecords: ProtocolRecord[], eventDescriptors: EventDescriptor[], options?: CommitRecordsOptions): Promise<ContractStreamEvent[]>;
     tryCommitRecordsWithEvents(protocolRecords: ProtocolRecord[], eventDescriptors: EventDescriptor[], options?: CommitRecordsOptions): Promise<{

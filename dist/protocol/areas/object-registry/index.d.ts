@@ -4,73 +4,874 @@ import { type ActionContract } from "../action-contract/schemas";
 import { type IsolationState } from "../isolation-breaker/schemas";
 import { type ProtocolObjectType, type ProtocolRecord } from "./schemas";
 import { type Greenlight } from "../policy-greenlight/schemas";
+export type IsolationScopeRef = Pick<IsolationState, "tenantId" | "organizationId" | "scopeType" | "scopeId">;
+export declare function isolationScopeRefsForContract(contract: ActionContract): IsolationScopeRef[];
 export type ProtocolObjectExportPosture = "catalog_public" | "transition_evidence" | "receipt_evidence" | "internal_evidence";
 export type ProtocolObjectRawReadPosture = "control_plane_read" | "audit_read" | "internal_only";
-export type IsolationScopeRef = Pick<IsolationState, "tenantId" | "organizationId" | "scopeType" | "scopeId">;
-export type ProtocolObjectRegistryEntry<T extends ProtocolObjectType = ProtocolObjectType> = {
+export type ProtocolObjectSchemaRegistration = Readonly<{
+    schemaVersion: string;
+    schema: ZodType;
+    objectIdSelector: (payload: unknown) => string;
+}>;
+export type ProtocolObjectRegistryEntry<T extends ProtocolObjectType = ProtocolObjectType> = Readonly<{
     objectType: T;
     schema: ZodType;
+    schemaRegistrations: readonly [ProtocolObjectSchemaRegistration, ...ProtocolObjectSchemaRegistration[]];
     idSelector: (record: ProtocolRecord) => string;
     exportPosture: ProtocolObjectExportPosture;
     rawReadPosture: ProtocolObjectRawReadPosture;
-};
-export declare const protocolObjectTypes: ("refusal" | "proof_gap" | "receipt" | "action_contract" | "greenlight" | "tool_capability" | "action_type" | "gateway_registry_entry" | "operating_envelope" | "endpoint_access_surface_binding" | "agentic_endpoint_access_policy" | "agentic_endpoint_access_attempt" | "agentic_endpoint_access_clearance_binding" | "agentic_endpoint_access_lease" | "agentic_endpoint_access_usage_event" | "agentic_endpoint_access_readback" | "agentic_endpoint_access_capabilities" | "gateway_credential_ref" | "delegated_authority_ref" | "delegated_authority_status_transition" | "gateway_custody_proof_packet" | "credential_resolution_evidence" | "typed_action_commitment" | "transition_request_context" | "runtime_execution" | "generated_execution_graph" | "idempotency_ledger_entry" | "bypass_probe" | "tool_call_draft" | "protected_path_posture" | "intent_compilation" | "delegation_evidence_record" | "negotiation_session" | "negotiation_offer" | "negotiation_decision" | "linked_agreement" | "agreement_obligation_binding" | "agreement_status_transition" | "authority_certificate" | "policy_decision" | "review_artifact" | "review_decision" | "breaker_decision" | "isolation_state" | "gateway_check_attempt" | "mutation_attempt" | "protected_surface_operation_claim" | "surface_operation_reconciliation" | "receipt_export" | "raw_record_read_audit" | "recovery_recommendation" | "recovery_recommendation_status_transition" | "contract_stream_event")[];
-export declare const protocolObjectRegistry: {
-    tool_capability: ProtocolObjectRegistryEntry<"tool_capability">;
-    action_type: ProtocolObjectRegistryEntry<"action_type">;
-    gateway_registry_entry: ProtocolObjectRegistryEntry<"gateway_registry_entry">;
-    operating_envelope: ProtocolObjectRegistryEntry<"operating_envelope">;
-    endpoint_access_surface_binding: ProtocolObjectRegistryEntry<"endpoint_access_surface_binding">;
-    agentic_endpoint_access_policy: ProtocolObjectRegistryEntry<"agentic_endpoint_access_policy">;
-    agentic_endpoint_access_attempt: ProtocolObjectRegistryEntry<"agentic_endpoint_access_attempt">;
-    agentic_endpoint_access_clearance_binding: ProtocolObjectRegistryEntry<"agentic_endpoint_access_clearance_binding">;
-    agentic_endpoint_access_lease: ProtocolObjectRegistryEntry<"agentic_endpoint_access_lease">;
-    agentic_endpoint_access_usage_event: ProtocolObjectRegistryEntry<"agentic_endpoint_access_usage_event">;
-    agentic_endpoint_access_readback: ProtocolObjectRegistryEntry<"agentic_endpoint_access_readback">;
-    agentic_endpoint_access_capabilities: ProtocolObjectRegistryEntry<"agentic_endpoint_access_capabilities">;
-    gateway_credential_ref: ProtocolObjectRegistryEntry<"gateway_credential_ref">;
-    delegated_authority_ref: ProtocolObjectRegistryEntry<"delegated_authority_ref">;
-    delegated_authority_status_transition: ProtocolObjectRegistryEntry<"delegated_authority_status_transition">;
-    gateway_custody_proof_packet: ProtocolObjectRegistryEntry<"gateway_custody_proof_packet">;
-    credential_resolution_evidence: ProtocolObjectRegistryEntry<"credential_resolution_evidence">;
-    typed_action_commitment: ProtocolObjectRegistryEntry<"typed_action_commitment">;
-    transition_request_context: ProtocolObjectRegistryEntry<"transition_request_context">;
-    runtime_execution: ProtocolObjectRegistryEntry<"runtime_execution">;
-    generated_execution_graph: ProtocolObjectRegistryEntry<"generated_execution_graph">;
-    idempotency_ledger_entry: ProtocolObjectRegistryEntry<"idempotency_ledger_entry">;
-    bypass_probe: ProtocolObjectRegistryEntry<"bypass_probe">;
-    tool_call_draft: ProtocolObjectRegistryEntry<"tool_call_draft">;
-    protected_path_posture: ProtocolObjectRegistryEntry<"protected_path_posture">;
-    intent_compilation: ProtocolObjectRegistryEntry<"intent_compilation">;
-    delegation_evidence_record: ProtocolObjectRegistryEntry<"delegation_evidence_record">;
-    negotiation_session: ProtocolObjectRegistryEntry<"negotiation_session">;
-    negotiation_offer: ProtocolObjectRegistryEntry<"negotiation_offer">;
-    negotiation_decision: ProtocolObjectRegistryEntry<"negotiation_decision">;
-    linked_agreement: ProtocolObjectRegistryEntry<"linked_agreement">;
-    agreement_obligation_binding: ProtocolObjectRegistryEntry<"agreement_obligation_binding">;
-    agreement_status_transition: ProtocolObjectRegistryEntry<"agreement_status_transition">;
-    action_contract: ProtocolObjectRegistryEntry<"action_contract">;
-    authority_certificate: ProtocolObjectRegistryEntry<"authority_certificate">;
-    policy_decision: ProtocolObjectRegistryEntry<"policy_decision">;
-    greenlight: ProtocolObjectRegistryEntry<"greenlight">;
-    review_artifact: ProtocolObjectRegistryEntry<"review_artifact">;
-    review_decision: ProtocolObjectRegistryEntry<"review_decision">;
-    breaker_decision: ProtocolObjectRegistryEntry<"breaker_decision">;
-    isolation_state: ProtocolObjectRegistryEntry<"isolation_state">;
-    gateway_check_attempt: ProtocolObjectRegistryEntry<"gateway_check_attempt">;
-    mutation_attempt: ProtocolObjectRegistryEntry<"mutation_attempt">;
-    protected_surface_operation_claim: ProtocolObjectRegistryEntry<"protected_surface_operation_claim">;
-    surface_operation_reconciliation: ProtocolObjectRegistryEntry<"surface_operation_reconciliation">;
-    proof_gap: ProtocolObjectRegistryEntry<"proof_gap">;
-    refusal: ProtocolObjectRegistryEntry<"refusal">;
-    receipt: ProtocolObjectRegistryEntry<"receipt">;
-    receipt_export: ProtocolObjectRegistryEntry<"receipt_export">;
-    raw_record_read_audit: ProtocolObjectRegistryEntry<"raw_record_read_audit">;
-    recovery_recommendation: ProtocolObjectRegistryEntry<"recovery_recommendation">;
-    recovery_recommendation_status_transition: ProtocolObjectRegistryEntry<"recovery_recommendation_status_transition">;
-    contract_stream_event: ProtocolObjectRegistryEntry<"contract_stream_event">;
-};
-export declare const protocolRecordSchemas: Record<ProtocolObjectType, ZodType>;
+}>;
+export declare const protocolObjectTypes: readonly ProtocolObjectType[];
+export declare const protocolObjectRegistry: Readonly<{
+    tool_capability: Readonly<{
+        objectType: "tool_capability";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    action_type: Readonly<{
+        objectType: "action_type";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    gateway_registry_entry: Readonly<{
+        objectType: "gateway_registry_entry";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    operating_envelope: Readonly<{
+        objectType: "operating_envelope";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    endpoint_access_surface_binding: Readonly<{
+        objectType: "endpoint_access_surface_binding";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_policy: Readonly<{
+        objectType: "agentic_endpoint_access_policy";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_attempt: Readonly<{
+        objectType: "agentic_endpoint_access_attempt";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_clearance_binding: Readonly<{
+        objectType: "agentic_endpoint_access_clearance_binding";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_lease: Readonly<{
+        objectType: "agentic_endpoint_access_lease";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_usage_event: Readonly<{
+        objectType: "agentic_endpoint_access_usage_event";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_readback: Readonly<{
+        objectType: "agentic_endpoint_access_readback";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agentic_endpoint_access_capabilities: Readonly<{
+        objectType: "agentic_endpoint_access_capabilities";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    gateway_credential_ref: Readonly<{
+        objectType: "gateway_credential_ref";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    delegated_authority_ref: Readonly<{
+        objectType: "delegated_authority_ref";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    delegated_authority_status_transition: Readonly<{
+        objectType: "delegated_authority_status_transition";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    gateway_custody_proof_packet: Readonly<{
+        objectType: "gateway_custody_proof_packet";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    credential_resolution_evidence: Readonly<{
+        objectType: "credential_resolution_evidence";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    typed_action_commitment: Readonly<{
+        objectType: "typed_action_commitment";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    transition_request_context: Readonly<{
+        objectType: "transition_request_context";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    runtime_execution: Readonly<{
+        objectType: "runtime_execution";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    generated_execution_graph: Readonly<{
+        objectType: "generated_execution_graph";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    idempotency_ledger_entry: Readonly<{
+        objectType: "idempotency_ledger_entry";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    bypass_probe: Readonly<{
+        objectType: "bypass_probe";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    tool_call_draft: Readonly<{
+        objectType: "tool_call_draft";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    protected_path_posture: Readonly<{
+        objectType: "protected_path_posture";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    intent_compilation: Readonly<{
+        objectType: "intent_compilation";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    delegation_evidence_record: Readonly<{
+        objectType: "delegation_evidence_record";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    negotiation_session: Readonly<{
+        objectType: "negotiation_session";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    negotiation_offer: Readonly<{
+        objectType: "negotiation_offer";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    negotiation_decision: Readonly<{
+        objectType: "negotiation_decision";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    linked_agreement: Readonly<{
+        objectType: "linked_agreement";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agreement_obligation_binding: Readonly<{
+        objectType: "agreement_obligation_binding";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    agreement_status_transition: Readonly<{
+        objectType: "agreement_status_transition";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    action_contract: Readonly<{
+        objectType: "action_contract";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    authority_certificate: Readonly<{
+        objectType: "authority_certificate";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    policy_decision: Readonly<{
+        objectType: "policy_decision";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    greenlight: Readonly<{
+        objectType: "greenlight";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    review_artifact: Readonly<{
+        objectType: "review_artifact";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    review_decision: Readonly<{
+        objectType: "review_decision";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    breaker_decision: Readonly<{
+        objectType: "breaker_decision";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    isolation_state: Readonly<{
+        objectType: "isolation_state";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    gateway_check_attempt: Readonly<{
+        objectType: "gateway_check_attempt";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    mutation_attempt: Readonly<{
+        objectType: "mutation_attempt";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    protected_surface_operation_claim: Readonly<{
+        objectType: "protected_surface_operation_claim";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    surface_operation_reconciliation: Readonly<{
+        objectType: "surface_operation_reconciliation";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    proof_gap: Readonly<{
+        objectType: "proof_gap";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    refusal: Readonly<{
+        objectType: "refusal";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    receipt: Readonly<{
+        objectType: "receipt";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    receipt_export: Readonly<{
+        objectType: "receipt_export";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    raw_record_read_audit: Readonly<{
+        objectType: "raw_record_read_audit";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    recovery_recommendation: Readonly<{
+        objectType: "recovery_recommendation";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    recovery_recommendation_status_transition: Readonly<{
+        objectType: "recovery_recommendation_status_transition";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+    contract_stream_event: Readonly<{
+        objectType: "contract_stream_event";
+        schema: ZodType;
+        schemaRegistrations: readonly [Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>, ...Readonly<{
+            schemaVersion: string;
+            schema: ZodType;
+            objectIdSelector: (payload: unknown) => string;
+        }>[]];
+        idSelector: (record: ProtocolRecord) => string;
+        exportPosture: ProtocolObjectExportPosture;
+        rawReadPosture: ProtocolObjectRawReadPosture;
+    }>;
+}>;
+export declare const protocolRecordSchemas: Readonly<Record<ProtocolObjectType, ZodType>>;
 export declare function getObjectId(record: ProtocolRecord): string;
-export declare function isolationScopeRefsForContract(contract: ActionContract): IsolationScopeRef[];
 export declare function isolationScopeRefsForGreenlight(greenlight: Greenlight): IsolationScopeRef[];

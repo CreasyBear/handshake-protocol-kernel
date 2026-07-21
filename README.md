@@ -41,7 +41,7 @@ action contract, policy decision, one-use greenlight or refusal, and gateway
 check before mutation. Presentation bundles are evidence for readback — they do
 not grant clearance by themselves.
 
-Package: `handshake-protocol-kernel@0.4.0`. MCP name:
+Package: `handshake-protocol-kernel@0.5.0`. MCP name:
 `io.github.CreasyBear/handshake-protocol-kernel`. Runtime: Node.js `>=20`.
 License: Apache-2.0. Published package repository form: package artifact repository, not source mirror.
 The published package repo contains package artifacts and trusted-publish
@@ -175,16 +175,17 @@ revocation authority, facilitator operation, seller middleware, unsupported x402
 schemes, marketplace certification, or compliance-grade audit. Aggregate
 payment-budget management is intentionally outside the current remit.
 
-Trusted Publishing: `0.4.0` is the current package release target. Its npm
+Trusted Publishing: `0.5.0` is the current package release target. Its npm
 availability is not claimed until `npm run release:npm:posture:remote -- --json`
 confirms registry latest, npm signature metadata, provenance metadata, and
 installed-artifact posture for the exact version. Public npm availability still
 does not create authority. MCP Registry discoverability remains a separate
 distribution launch blocker.
 
-Next Trusted Publishing workflow input: `expected_version = 0.4.0`. Older
-`0.2.x` and `0.3.0` npm and host-activation evidence remains historical only,
-not current package proof. Release proof states:
+Next Trusted Publishing workflow input: `expected_version = 0.5.0`. Older
+`0.2.x` and `0.3.0` npm and host-activation evidence remains historical only.
+Verified `0.4.0` publication evidence is prior-version distribution evidence
+only, not current `0.5.0` artifact proof or authority. Release proof states:
 `ready_to_publish` means package shape and local gates passed;
 `actually_published` means npm publish and installed-artifact readback passed
 for the exact version; `registry_discoverable` means MCP Registry acceptance and

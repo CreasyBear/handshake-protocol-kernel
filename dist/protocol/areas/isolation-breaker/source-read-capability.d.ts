@@ -1,0 +1,10 @@
+import type { AuthorityRecordReadStore } from "../../store/authority-record-read";
+import type { ProtocolStore } from "../../store/port";
+export type IsolationAuthorityReader = Readonly<AuthorityRecordReadStore>;
+export type PreparedIsolationAuthorityReaderBinding = object;
+export declare function registerIsolationSourceRoot(root: object): void;
+export declare function bindIsolationAuthorityReader(root: object, carrier: ProtocolStore, source: IsolationAuthorityReader): void;
+export declare function prepareIsolationAuthorityReaderBinding(root: object, carrier: ProtocolStore, source: IsolationAuthorityReader): PreparedIsolationAuthorityReaderBinding;
+export declare function commitIsolationAuthorityReaderBinding(prepared: PreparedIsolationAuthorityReaderBinding): void;
+export declare function observeIsolationAuthorityReader(store: ProtocolStore): IsolationAuthorityReader | null;
+export declare function assertIsolationSourceRoot(root: object): void;

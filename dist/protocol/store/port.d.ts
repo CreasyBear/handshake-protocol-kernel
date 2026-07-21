@@ -1,13 +1,13 @@
 import type { ContractStreamEvent } from "../events/schemas";
 import type { IdempotencyLedgerEntry } from "../areas/idempotency-ledger";
-import type { IsolationState } from "../areas/isolation-breaker";
+import type { IsolationState } from "../areas/isolation-breaker/schemas";
 import type { ProtocolObjectType } from "../areas/object-registry/schemas";
 import type { ProtectedSurfaceOperationClaim } from "../areas/operation-lifecycle";
 import type { ProtectedPathPosture } from "../areas/protected-path-posture";
 import type { Receipt } from "../areas/receipt-export";
 export type { ContractStreamEvent } from "../events/schemas";
 export type { IdempotencyLedgerEntry } from "../areas/idempotency-ledger";
-export type { IsolationState } from "../areas/isolation-breaker";
+export type { IsolationState } from "../areas/isolation-breaker/schemas";
 export type { ProtocolObjectType } from "../areas/object-registry/schemas";
 export type { ProtectedSurfaceOperationClaim } from "../areas/operation-lifecycle";
 export type { ProtectedPathPosture } from "../areas/protected-path-posture";
@@ -114,6 +114,15 @@ export type EndpointAccessRecordScope = {
     tenantId: string;
     organizationId: string;
 };
+export type RawRecordReadAuditRecordScope = {
+    tenantId: string;
+    organizationId: string;
+};
+export type RawRecordReadAuditQuery = {
+    targetObjectType: ProtocolObjectType;
+    targetObjectId: string;
+    limit: number;
+};
 export type EndpointAccessUsageCounterReservation = EndpointAccessUsageCounterKey & {
     expectedCounter: number;
     counterAfter: number;
@@ -160,9 +169,15 @@ export type StreamEventRange = {
     endOffset?: number;
     limit?: number;
 };
+/**
+ * A postcondition, not an insertion-causality claim. "exact" means the complete
+ * requested envelope is durably readable after the call; concurrent same-envelope
+ * insertion is intentionally indistinguishable from insertion by this invocation.
+ */
+export type PutRecordIfAbsentOrSameResult = "exact" | "conflict";
 export interface ProtocolStore {
     putRecord(record: StoredProtocolRecord): Promise<void>;
-    putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
+    putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<PutRecordIfAbsentOrSameResult>;
     getRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
     listRecordsByType<T>(objectType: ProtocolObjectType, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
     listRecordsByActionContract<T>(objectType: ProtocolObjectType, actionContractId: string, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
@@ -183,4 +198,7 @@ export interface ProtocolStore {
     listEndpointAccessUsageEventsByLeaseId<T>(leaseId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T>[]>;
     getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
     commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
+}
+export interface RawRecordReadAuditReader {
+    listRawRecordReadAudits<T>(scope: RawRecordReadAuditRecordScope, query: RawRecordReadAuditQuery): Promise<StoredProtocolRecord<T>[]>;
 }

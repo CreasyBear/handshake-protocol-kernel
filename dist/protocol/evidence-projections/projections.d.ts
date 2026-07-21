@@ -7,14 +7,22 @@ import type { SurfaceOperationReconciliation } from "../areas/operation-lifecycl
 import type { ProtectedPathPosture } from "../areas/protected-path-posture";
 import type { Greenlight, PolicyDecision } from "../areas/policy-greenlight/schemas";
 import type { ProofGap } from "../areas/proof-gap";
+import type { RawRecordReadAudit } from "../areas/raw-read-audit";
 import { type Refusal } from "../areas/refusal";
 import type { Receipt } from "../areas/receipt-export/schemas";
-import { type TypedActionCommitmentRecord } from "../areas/typed-action-commitment";
+import { projectTypedActionCommitment, type TypedActionCommitmentRecord } from "../areas/typed-action-commitment";
 import type { ContractStreamEvent } from "../events/schemas";
 import type { StoredProtocolRecord } from "../store/port";
 import { type AgentTransactionEnvelopeProjection, type ContractEvidenceProjection, type IdempotencyRecoveryProjection, type OperationCorrelationIndex, type OperationReadbackProjection, type OperationReadbackProjectionFreshness, type ProtectedPathInstallHealthProjection, type ReceiptTimelineProjection } from "./schemas";
-export { projectTypedActionCommitment } from "../areas/typed-action-commitment";
+import { type RawRecordReadAuditProjection } from "./raw-read-audit-schemas";
+export { projectTypedActionCommitment };
 export declare function projectContractEvidence(contract: ActionContract): ContractEvidenceProjection;
+export declare function rawRecordReadAuditProjectionLimit(limit?: number): number;
+export declare function projectRawRecordReadAuditProjection(input: {
+    targetRecord: StoredProtocolRecord;
+    audits: readonly StoredProtocolRecord<RawRecordReadAudit>[];
+    limit?: number;
+}): RawRecordReadAuditProjection;
 export type AgentTransactionEnvelopeInput = {
     contract: ActionContract;
     policyDecision: PolicyDecision;

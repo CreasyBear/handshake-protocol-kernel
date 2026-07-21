@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 import type { TransitionCallerRole } from "../admission/caller-auth";
-export type EvidenceReadRouteId = "getGeneratedGraphEvidenceProjection" | "getContractEvidenceProjection" | "getAgentTransactionEnvelopeProjection" | "getOperationReadbackProjection" | "getOperationCorrelationIndex" | "getIdempotencyRecoveryProjection" | "getReceiptTimelineProjection" | "getProtectedPathInstallHealthProjection";
+export type EvidenceReadRouteId = "getGeneratedGraphEvidenceProjection" | "getContractEvidenceProjection" | "getAgentTransactionEnvelopeProjection" | "getOperationReadbackProjection" | "getOperationCorrelationIndex" | "getIdempotencyRecoveryProjection" | "getReceiptTimelineProjection" | "getRawRecordReadAuditProjection" | "getProtectedPathInstallHealthProjection";
 export type EvidenceReadRouteDefinition = {
     routeId: EvidenceReadRouteId;
     honoPath: `/v0.2/${string}`;
@@ -1178,6 +1178,80 @@ export declare const evidenceReadRouteDefinitions: readonly [{
     readonly pathParameters: readonly [{
         readonly name: "receiptId";
         readonly description: "Receipt identifier.";
+    }];
+}, {
+    readonly routeId: "getRawRecordReadAuditProjection";
+    readonly honoPath: "/v0.2/evidence/raw-record-read-audits/:targetObjectType/:targetObjectId";
+    readonly openApiPath: "/v0.2/evidence/raw-record-read-audits/{targetObjectType}/{targetObjectId}";
+    readonly roles: readonly ["review_custody", "runtime_evidence"];
+    readonly summary: "Read redacted raw-record-read audit evidence for one target record";
+    readonly responseDescription: "Redacted raw-record-read audit projection. Inspection evidence only; not raw-record access, not raw-read authority, and not a receipt export.";
+    readonly responseSchema: import("zod").ZodObject<{
+        targetObjectType: import("zod").ZodString;
+        targetObjectRef: import("zod").ZodString;
+        targetRecordDigest: import("zod").ZodString;
+        targetRecordSchemaVersion: import("zod").ZodString;
+        targetRecordCreatedAt: import("zod").ZodString;
+        queryLimit: import("zod").ZodNumber;
+        resultCount: import("zod").ZodNumber;
+        hasMore: import("zod").ZodBoolean;
+        audits: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodObject<{
+            rawRecordReadAuditRef: import("zod").ZodString;
+            auditRecordDigest: import("zod").ZodString;
+            targetObjectType: import("zod").ZodString;
+            targetObjectRef: import("zod").ZodString;
+            targetRecordDigest: import("zod").ZodString;
+            targetRecordSchemaVersion: import("zod").ZodString;
+            targetRecordCreatedAt: import("zod").ZodString;
+            callerIdentityRef: import("zod").ZodString;
+            callerSubjectDigest: import("zod").ZodString;
+            authProviderRef: import("zod").ZodString;
+            authSessionDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            serviceCredentialDigest: import("zod").ZodNullable<import("zod").ZodString>;
+            projectId: import("zod").ZodNullable<import("zod").ZodString>;
+            workspaceId: import("zod").ZodNullable<import("zod").ZodString>;
+            custodyRoles: import("zod").ZodArray<import("zod").ZodString>;
+            hostedRoles: import("zod").ZodArray<import("zod").ZodString>;
+            hostedScopes: import("zod").ZodArray<import("zod").ZodString>;
+            rawReadPurposeDigest: import("zod").ZodString;
+            purposeRedactionPolicyId: import("zod").ZodLiteral<"hosted-raw-read-purpose-digest.v1">;
+            rawReadExpiresAt: import("zod").ZodString;
+            routeId: import("zod").ZodLiteral<"readProtocolRecord">;
+            requestMethod: import("zod").ZodLiteral<"GET">;
+            requestedAt: import("zod").ZodString;
+            rawRecordReturned: import("zod").ZodLiteral<true>;
+            rawRecordPayloadIncludedInAudit: import("zod").ZodLiteral<false>;
+            authorityBoundary: import("zod").ZodObject<{
+                createsPolicyDecision: import("zod").ZodLiteral<false>;
+                createsGreenlight: import("zod").ZodLiteral<false>;
+                performsGatewayCheck: import("zod").ZodLiteral<false>;
+                createsMutationAuthority: import("zod").ZodLiteral<false>;
+                createsRawReadAuthority: import("zod").ZodLiteral<false>;
+                exposesRawRecordInAudit: import("zod").ZodLiteral<false>;
+            }, import("zod/v4/core").$strict>;
+        }, import("zod/v4/core").$strict>>>;
+        rawRecordPayloadIncluded: import("zod").ZodLiteral<false>;
+        rawPurposeIncluded: import("zod").ZodLiteral<false>;
+        credentialMaterialIncluded: import("zod").ZodLiteral<false>;
+        paymentMaterialIncluded: import("zod").ZodLiteral<false>;
+        projectionAuthorityBoundary: import("zod").ZodObject<{
+            createsPolicyDecision: import("zod").ZodLiteral<false>;
+            createsGreenlight: import("zod").ZodLiteral<false>;
+            performsGatewayCheck: import("zod").ZodLiteral<false>;
+            createsMutationAuthority: import("zod").ZodLiteral<false>;
+            createsRawReadAuthority: import("zod").ZodLiteral<false>;
+            exposesRawRecord: import("zod").ZodLiteral<false>;
+            exposesRawReadPurpose: import("zod").ZodLiteral<false>;
+        }, import("zod/v4/core").$strict>;
+        redactionProfileRef: import("zod").ZodLiteral<"raw-record-read-audit:v0.2-redacted">;
+        omittedFields: import("zod").ZodDefault<import("zod").ZodArray<import("zod").ZodString>>;
+    }, import("zod/v4/core").$strict>;
+    readonly pathParameters: readonly [{
+        readonly name: "targetObjectType";
+        readonly description: "Protocol object type for the audited target record.";
+    }, {
+        readonly name: "targetObjectId";
+        readonly description: "Protocol object identifier for the audited target record.";
     }];
 }, {
     readonly routeId: "getProtectedPathInstallHealthProjection";

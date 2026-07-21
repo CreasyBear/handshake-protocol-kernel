@@ -1,127 +1,10 @@
-import { z } from "zod";
 import type { ClientEvmSigner } from "@x402/evm";
-import { type GatewayCheckInput, type GatewayCheckResult, type VerifiedGatewayCheck } from "../../protocol/areas/gateway-gate";
+import { type GatewayCheckInput, type GatewayCheckResult } from "../../protocol/areas/gateway-gate";
 import type { CredentialResolutionEvidence, RecordCredentialResolutionEvidenceInput } from "../../protocol/areas/credential-custody";
 import type { ReconcileSurfaceOperationInput, SurfaceOperationReconciliation, SurfaceOperationReconciliationResult } from "../../protocol/areas/operation-lifecycle";
-import { type Eip712TypedCommitmentInput, type NormalizedEip712TypedCommitment, type RecordTypedActionCommitmentInput, type TypedActionCommitmentRecord } from "../../protocol/areas/typed-action-commitment";
-export declare const X402PaymentParametersSchema: z.ZodObject<{
-    endpointUrl: z.ZodString;
-    endpointDomain: z.ZodString;
-    intendedHttpMethod: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    intendedRequestUrl: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    intendedRequestBodyPosture: z.ZodDefault<z.ZodEnum<{
-        unsupported: "unsupported";
-        digest_bound: "digest_bound";
-        no_body: "no_body";
-        omitted: "omitted";
-    }>>;
-    intendedRequestBodyDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    selectedHeadersDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    providerEnvironmentPosture: z.ZodDefault<z.ZodEnum<{
-        unknown: "unknown";
-        local_reference_sandbox: "local_reference_sandbox";
-        external_sandbox: "external_sandbox";
-        live: "live";
-    }>>;
-    providerEnvironmentRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    x402Version: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
-    x402Scheme: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    payee: z.ZodString;
-    payTo: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    network: z.ZodString;
-    token: z.ZodString;
-    asset: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    atomicAmount: z.ZodString;
-    x402EvidenceProfile: z.ZodDefault<z.ZodEnum<{
-        official_payment_required: "official_payment_required";
-        local_digest_profile: "local_digest_profile";
-    }>>;
-    paymentRequirementsDigest: z.ZodString;
-    selectedPaymentRequirementIndex: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
-    selectedPaymentRequirementDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    maxTimeoutSeconds: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
-    paymentIdentifierPosture: z.ZodDefault<z.ZodEnum<{
-        bound: "bound";
-        not_advertised: "not_advertised";
-        advertised_absent: "advertised_absent";
-    }>>;
-    paymentIdentifierRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    paymentIdentifierDigest: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    facilitatorRef: z.ZodDefault<z.ZodNullable<z.ZodString>>;
-    sdkPackageVersions: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodString>>;
-    extensionKeys: z.ZodDefault<z.ZodArray<z.ZodString>>;
-    gatewayCredentialRefId: z.ZodString;
-    gatewayCredentialRefDigest: z.ZodString;
-    gatewayReadinessRef: z.ZodString;
-    gatewayReadinessDigest: z.ZodString;
-    policyVersionRef: z.ZodString;
-    policyVersionDigest: z.ZodString;
-}, z.core.$strict>;
-export type X402PaymentParameters = z.infer<typeof X402PaymentParametersSchema>;
-export type X402PaymentSignatureCommand = {
-    verifiedGate: VerifiedGatewayCheck;
-    parameters: X402PaymentParameters;
-    credentialResolutionEvidence: CredentialResolutionEvidence;
-    typedActionCommitment?: NormalizedEip712TypedCommitment;
-    credentialUseRef: string;
-    providerRequestRef: string;
-    providerOperationRef: string;
-};
-export type X402LocalReferenceSandboxEvidenceBoundary = {
-    boundaryKind: "x402_local_reference_sandbox";
-    evidenceProfile: "local_reference_downstream_fixture";
-    providerEnvironmentPosture: "local_reference_sandbox";
-    fixtureScope: "local_reference_only";
-    signedRetryPosture: "not_observed" | "post_gateway_check_observation_only";
-    authorityCreated: false;
-    paymentFinalityClaimed: false;
-    settlementFinalityClaimed: false;
-    facilitatorOperationClaimed: false;
-    sellerMiddlewareClaimed: false;
-    providerCustodyClaimed: false;
-    liveProviderOperationClaimed: false;
-};
-export type X402PaymentSignatureEvidence = {
-    evidenceRef: string;
-    surfaceOperationRef: string;
-    paymentSignatureHeaderName: "PAYMENT-SIGNATURE";
-    paymentSignatureHeaderRef: string;
-    paymentSignatureDigest: `sha256:${string}`;
-    paymentPayloadShape: "official_x402_payment_payload_v2" | "local_fixture_payment_signature";
-    paymentPayloadRef?: string;
-    paymentPayloadDigest?: `sha256:${string}`;
-    paymentIdentifierRef?: string;
-    paymentIdentifierDigest?: `sha256:${string}`;
-    credentialMaterialPosture: "gateway_held_redacted" | "local_fixture";
-    downstreamPaymentStatus: "succeeded" | "unknown";
-    paymentResponseEvidenceRef: string | null;
-    providerRequestRef: string | null;
-    providerOperationRef: string | null;
-    additionalEvidenceRefs?: string[];
-    localReferenceSandboxBoundary?: X402LocalReferenceSandboxEvidenceBoundary;
-};
-export interface X402WalletSigningSurface {
-    signPayment(command: X402PaymentSignatureCommand): Promise<X402PaymentSignatureEvidence>;
-}
-export type X402WalletTypedPayloadEvidence = {
-    chainId?: string;
-    verifyingContract?: string;
-    selectedPaymentRequirementIndex?: number;
-    selectedPaymentRequirementDigest?: `sha256:${string}`;
-    paramsDigest?: `sha256:${string}`;
-    idempotencyKey?: string;
-    verifierContextDigest?: `sha256:${string}`;
-    expectedVerifierContextDigest?: `sha256:${string}`;
-    signingMethod?: Eip712TypedCommitmentInput["signingMethod"];
-    signerKind?: Eip712TypedCommitmentInput["signerKind"];
-    signerRef?: string;
-    domainSeparator?: string;
-    structHash?: string;
-    eip712Digest?: string;
-    nonceRef?: string;
-    nonceDigest?: `sha256:${string}`;
-    replayStatus?: Eip712TypedCommitmentInput["replayStatus"];
-};
+import { type RecordTypedActionCommitmentInput, type TypedActionCommitmentRecord } from "../../protocol/areas/typed-action-commitment";
+export { X402PaymentParametersSchema, type X402LocalReferenceSandboxEvidenceBoundary, type X402PaymentParameters, type X402PaymentSignatureCommand, type X402PaymentSignatureEvidence, type X402WalletSigningSurface, type X402WalletTypedPayloadEvidence, } from "./signing-command/types";
+import { type X402PaymentParameters, type X402PaymentSignatureCommand, type X402PaymentSignatureEvidence, type X402WalletSigningSurface, type X402WalletTypedPayloadEvidence } from "./signing-command/types";
 /**
  * D-64 Mechanism A — gateway-held credential custody (structural, not label-only).
  *
@@ -189,7 +72,7 @@ export type X402WalletGatewayResult = {
     reconciliation: SurfaceOperationReconciliation;
     signatureEvidence: X402PaymentSignatureEvidence;
 } | {
-    outcome: "payment_signature_failed";
+    outcome: "payment_signature_failed" | "payment_signature_outcome_unknown";
     gatewayCheck: GatewayCheckResult;
     credentialResolutionEvidence: CredentialResolutionEvidence | null;
     typedActionCommitment: TypedActionCommitmentRecord | null;

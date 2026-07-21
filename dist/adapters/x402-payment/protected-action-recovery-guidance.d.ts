@@ -1,0 +1,11 @@
+import type { McpToolResult } from "../../mcp/output";
+import type { RuntimeIngressDispatchBlock, RuntimeIngressObservedDispatch } from "../../runtime/ingress";
+import { type ProtectedActionRecoveryGuidance } from "../../surfaces/protected-action-recovery-guidance";
+import type { X402PaymentRuntimeResult } from "./action-proposal";
+import type { ProtectedX402ToolFacadeResult } from "./protected-tool-facade";
+import type { X402ProtectedToolHostProfileResult } from "./protected-tool-profile";
+export declare function recoveryGuidanceFromProtectedX402ToolFacadeResult(result: ProtectedX402ToolFacadeResult): ProtectedActionRecoveryGuidance;
+export declare function recoveryGuidanceFromProtectedX402ToolHostProfileResult(result: X402ProtectedToolHostProfileResult): ProtectedActionRecoveryGuidance;
+export declare function recoveryGuidanceFromMcpX402PaymentResult(result: McpToolResult): ProtectedActionRecoveryGuidance;
+export declare function recoveryGuidanceFromX402PaymentRuntimeResult(result: X402PaymentRuntimeResult): ProtectedActionRecoveryGuidance;
+export declare function recoveryGuidanceFromRuntimeIngressX402Dispatch(blockValue: RuntimeIngressDispatchBlock, dispatchValue: RuntimeIngressObservedDispatch, refusalReasonCodes: readonly string[]): ProtectedActionRecoveryGuidance;

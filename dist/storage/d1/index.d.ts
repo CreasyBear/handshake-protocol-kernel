@@ -1,13 +1,14 @@
-import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessRecordScope, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
-export declare class D1ProtocolStore implements ProtocolStore {
-    private readonly db;
-    private readonly statements;
+import type { ContractStreamEvent, EndpointAccessLeaseCommit, EndpointAccessLeaseCommitResult, EndpointAccessRecordScope, EndpointAccessUsageCommit, EndpointAccessUsageCommitResult, EndpointAccessUsageCounterKey, GreenlightConsumption, IdempotencyLedgerEntry, IsolationScopeRef, IsolationState, ProtocolCommit, ProtocolCommitResult, ProtocolStore, RawRecordReadAuditReader, ProtocolObjectType, ProtectedPathPosture, ProtectedSurfaceOperationClaim, Receipt, StreamEventRange, GatewayCheckCommit, GatewayCheckCommitResult, ProtocolRecordScope, RawRecordReadAuditQuery, RawRecordReadAuditRecordScope, StoredProtocolRecord, StreamTail } from "../../protocol/store/port";
+import { D1AuthoritySourceStore } from "./authority-source";
+export declare class D1ProtocolStore extends D1AuthoritySourceStore implements ProtocolStore, RawRecordReadAuditReader {
+    #private;
     constructor(db: D1Database);
     putRecord(record: StoredProtocolRecord): Promise<void>;
-    putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<"inserted" | "unchanged" | "conflict">;
+    putRecordIfAbsentOrSame(record: StoredProtocolRecord): Promise<"exact" | "conflict">;
     getRecord<T>(objectType: ProtocolObjectType, objectId: string): Promise<StoredProtocolRecord<T> | null>;
     listRecordsByType<T>(objectType: ProtocolObjectType, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
     listRecordsByActionContract<T>(objectType: ProtocolObjectType, actionContractId: string, scope?: ProtocolRecordScope): Promise<StoredProtocolRecord<T>[]>;
+    listRawRecordReadAudits<T>(scope: RawRecordReadAuditRecordScope, query: RawRecordReadAuditQuery): Promise<StoredProtocolRecord<T>[]>;
     getStreamTail(streamId: string, partitionKey: string): Promise<StreamTail>;
     getStreamEvent(streamId: string, partitionKey: string, offset: number): Promise<ContractStreamEvent | null>;
     listStreamEvents(streamId: string, partitionKey: string, range?: StreamEventRange): Promise<ContractStreamEvent[]>;
@@ -22,6 +23,7 @@ export declare class D1ProtocolStore implements ProtocolStore {
     commitEndpointAccessLease(commit: EndpointAccessLeaseCommit): Promise<EndpointAccessLeaseCommitResult>;
     getEndpointAccessUsageCounter(key: EndpointAccessUsageCounterKey): Promise<number>;
     commitEndpointAccessUsage(commit: EndpointAccessUsageCommit): Promise<EndpointAccessUsageCommitResult>;
+    private preflightAbsentOrSameRecords;
     private hasGreenlightConsumption;
     private hasEndpointAccessLeaseClaim;
     getEndpointAccessLeaseByGreenlightId<T>(greenlightId: string, scope: EndpointAccessRecordScope): Promise<StoredProtocolRecord<T> | null>;

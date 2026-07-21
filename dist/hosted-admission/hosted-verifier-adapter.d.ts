@@ -97,6 +97,7 @@ export type HostedVerifierAdapter = {
 export type HostedVerifierAdapterOptions = {
     readonly allowedProviderKinds?: readonly HostedIdentityProviderKind[];
     readonly requireActiveOrganization?: boolean;
+    readonly productionEligible?: boolean;
 };
 export declare function createHostedCallerVerifierFromAdapter(adapter: HostedVerifierAdapter, options?: HostedVerifierAdapterOptions): HostedCallerVerifier;
 export declare function isHostedIdentityProviderKind(value: string): value is HostedIdentityProviderKind;

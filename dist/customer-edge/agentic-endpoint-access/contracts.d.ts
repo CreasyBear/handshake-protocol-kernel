@@ -5,6 +5,8 @@ export { AgenticEndpointAccessAttemptSchema, AgenticEndpointAccessCapabilitiesSc
 export type { AgenticEndpointAccessAttempt, AgenticEndpointAccessCapabilities, AgenticEndpointAccessClearanceBinding, AgenticEndpointAccessLease, AgenticEndpointAccessPolicy, AgenticEndpointAccessReadback, AgenticEndpointAccessRequestEvidence, AgenticEndpointAccessUsageEvent, EndpointAccessSurfaceBinding, };
 export declare const agenticEndpointAccessMiddlewareConfigSchemaVersion: "handshake.agentic-endpoint-access.middleware-config.v0.3.0";
 export declare const agenticEndpointAccessMiddlewareEventSchemaVersion: "handshake.agentic-endpoint-access.middleware-event.v0.3.0";
+export declare const agenticEndpointAccessDefaultMaxRequestBodyBytes = 1048576;
+export declare const agenticEndpointAccessMaxRequestBodyBytesCeiling: number;
 export declare const AgenticEndpointAccessProtectionStatusSchema: z.ZodEnum<{
     proof_gap: "proof_gap";
     stale: "stale";
@@ -55,6 +57,14 @@ export declare const agenticEndpointAccessMiddlewareAuthorityBoundary: {
     readonly widensOperatingBounds: false;
     readonly freshActionContractRequiredForDownstreamAction: true;
 };
+export declare const AgenticEndpointAccessHeaderRedactionPolicySchema: z.ZodObject<{
+    redactionPolicyId: z.ZodOptional<z.ZodString>;
+    additionalSensitiveHeaderNames: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    additionalSensitiveHeaderNameSubstrings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    additionalSensitiveValueSubstrings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+}, z.core.$strict>;
+export type AgenticEndpointAccessHeaderRedactionPolicy = z.input<typeof AgenticEndpointAccessHeaderRedactionPolicySchema>;
+export type ParsedAgenticEndpointAccessHeaderRedactionPolicy = z.infer<typeof AgenticEndpointAccessHeaderRedactionPolicySchema>;
 export declare const AgenticEndpointAccessMiddlewareOptionsSchema: z.ZodObject<{
     tenantId: z.ZodString;
     organizationId: z.ZodString;
@@ -62,7 +72,15 @@ export declare const AgenticEndpointAccessMiddlewareOptionsSchema: z.ZodObject<{
     middlewareVersion: z.ZodString;
     publicVerifyBaseUrl: z.ZodOptional<z.ZodString>;
     defaultLeaseTtlSeconds: z.ZodDefault<z.ZodNumber>;
+    maxRequestBodyBytes: z.ZodDefault<z.ZodNumber>;
+    headerRedactionPolicy: z.ZodOptional<z.ZodObject<{
+        redactionPolicyId: z.ZodOptional<z.ZodString>;
+        additionalSensitiveHeaderNames: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        additionalSensitiveHeaderNameSubstrings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        additionalSensitiveValueSubstrings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
+export type AgenticEndpointAccessMiddlewareOptionsInput = z.input<typeof AgenticEndpointAccessMiddlewareOptionsSchema>;
 export type AgenticEndpointAccessMiddlewareOptions = z.infer<typeof AgenticEndpointAccessMiddlewareOptionsSchema>;
 export declare const AgenticEndpointAccessConfigSnapshotSchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<"handshake.agentic-endpoint-access.middleware-config.v0.3.0">;

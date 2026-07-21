@@ -57,7 +57,7 @@ export type PreviewDeployGatewayResult = {
     reconciliation: SurfaceOperationReconciliation;
     previewEvidence: PreviewDeployEvidence;
 } | {
-    outcome: "preview_failed";
+    outcome: "preview_failed" | "preview_outcome_unknown";
     gatewayCheck: GatewayCheckResult;
     reconciliation: SurfaceOperationReconciliation;
     previewEvidence: null;

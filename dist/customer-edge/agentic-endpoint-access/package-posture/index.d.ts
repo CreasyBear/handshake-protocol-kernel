@@ -78,6 +78,14 @@ export declare const AgenticEndpointAccessMiddlewarePackagePostureSchema: z.ZodO
         installed_package_middleware_smoke_passed: "installed_package_middleware_smoke_passed";
         package_export_ledger_promoted: "package_export_ledger_promoted";
     }>>;
+    localStorePosture: z.ZodObject<{
+        referenceStoreKind: z.ZodLiteral<"node_file_reference">;
+        deploymentPosture: z.ZodLiteral<"single_process_reference">;
+        restartDurable: z.ZodLiteral<true>;
+        productionMultiProcessEligible: z.ZodLiteral<false>;
+        productionStoreRequiredForMultiProcess: z.ZodLiteral<true>;
+        requiredProductionCapabilities: z.ZodArray<z.ZodString>;
+    }, z.core.$strict>;
     nonClaims: z.ZodArray<z.ZodString>;
 }, z.core.$strict>;
 export type AgenticEndpointAccessMiddlewarePackagePosture = z.infer<typeof AgenticEndpointAccessMiddlewarePackagePostureSchema>;
@@ -95,5 +103,13 @@ export declare const agenticEndpointAccessMiddlewarePackagePosture: {
     acceptedSourceBoundaryEvidence: ("source_boundary_accepted" | "product_proof_harness_passed" | "claim_boundary_passed" | "import_posture_passed" | "cloud_adapter_contract_passed" | "durable_local_store_restart_proof_passed" | "full_repo_gate_passed" | "real_customer_edge_integration_passed" | "framework_wrapper_parity_passed" | "pinned_cloud_shared_contract_passed" | "installed_package_boundary_smoke_passed" | "installed_package_middleware_smoke_passed" | "package_export_ledger_promoted")[];
     requiredPromotionGates: ("source_boundary_accepted" | "product_proof_harness_passed" | "claim_boundary_passed" | "import_posture_passed" | "cloud_adapter_contract_passed" | "durable_local_store_restart_proof_passed" | "full_repo_gate_passed" | "real_customer_edge_integration_passed" | "framework_wrapper_parity_passed" | "pinned_cloud_shared_contract_passed" | "installed_package_boundary_smoke_passed" | "installed_package_middleware_smoke_passed" | "package_export_ledger_promoted")[];
     missingPromotionGates: ("source_boundary_accepted" | "product_proof_harness_passed" | "claim_boundary_passed" | "import_posture_passed" | "cloud_adapter_contract_passed" | "durable_local_store_restart_proof_passed" | "full_repo_gate_passed" | "real_customer_edge_integration_passed" | "framework_wrapper_parity_passed" | "pinned_cloud_shared_contract_passed" | "installed_package_boundary_smoke_passed" | "installed_package_middleware_smoke_passed" | "package_export_ledger_promoted")[];
+    localStorePosture: {
+        referenceStoreKind: "node_file_reference";
+        deploymentPosture: "single_process_reference";
+        restartDurable: true;
+        productionMultiProcessEligible: false;
+        productionStoreRequiredForMultiProcess: true;
+        requiredProductionCapabilities: string[];
+    };
     nonClaims: string[];
 };

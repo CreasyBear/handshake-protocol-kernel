@@ -1,0 +1,32 @@
+import type { ActionContract } from "../../action-contract";
+import type { AggregateAdmissionConfigurationObserver, AggregateAuthorityObservationReader } from "../../aggregate-authority/index";
+import type { AuthorityContextCapability } from "../../../authority-context/capability";
+import { type ResolvedAuthorityContext } from "../../../authority-context/resolver";
+import type { ProtocolStore, StoredProtocolRecord } from "../../../store/port";
+import { type PolicyAdmissionLogicalOutcomeQuery, type PolicyAdmissionLogicalOutcomeRead, type PolicyAdmissionSourceCommand, type PolicyAdmissionSourceResult, type PolicyAdmissionSourceStore } from "./source/source-writer";
+import { type ConsumedPolicyGreenlightReplay, type CurrentPolicyGreenlightSource } from "./greenlight-readback";
+import { type ProtocolRecordReader, type ResourceMembershipRegistry } from "./resource-membership";
+import type { AggregateAdmissionSnapshot } from "./snapshot";
+export type { AggregateAdmissionSnapshot } from "./snapshot";
+export type { PolicyAdmissionSourceCommand } from "./source/source-writer";
+export type PolicyAdmissionCapability = Readonly<{
+    resolveAggregateForContract(context: ResolvedAuthorityContext, contractRecord: StoredProtocolRecord<ActionContract>): Promise<AggregateAdmissionSnapshot>;
+}>;
+type PolicyAdmissionCapabilityState = Readonly<{
+    sourceOwner: object;
+    protocolReader: ProtocolRecordReader;
+    authorityReader: AggregateAuthorityObservationReader;
+    authorityContextCapability: AuthorityContextCapability;
+    policyAdmissionSource: PolicyAdmissionSourceStore;
+    resourceMembershipRegistry: ResourceMembershipRegistry;
+    observeAggregateAdmissionConfiguration: AggregateAdmissionConfigurationObserver;
+}>;
+export declare function registerPolicyAdmissionRoot(root: object): void;
+export declare function createPolicyAdmissionCapability(root: object, hostIdentity: object, carrier: ProtocolStore, state: PolicyAdmissionCapabilityState): PolicyAdmissionCapability;
+export declare function resolvePolicyAdmissionAggregateSnapshot(carrier: ProtocolStore, context: ResolvedAuthorityContext, contractRecord: StoredProtocolRecord<ActionContract>): Promise<AggregateAdmissionSnapshot>;
+export declare function resolvePolicyAdmissionAggregateSnapshotForSource(carrier: ProtocolStore, sourceOwner: object, context: ResolvedAuthorityContext, contractRecord: StoredProtocolRecord<ActionContract>): Promise<AggregateAdmissionSnapshot>;
+export declare function executePolicyAdmissionSourceCommand(carrier: ProtocolStore, command: PolicyAdmissionSourceCommand): Promise<PolicyAdmissionSourceResult>;
+export declare function resolvePolicyAdmissionLogicalOutcome(carrier: ProtocolStore, query: PolicyAdmissionLogicalOutcomeQuery): Promise<PolicyAdmissionLogicalOutcomeRead>;
+export declare function resolvePolicyAdmissionGreenlightSourceState(carrier: ProtocolStore, contractRecord: StoredProtocolRecord<ActionContract>): Promise<CurrentPolicyGreenlightSource | ConsumedPolicyGreenlightReplay>;
+export declare function assertPolicyAdmissionGatewayReady(carrier: ProtocolStore): void;
+export declare function hasPolicyAdmissionSourceBinding(carrier: ProtocolStore): boolean;

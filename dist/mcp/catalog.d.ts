@@ -156,10 +156,10 @@ export declare const mcpReadOnlyTools: readonly [{
         phase: z.ZodEnum<{
             metadata: "metadata";
             freshness: "freshness";
+            evidence: "evidence";
+            readiness: "readiness";
             bypass: "bypass";
             replay: "replay";
-            readiness: "readiness";
-            evidence: "evidence";
             proposal: "proposal";
             tool_execution: "tool_execution";
         }>;
@@ -366,10 +366,10 @@ export declare const mcpProposalTools: readonly [{
         phase: z.ZodEnum<{
             metadata: "metadata";
             freshness: "freshness";
+            evidence: "evidence";
+            readiness: "readiness";
             bypass: "bypass";
             replay: "replay";
-            readiness: "readiness";
-            evidence: "evidence";
             proposal: "proposal";
             tool_execution: "tool_execution";
         }>;
@@ -579,10 +579,10 @@ export declare function mcpCatalogSnapshot(): {
             phase: z.ZodEnum<{
                 metadata: "metadata";
                 freshness: "freshness";
+                evidence: "evidence";
+                readiness: "readiness";
                 bypass: "bypass";
                 replay: "replay";
-                readiness: "readiness";
-                evidence: "evidence";
                 proposal: "proposal";
                 tool_execution: "tool_execution";
             }>;
@@ -788,10 +788,10 @@ export declare function mcpCatalogSnapshot(): {
             phase: z.ZodEnum<{
                 metadata: "metadata";
                 freshness: "freshness";
+                evidence: "evidence";
+                readiness: "readiness";
                 bypass: "bypass";
                 replay: "replay";
-                readiness: "readiness";
-                evidence: "evidence";
                 proposal: "proposal";
                 tool_execution: "tool_execution";
             }>;

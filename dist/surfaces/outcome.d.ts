@@ -25,10 +25,10 @@ export declare const SurfaceOutcomeCommonSchema: z.ZodObject<{
     phase: z.ZodEnum<{
         metadata: "metadata";
         freshness: "freshness";
+        evidence: "evidence";
+        readiness: "readiness";
         bypass: "bypass";
         replay: "replay";
-        readiness: "readiness";
-        evidence: "evidence";
         proposal: "proposal";
         tool_execution: "tool_execution";
     }>;
@@ -129,10 +129,10 @@ export declare const NonContractOutcomeSchema: z.ZodObject<{
     phase: z.ZodEnum<{
         metadata: "metadata";
         freshness: "freshness";
+        evidence: "evidence";
+        readiness: "readiness";
         bypass: "bypass";
         replay: "replay";
-        readiness: "readiness";
-        evidence: "evidence";
         proposal: "proposal";
         tool_execution: "tool_execution";
     }>;
@@ -244,10 +244,10 @@ export declare const SurfaceOutcomeSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
     phase: z.ZodEnum<{
         metadata: "metadata";
         freshness: "freshness";
+        evidence: "evidence";
+        readiness: "readiness";
         bypass: "bypass";
         replay: "replay";
-        readiness: "readiness";
-        evidence: "evidence";
         proposal: "proposal";
         tool_execution: "tool_execution";
     }>;

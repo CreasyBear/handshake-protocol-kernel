@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -14710,44 +14714,356 @@ function credentialCustodyCanSatisfyGatewayChecked(credentialCustodyStatus) {
   return ["gateway_held", "fixture_gateway_held", "gateway_resolved_from_vault", "provider_gateway_held"].includes(credentialCustodyStatus);
 }
 // src/protocol/foundation/canonical.ts
+var HEX_DIGITS = "0123456789abcdef";
+var JSON_SNAPSHOT_MAX_DEPTH = 64;
+var JSON_SNAPSHOT_MAX_NODES = 500000;
+var JSON_SNAPSHOT_MAX_STRING_CODE_UNITS = 1e6;
+var trustedArray = Array;
+var trustedArrayIsArray = Array.isArray;
+var trustedArrayPrototype = Array.prototype;
+var trustedArraySort = Array.prototype.sort;
+var trustedArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+var trustedDataView = DataView;
+var trustedDataViewGetUint8 = DataView.prototype.getUint8;
+var trustedJsonStringify = JSON.stringify;
+var trustedNumberIsFinite = Number.isFinite;
+var trustedNumberIsSafeInteger = Number.isSafeInteger;
+var trustedNumberMaxSafeInteger = Number.MAX_SAFE_INTEGER;
+var trustedObjectCreate = Object.create;
+var trustedObjectDefineProperty = Object.defineProperty;
+var trustedObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var trustedObjectGetPrototypeOf = Object.getPrototypeOf;
+var trustedObjectKeys = Object.keys;
+var trustedObjectPrototype = Object.prototype;
+var trustedReflectApply = Reflect.apply;
+var trustedReflectOwnKeys = Reflect.ownKeys;
+var trustedSet = Set;
+var trustedSetAdd = Set.prototype.add;
+var trustedSetDelete = Set.prototype.delete;
+var trustedSetHas = Set.prototype.has;
+var trustedString = String;
+var trustedStringCharCodeAt = String.prototype.charCodeAt;
+var trustedSubtle = crypto.subtle;
+var trustedSubtleDigest = trustedSubtle.digest;
+var trustedSubtleImportKey = trustedSubtle.importKey;
+var trustedSubtleSign = trustedSubtle.sign;
+var trustedTextEncoder = new TextEncoder;
+var trustedTextEncoderEncode = TextEncoder.prototype.encode;
 function canonicalize(value) {
   if (value === null)
     return "null";
   if (typeof value === "boolean")
     return value ? "true" : "false";
   if (typeof value === "string")
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value))
+    if (!trustedNumberIsFinite(value))
       throw new Error("Cannot canonicalize non-finite number");
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   }
-  if (Array.isArray(value))
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
-  const keys = Object.keys(value).sort();
-  const fields = keys.map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`);
-  return `{${fields.join(",")}}`;
+  if (trustedArrayIsArray(value)) {
+    let canonical2 = "[";
+    for (let index = 0;index < value.length; index += 1) {
+      const descriptor = trustedObjectGetOwnPropertyDescriptor(value, trustedString(index));
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw new Error("Cannot canonicalize sparse or accessor-backed array");
+      }
+      if (index > 0)
+        canonical2 += ",";
+      canonical2 += canonicalize(descriptor.value);
+    }
+    return `${canonical2}]`;
+  }
+  const keys = trustedObjectKeys(value);
+  trustedReflectApply(trustedArraySort, keys, [compareCodeUnits]);
+  let canonical = "{";
+  for (let index = 0;index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === undefined)
+      throw new Error("Cannot canonicalize an unstable object key set");
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot canonicalize accessor-backed or unstable object data");
+    }
+    if (index > 0)
+      canonical += ",";
+    canonical += `${stringifyCanonicalPrimitive(key)}:${canonicalize(descriptor.value)}`;
+  }
+  return `${canonical}}`;
 }
 async function digestCanonical(value) {
-  const bytes = new TextEncoder().encode(canonicalize(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `sha256:${toHex(digest)}`;
+  const bytes = encodeUtf8(canonicalize(value));
+  const digest = await trustedReflectApply(trustedSubtleDigest, trustedSubtle, ["SHA-256", bytes]);
+  return `sha256:${toHex(digest, 32)}`;
 }
 async function protectedActionParamsDigest(input) {
-  const material = {
-    parameters: JSON.parse(JSON.stringify(input.parameters)),
-    secretRefs: input.secretRefs ?? {}
-  };
-  if (input.gatewayCredentialRefs && input.gatewayCredentialRefs.length > 0) {
-    material.gatewayCredentialRefs = JSON.parse(JSON.stringify(input.gatewayCredentialRefs));
+  const digestInput = snapshotProtectedActionParamsDigestInput(input);
+  const snapshotState = createJsonSnapshotState();
+  const parameters = cloneJsonValue(digestInput.parameters, snapshotState);
+  const secretRefs = cloneJsonValue(digestInput.secretRefs ?? {}, snapshotState);
+  if (!isJsonRecord(parameters) || !isJsonRecord(secretRefs)) {
+    throw new Error("Protected action parameters and secret refs must be JSON objects");
   }
-  if (input.delegatedAuthorityRefs && input.delegatedAuthorityRefs.length > 0) {
-    material.delegatedAuthorityRefs = JSON.parse(JSON.stringify(input.delegatedAuthorityRefs));
+  const material = trustedObjectCreate(null);
+  assignJsonSnapshot(material, "parameters", parameters);
+  assignJsonSnapshot(material, "secretRefs", secretRefs);
+  if (digestInput.gatewayCredentialRefs !== undefined) {
+    const gatewayCredentialRefs = cloneJsonValue(digestInput.gatewayCredentialRefs, snapshotState);
+    if (!trustedArrayIsArray(gatewayCredentialRefs)) {
+      throw new Error("Protected action gateway credential refs must be a JSON array");
+    }
+    if (gatewayCredentialRefs.length > 0) {
+      assignJsonSnapshot(material, "gatewayCredentialRefs", gatewayCredentialRefs);
+    }
+  }
+  if (digestInput.delegatedAuthorityRefs !== undefined) {
+    const delegatedAuthorityRefs = cloneJsonValue(digestInput.delegatedAuthorityRefs, snapshotState);
+    if (!trustedArrayIsArray(delegatedAuthorityRefs)) {
+      throw new Error("Protected action delegated authority refs must be a JSON array");
+    }
+    if (delegatedAuthorityRefs.length > 0) {
+      assignJsonSnapshot(material, "delegatedAuthorityRefs", delegatedAuthorityRefs);
+    }
   }
   return digestCanonical(material);
 }
-function toHex(buffer) {
-  return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function toHex(buffer, expectedByteLength) {
+  if (trustedArrayBufferByteLength === undefined) {
+    throw new Error("Cannot inspect cryptographic result bytes");
+  }
+  const byteLength = trustedReflectApply(trustedArrayBufferByteLength, buffer, []);
+  if (byteLength !== expectedByteLength) {
+    throw new Error("Unexpected cryptographic result length");
+  }
+  const bytes = new trustedDataView(buffer);
+  let hex3 = "";
+  for (let index = 0;index < byteLength; index += 1) {
+    const byte = trustedReflectApply(trustedDataViewGetUint8, bytes, [index]);
+    hex3 += HEX_DIGITS[byte >>> 4 & 15];
+    hex3 += HEX_DIGITS[byte & 15];
+  }
+  return hex3;
+}
+function compareCodeUnits(left, right) {
+  if (left < right)
+    return -1;
+  if (left > right)
+    return 1;
+  return 0;
+}
+function stringifyCanonicalPrimitive(value) {
+  const canonical = trustedJsonStringify(value);
+  if (canonical === undefined)
+    throw new Error("Cannot canonicalize an unsupported primitive");
+  return canonical;
+}
+function encodeUtf8(value) {
+  return trustedReflectApply(trustedTextEncoderEncode, trustedTextEncoder, [value]);
+}
+function createJsonSnapshotState() {
+  return {
+    ancestors: new trustedSet,
+    nodes: 0,
+    stringCodeUnits: 0
+  };
+}
+function cloneJsonValue(value, state = createJsonSnapshotState()) {
+  return snapshotJsonValue(value, 0, state);
+}
+function snapshotProtectedActionParamsDigestInput(input) {
+  if (input === null || typeof input !== "object") {
+    throw new Error("Protected action digest input must be a plain object");
+  }
+  const prototype = trustedObjectGetPrototypeOf(input);
+  if (prototype !== trustedObjectPrototype && prototype !== null) {
+    throw new Error("Protected action digest input must be a plain object");
+  }
+  let parameters;
+  let hasParameters = false;
+  let secretRefs;
+  let gatewayCredentialRefs;
+  let delegatedAuthorityRefs;
+  const ownKeys = trustedReflectOwnKeys(input);
+  for (let index = 0;index < ownKeys.length; index += 1) {
+    const key = ownKeys[index];
+    if (key === undefined || typeof key === "symbol") {
+      throw new Error("Protected action digest input must use closed string fields");
+    }
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(input, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error(`Protected action digest field ${key} must be an own data descriptor`);
+    }
+    switch (key) {
+      case "parameters":
+        parameters = descriptor.value;
+        hasParameters = true;
+        break;
+      case "secretRefs":
+        secretRefs = descriptor.value;
+        break;
+      case "gatewayCredentialRefs":
+        gatewayCredentialRefs = descriptor.value;
+        break;
+      case "delegatedAuthorityRefs":
+        delegatedAuthorityRefs = descriptor.value;
+        break;
+      default:
+        throw new Error(`Protected action digest field ${key} is not registered`);
+    }
+  }
+  if (!hasParameters) {
+    throw new Error("Protected action digest input must have own parameters");
+  }
+  return {
+    parameters,
+    secretRefs,
+    gatewayCredentialRefs,
+    delegatedAuthorityRefs
+  };
+}
+function snapshotJsonValue(value, depth, state) {
+  state.nodes += 1;
+  if (state.nodes > JSON_SNAPSHOT_MAX_NODES || depth > JSON_SNAPSHOT_MAX_DEPTH) {
+    throw new Error("Cannot clone JSON beyond the structural budget");
+  }
+  if (value === null || typeof value === "boolean")
+    return value;
+  if (typeof value === "string") {
+    state.stringCodeUnits += value.length;
+    if (state.stringCodeUnits > JSON_SNAPSHOT_MAX_STRING_CODE_UNITS) {
+      throw new Error("Cannot clone JSON beyond the string budget");
+    }
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!trustedNumberIsFinite(value))
+      throw new Error("Cannot clone a non-finite JSON number");
+    return value;
+  }
+  if (typeof value !== "object")
+    throw new Error("Cannot clone a non-JSON value");
+  if (trustedReflectApply(trustedSetHas, state.ancestors, [value])) {
+    throw new Error("Cannot clone cyclic JSON");
+  }
+  let isArray;
+  let prototype;
+  let ownKeys;
+  try {
+    isArray = trustedArrayIsArray(value);
+    prototype = trustedObjectGetPrototypeOf(value);
+    ownKeys = trustedReflectOwnKeys(value);
+  } catch {
+    throw new Error("Cannot inspect JSON input");
+  }
+  if (prototype !== (isArray ? trustedArrayPrototype : trustedObjectPrototype) && !(prototype === null && !isArray)) {
+    throw new Error("Cannot clone JSON with a non-plain prototype");
+  }
+  state.nodes += ownKeys.length;
+  if (state.nodes > JSON_SNAPSHOT_MAX_NODES)
+    throw new Error("Cannot clone JSON beyond the structural budget");
+  trustedReflectApply(trustedSetAdd, state.ancestors, [value]);
+  try {
+    return isArray ? snapshotJsonArray(value, ownKeys, depth, state) : snapshotJsonObject(value, ownKeys, depth, state);
+  } finally {
+    trustedReflectApply(trustedSetDelete, state.ancestors, [value]);
+  }
+}
+function snapshotJsonArray(value, ownKeys, depth, state) {
+  const lengthDescriptor = trustedObjectGetOwnPropertyDescriptor(value, "length");
+  if (lengthDescriptor === undefined || lengthDescriptor.enumerable || !("value" in lengthDescriptor) || !trustedNumberIsSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+    throw new Error("Cannot clone an unstable JSON array length");
+  }
+  const length = lengthDescriptor.value;
+  if (length > JSON_SNAPSHOT_MAX_NODES) {
+    throw new Error("Cannot clone JSON arrays beyond the structural budget");
+  }
+  const elementDescriptors = trustedObjectCreate(null);
+  for (let keyIndex = 0;keyIndex < ownKeys.length; keyIndex += 1) {
+    const key = ownKeys[keyIndex];
+    if (key === undefined)
+      throw new Error("Cannot clone an unstable JSON array");
+    if (typeof key === "symbol")
+      throw new Error("Cannot clone JSON with symbol keys");
+    state.stringCodeUnits += key.length;
+    if (state.stringCodeUnits > JSON_SNAPSHOT_MAX_STRING_CODE_UNITS) {
+      throw new Error("Cannot clone JSON beyond the string budget");
+    }
+    if (key === "length")
+      continue;
+    const arrayIndex = canonicalArrayIndex(key, length);
+    if (arrayIndex === null)
+      throw new Error("Cannot clone JSON arrays with named properties");
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot clone sparse or accessor-backed JSON arrays");
+    }
+    trustedObjectDefineProperty(elementDescriptors, trustedString(arrayIndex), {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: descriptor
+    });
+  }
+  const snapshot = new trustedArray(length);
+  for (let index = 0;index < length; index += 1) {
+    const capturedDescriptor = trustedObjectGetOwnPropertyDescriptor(elementDescriptors, trustedString(index));
+    if (capturedDescriptor === undefined || !("value" in capturedDescriptor)) {
+      throw new Error("Cannot clone sparse JSON arrays");
+    }
+    const descriptor = capturedDescriptor.value;
+    assignJsonSnapshot(snapshot, index, snapshotJsonValue(descriptor.value, depth + 1, state));
+  }
+  return snapshot;
+}
+function snapshotJsonObject(value, ownKeys, depth, state) {
+  const snapshot = trustedObjectCreate(null);
+  for (let index = 0;index < ownKeys.length; index += 1) {
+    const key = ownKeys[index];
+    if (key === undefined)
+      throw new Error("Cannot clone an unstable JSON object");
+    if (typeof key === "symbol")
+      throw new Error("Cannot clone JSON with symbol keys");
+    state.stringCodeUnits += key.length;
+    if (state.stringCodeUnits > JSON_SNAPSHOT_MAX_STRING_CODE_UNITS) {
+      throw new Error("Cannot clone JSON beyond the string budget");
+    }
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot clone accessor-backed or hidden JSON data");
+    }
+    assignJsonSnapshot(snapshot, key, snapshotJsonValue(descriptor.value, depth + 1, state));
+  }
+  return snapshot;
+}
+function canonicalArrayIndex(key, length) {
+  if (key.length === 0)
+    return null;
+  if (key === "0")
+    return length > 0 ? 0 : null;
+  if (key[0] === "0")
+    return null;
+  let value = 0;
+  for (let offset = 0;offset < key.length; offset += 1) {
+    const codeUnit = trustedReflectApply(trustedStringCharCodeAt, key, [offset]);
+    if (codeUnit < 48 || codeUnit > 57)
+      return null;
+    const digit = codeUnit - 48;
+    if (value > (trustedNumberMaxSafeInteger - digit) / 10)
+      return null;
+    value = value * 10 + digit;
+  }
+  return trustedNumberIsSafeInteger(value) && value < length ? value : null;
+}
+function assignJsonSnapshot(target, key, value) {
+  trustedObjectDefineProperty(target, trustedString(key), {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true
+  });
+}
+function isJsonRecord(value) {
+  return value !== null && typeof value === "object" && !trustedArrayIsArray(value);
 }
 
 // src/protocol/foundation/ids.ts
@@ -15699,6 +16015,2257 @@ var CreateBreakerDecisionInputSchema = exports_external.strictObject({
   proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
   decisionExpiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null)
 });
+// src/protocol/areas/policy-greenlight/admission/source/source-grammar.ts
+var POLICY_TRANSACTION_ID = /^policy_tx_([a-f0-9]{64})$/;
+var POLICY_OUTCOME_ID = /^policy_outcome_codec3_([a-f0-9]{64})_v1$/;
+var POLICY_OUTCOME_STATE = /^policy_(greenlight|refuse|review_required|halt|quarantine|proof_gap)$/;
+function validatePolicyAdmissionCodec3Grammar(mutation) {
+  const transactionMatch = POLICY_TRANSACTION_ID.exec(mutation.identity.localId);
+  if (mutation.writerGrammar !== "policy-admission-codec-3" || mutation.identity.mutationKind !== "policy_admission" || transactionMatch === null) {
+    throw new Error("Policy-admission codec-3 identity is invalid.");
+  }
+  const outcomes = mutation.records.filter(isOutcomeRecord);
+  if (outcomes.length !== 1) {
+    throw new Error("Policy-admission codec-3 requires one exact outcome record.");
+  }
+  const outcome = outcomes[0];
+  if (outcome === undefined) {
+    throw new Error("Policy-admission codec-3 requires one exact outcome record.");
+  }
+  const outcomeMatch = POLICY_OUTCOME_ID.exec(outcome.record.localId);
+  if (outcomeMatch === null || outcomeMatch[1] !== transactionMatch[1]) {
+    throw new Error("Policy-admission codec-3 outcome identity is invalid.");
+  }
+  const payload = parseOutcomePayload(outcome.payload);
+  if (payload.transactionDigest !== `sha256:${transactionMatch[1]}` || payload.transactionBinding.outcome !== payload.outcome || payload.transactionBinding.aggregatePosture !== payload.aggregatePosture || payload.transactionBinding.logicalAttemptDigest !== payload.attemptDigest || payload.transactionBinding.actionContractId !== payload.actionContractId || payload.transactionBinding.actionContractDigest !== payload.actionContractDigest || payload.transactionBinding.policyInputDigest !== payload.policyInputDigest || payload.transactionBinding.aggregateSnapshotDigest !== payload.aggregateSnapshotDigest || payload.transactionBinding.isolationSnapshotDigest !== payload.isolationSnapshotDigest) {
+    throw new Error("Policy-admission codec-3 outcome binding is invalid.");
+  }
+  const greenlight = outcome.semanticState === "policy_greenlight";
+  const expectedRecordRoles = greenlight ? payload.aggregatePosture === "required" ? [
+    "outcome",
+    "greenlight_issuance",
+    "policy_idempotency",
+    "aggregate_reservation",
+    "aggregate_bucket",
+    "aggregate_checkpoint"
+  ] : ["outcome", "greenlight_issuance", "policy_idempotency"] : ["outcome"];
+  const recordsByRole = new Map;
+  for (const record2 of mutation.records) {
+    const role = policyRecordRole(record2);
+    if (role === null || recordsByRole.has(role)) {
+      throw new Error("Policy-admission codec-3 record set is not exact.");
+    }
+    recordsByRole.set(role, record2);
+  }
+  if (recordsByRole.size !== expectedRecordRoles.length || expectedRecordRoles.some((role) => !recordsByRole.has(role))) {
+    throw new Error("Policy-admission codec-3 record set is not exact.");
+  }
+  validatePolicyRecordPayloads(recordsByRole, payload);
+  validateRequiredAggregateRecords(recordsByRole, payload, transactionMatch[1]);
+  const expectedPointerCount = expectedRecordRoles.length - (recordsByRole.has("aggregate_reservation") ? 1 : 0);
+  validateExactPointerSet(mutation.pointerMutations, recordsByRole, expectedPointerCount);
+  if (canonicalGuardSet(mutation.pointerGuards) !== canonicalGuardSet(payload.transactionBinding.pointerGuards)) {
+    throw new Error("Policy-admission codec-3 guard set is invalid.");
+  }
+  if (mutation.pointerGuards.some((guard) => guard.pointer.pointerKind === "effect_lineage" || guard.pointer.pointerKind === "effect_observation")) {
+    throw new Error("Policy-admission codec-3 contains a foreign authority guard.");
+  }
+  const expectedTemporalFence = payload.transactionBinding.temporalFence;
+  const actualTemporalFence = mutation.temporalFence ?? null;
+  if (greenlight !== (actualTemporalFence?.kind === "store_time_in_half_open_interval") || canonicalize(actualTemporalFence) !== canonicalize(expectedTemporalFence)) {
+    throw new Error("Policy-admission codec-3 temporal shape is invalid.");
+  }
+  const disposition = payload.transactionBinding.projectionDisposition;
+  if (mutation.projectionIntents.length !== disposition.projectionIntentCount) {
+    throw new Error("Policy-admission codec-3 projection set is invalid.");
+  }
+  if (disposition.projectionIntentCount === 1) {
+    validateExactProjection(mutation, outcome, disposition);
+  }
+}
+function validateRequiredAggregateRecords(records, outcome, transactionHex) {
+  const reservation = records.get("aggregate_reservation");
+  const bucket = records.get("aggregate_bucket");
+  const checkpoint = records.get("aggregate_checkpoint");
+  if (reservation === undefined && bucket === undefined && checkpoint === undefined)
+    return;
+  if (outcome.aggregatePosture !== "required") {
+    if (reservation !== undefined || bucket !== undefined || checkpoint !== undefined) {
+      throw new Error("Policy-admission codec-3 aggregate record set is invalid.");
+    }
+    return;
+  }
+  if (reservation === undefined || bucket === undefined || checkpoint === undefined) {
+    throw new Error("Policy-admission codec-3 aggregate record set is incomplete.");
+  }
+  const reservationPayload = parseAggregateReservationPayload(reservation.payload);
+  const transactionRef = `policy_admission:${transactionHex}`;
+  const greenlightRef = `greenlight:${outcome.greenlightId ?? ""}`;
+  if (reservation.version !== 1 || reservation.predecessor !== null || reservation.record.localId !== `${reservationPayload.lineage.reservationRef}_v1` || reservationPayload.state !== "authority_reserved" || reservationPayload.lineage.origin.actionContractDigest !== outcome.actionContractDigest || reservationPayload.lineage.origin.originMutationRef !== transactionRef || reservationPayload.lineage.origin.owningGreenlightRef !== greenlightRef || reservationPayload.transitionMutationRef !== transactionRef) {
+    throw new Error("Policy-admission codec-3 aggregate reservation binding is invalid.");
+  }
+  const bucketPayload = parseAggregateBucketPayload(bucket.payload);
+  const bucketIdentity = /^agg1_bucket_([a-f0-9]{64})_v([1-9][0-9]*)$/.exec(bucket.record.localId);
+  const domainHex = bucketIdentity?.[1] ?? "";
+  const bucketVersion = Number(bucketIdentity?.[2] ?? "0");
+  if (bucketVersion < 2 || bucket.version !== bucketVersion || !isWitness(bucket.predecessor) || bucket.predecessor.version !== bucketVersion - 1 || bucket.predecessor.record.recordKind !== "authority_state" || bucket.predecessor.record.localId !== `agg1_bucket_${domainHex}_v${bucketVersion - 1}` || bucket.predecessor.semanticState !== "aggregate_exposure_bucket" || bucket.record.localId !== `agg1_bucket_${domainHex}_v${bucketVersion}` || bucketPayload.locatorDigest !== reservationPayload.lineage.origin.locatorDigest || bucketPayload.bindingDigest !== reservationPayload.lineage.origin.bindingDigest || bucketPayload.bucketState.locatorDigest !== bucketPayload.locatorDigest || bucketPayload.bucketState.bindingDigest !== bucketPayload.bindingDigest) {
+    throw new Error("Policy-admission codec-3 aggregate bucket binding is invalid.");
+  }
+  const newlyReservedMatches = bucketPayload.bucketState.reservations.filter((candidate) => candidate.lineage.reservationRef === reservationPayload.lineage.reservationRef && canonicalize(candidate.lineage) === canonicalize(reservationPayload.lineage));
+  const newlyReserved = newlyReservedMatches[0];
+  if (newlyReservedMatches.length !== 1 || newlyReserved === undefined || newlyReserved.state !== reservationPayload.state || !witnessEqualsRecord(newlyReserved.sourceWitness, reservation)) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  const checkpointPayload = parseAggregateCheckpointPayload(checkpoint.payload);
+  const checkpointIdentity = /^agg1_checkpoint_([a-f0-9]{64})_v([1-9][0-9]*)$/.exec(checkpoint.record.localId);
+  const checkpointVersion = Number(checkpointIdentity?.[2] ?? "0");
+  if (checkpointIdentity?.[1] !== domainHex || checkpointVersion < 2 || checkpoint.version !== checkpointVersion || !isWitness(checkpoint.predecessor) || checkpoint.predecessor.version !== checkpointVersion - 1 || checkpoint.predecessor.record.recordKind !== "authority_evidence" || checkpoint.predecessor.record.localId !== `agg1_checkpoint_${domainHex}_v${checkpointVersion - 1}` || checkpoint.predecessor.semanticState !== "aggregate_induction_checkpoint" || checkpoint.record.localId !== `agg1_checkpoint_${domainHex}_v${checkpointVersion}` || checkpointPayload.domainDigest !== `sha256:${domainHex}` || checkpointPayload.locatorDigest !== bucketPayload.locatorDigest || !witnessEqualsRecord(checkpointPayload.headBucketWitness, bucket)) {
+    throw new Error("Policy-admission codec-3 aggregate checkpoint binding is invalid.");
+  }
+}
+function parseAggregateReservationPayload(value) {
+  if (!hasExactKeys(value, ["aggregateReservationStateSourceVersion", "stateCandidate"])) {
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  }
+  const payload = value;
+  if (payload.aggregateReservationStateSourceVersion !== "aggregate-reservation-state-source-1" || !hasExactKeys(payload.stateCandidate, [
+    "authority",
+    "candidateDigest",
+    "lineage",
+    "predecessor",
+    "state",
+    "transitionMutationRef"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  const candidate = payload.stateCandidate;
+  const lineage = parseAggregateLineage(candidate.lineage);
+  if (candidate.authority !== "none" || !isDigest(candidate.candidateDigest) || candidate.predecessor !== null || candidate.state !== "authority_reserved" || !isNonemptyString(candidate.transitionMutationRef))
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  return {
+    lineage,
+    state: candidate.state,
+    transitionMutationRef: candidate.transitionMutationRef
+  };
+}
+function parseAggregateLineage(value) {
+  if (!hasExactKeys(value, ["authority", "lineageDigest", "origin", "reservationRef"])) {
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  }
+  const lineage = value;
+  if (lineage.authority !== "none" || !isDigest(lineage.lineageDigest) || !isNonemptyString(lineage.reservationRef) || !hasExactKeys(lineage.origin, [
+    "actionContractDigest",
+    "bindingDigest",
+    "locatorDigest",
+    "originMutationRef",
+    "owningGreenlightRef",
+    "quantity"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  const origin = lineage.origin;
+  if (!isDigest(origin.actionContractDigest) || !isDigest(origin.bindingDigest) || !isDigest(origin.locatorDigest) || !isNonemptyString(origin.originMutationRef) || !isNonemptyString(origin.owningGreenlightRef) || origin.quantity !== "1")
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  return { origin, lineageDigest: lineage.lineageDigest, reservationRef: lineage.reservationRef };
+}
+function parseAggregateBucketPayload(value) {
+  if (!hasExactKeys(value, [
+    "aggregateExposureBucketSourceVersion",
+    "bindingDigest",
+    "bindingRecordWitness",
+    "bucketState",
+    "locatorDigest"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate bucket payload is invalid.");
+  const payload = value;
+  if (payload.aggregateExposureBucketSourceVersion !== "aggregate-exposure-bucket-source-1" || !isDigest(payload.bindingDigest) || !isDigest(payload.locatorDigest) || !isWitness(payload.bindingRecordWitness) || !hasExactKeys(payload.bucketState, [
+    "authority",
+    "bindingDigest",
+    "conservation",
+    "limitQuantity",
+    "locatorDigest",
+    "predecessorEncumbrances",
+    "reservations",
+    "stateDigest",
+    "window"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate bucket payload is invalid.");
+  const state = payload.bucketState;
+  if (state.authority !== "none" || !isDigest(state.bindingDigest) || !isDigest(state.locatorDigest) || !isQuantity(state.limitQuantity) || !isDigest(state.stateDigest) || !Array.isArray(state.reservations) || !Array.isArray(state.predecessorEncumbrances) || !hasExactKeys(state.window, ["endsAt", "startsAt"]))
+    throw new Error("Policy-admission codec-3 aggregate bucket state is invalid.");
+  const window = state.window;
+  if (!isNonemptyString(window.startsAt) || !isNonemptyString(window.endsAt)) {
+    throw new Error("Policy-admission codec-3 aggregate bucket state is invalid.");
+  }
+  const reservations = state.reservations.map(parseReservationSnapshot);
+  if (!parseConservation(state.conservation)) {
+    throw new Error("Policy-admission codec-3 aggregate conservation is invalid.");
+  }
+  if (state.predecessorEncumbrances.length !== 0) {
+    throw new Error("Policy-admission codec-3 aggregate predecessor encumbrances are invalid.");
+  }
+  return {
+    locatorDigest: payload.locatorDigest,
+    bindingDigest: payload.bindingDigest,
+    bucketState: {
+      locatorDigest: state.locatorDigest,
+      bindingDigest: state.bindingDigest,
+      reservations
+    }
+  };
+}
+function parseReservationSnapshot(value) {
+  if (!hasExactKeys(value, ["lineage", "sourceWitness", "state"])) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  const snapshot = value;
+  if (!isReservationState(snapshot.state) || !isWitness(snapshot.sourceWitness)) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  return {
+    lineage: parseAggregateLineage(snapshot.lineage),
+    sourceWitness: snapshot.sourceWitness,
+    state: snapshot.state
+  };
+}
+function parseConservation(value) {
+  if (!hasExactKeys(value, [
+    "authority",
+    "availability",
+    "availableQuantity",
+    "bindingDigest",
+    "encumberedQuantity",
+    "limitQuantity",
+    "lineageSetDigest",
+    "locatorDigest",
+    "overLimitQuantity",
+    "predecessorEncumbranceLineageDigests",
+    "releasedQuantity",
+    "reservationLineageDigests",
+    "snapshotDigest",
+    "stateQuantities"
+  ]))
+    return false;
+  const conservation = value;
+  if (conservation.authority !== "none" || conservation.availability !== "available" && conservation.availability !== "none" && conservation.availability !== "blocked_over_limit" || !isDigest(conservation.bindingDigest) || !isDigest(conservation.locatorDigest) || !isDigest(conservation.lineageSetDigest) || !isDigest(conservation.snapshotDigest) || !isQuantity(conservation.availableQuantity) || !isQuantity(conservation.encumberedQuantity) || !isQuantity(conservation.limitQuantity) || !isQuantity(conservation.overLimitQuantity) || !isQuantity(conservation.releasedQuantity) || !Array.isArray(conservation.reservationLineageDigests) || !conservation.reservationLineageDigests.every(isDigest) || !Array.isArray(conservation.predecessorEncumbranceLineageDigests) || !conservation.predecessorEncumbranceLineageDigests.every(isDigest) || !hasExactKeys(conservation.stateQuantities, [
+    "authority_reserved",
+    "blocked_unknown",
+    "effect_in_flight",
+    "released_confirmed_not_committed",
+    "terminal_committed"
+  ]))
+    return false;
+  return Object.values(conservation.stateQuantities).every(isQuantity);
+}
+function parseAggregateCheckpointPayload(value) {
+  if (!hasExactKeys(value, [
+    "aggregateInductionCheckpointSourceVersion",
+    "domainDigest",
+    "familyDigest",
+    "headBucketWitness",
+    "locatorDigest",
+    "rootKind",
+    "writerProfile"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate checkpoint payload is invalid.");
+  const payload = value;
+  if (payload.aggregateInductionCheckpointSourceVersion !== "aggregate-induction-checkpoint-source-1" || payload.writerProfile !== "aggregate-bucket-writer-profile-1" || payload.rootKind !== "closed_writer_successor" || !isDigest(payload.locatorDigest) || !isDigest(payload.familyDigest) || !isDigest(payload.domainDigest) || !isWitness(payload.headBucketWitness))
+    throw new Error("Policy-admission codec-3 aggregate checkpoint payload is invalid.");
+  return payload;
+}
+function isWitness(value) {
+  if (!hasExactKeys(value, ["digest", "record", "semanticState", "version"]))
+    return false;
+  const witness = value;
+  return isDigest(witness.digest) && isNonemptyString(witness.semanticState) && typeof witness.version === "number" && Number.isSafeInteger(witness.version) && witness.version > 0 && hasExactKeys(witness.record, ["localId", "recordKind"]) && isNonemptyString(witness.record.localId) && isNonemptyString(witness.record.recordKind);
+}
+function witnessEqualsRecord(witness, record2) {
+  return witness.record.recordKind === record2.record.recordKind && witness.record.localId === record2.record.localId && witness.semanticState === record2.semanticState && witness.version === record2.version && witness.digest === record2.digest;
+}
+function isReservationState(value) {
+  return value === "authority_reserved" || value === "effect_in_flight" || value === "blocked_unknown" || value === "released_confirmed_not_committed" || value === "terminal_committed";
+}
+function isQuantity(value) {
+  return typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value);
+}
+function isOutcomeRecord(record2) {
+  return record2.record.recordKind === "authority_evidence" && POLICY_OUTCOME_ID.test(record2.record.localId) && POLICY_OUTCOME_STATE.test(record2.semanticState) && record2.version === 1 && record2.predecessor === null;
+}
+function policyRecordRole(record2) {
+  if (isOutcomeRecord(record2))
+    return "outcome";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("greenlight_issuance_") && record2.semanticState === "greenlight_issued")
+    return "greenlight_issuance";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("policy_idempotency_") && record2.semanticState === "policy_idempotency_reserved")
+    return "policy_idempotency";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("agg1_reservation_") && record2.semanticState === "authority_reserved")
+    return "aggregate_reservation";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("agg1_bucket_") && record2.semanticState === "aggregate_exposure_bucket")
+    return "aggregate_bucket";
+  if (record2.record.recordKind === "authority_evidence" && record2.record.localId.startsWith("agg1_checkpoint_") && record2.semanticState === "aggregate_induction_checkpoint")
+    return "aggregate_checkpoint";
+  return null;
+}
+function validatePolicyRecordPayloads(records, outcome) {
+  const issuance = records.get("greenlight_issuance");
+  const idempotency = records.get("policy_idempotency");
+  if (issuance === undefined && idempotency === undefined)
+    return;
+  if (issuance === undefined || idempotency === undefined) {
+    throw new Error("Policy-admission codec-3 positive record set is incomplete.");
+  }
+  const issuancePayload = parseGreenlightIssuancePayload(issuance.payload);
+  const idempotencyPayload = parsePolicyIdempotencyPayload(idempotency.payload);
+  if (issuancePayload.attemptDigest !== outcome.attemptDigest || issuancePayload.transactionDigest !== outcome.transactionDigest || issuancePayload.actionContractId !== outcome.actionContractId || issuancePayload.actionContractDigest !== outcome.actionContractDigest || issuancePayload.policyDecisionId !== outcome.policyDecisionId || issuancePayload.policyInputDigest !== outcome.policyInputDigest || issuancePayload.greenlightId !== outcome.greenlightId || idempotencyPayload.attemptDigest !== outcome.attemptDigest || idempotencyPayload.transactionDigest !== outcome.transactionDigest || idempotencyPayload.actionContractId !== outcome.actionContractId || idempotencyPayload.actionContractDigest !== outcome.actionContractDigest || idempotencyPayload.policyDecisionId !== outcome.policyDecisionId || idempotencyPayload.greenlightId !== outcome.greenlightId) {
+    throw new Error("Policy-admission codec-3 positive record binding is invalid.");
+  }
+}
+function validateExactPointerSet(pointers, records, expectedCount) {
+  if (pointers.length !== expectedCount) {
+    throw new Error("Policy-admission codec-3 pointer set is not exact.");
+  }
+  const targetedRoles = new Set;
+  const pointerIdentities = new Set;
+  for (const pointer of pointers) {
+    const identity = `${pointer.pointer.pointerKind}:${pointer.pointer.localId}`;
+    if (pointerIdentities.has(identity) || pointer.successor === null) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+    pointerIdentities.add(identity);
+    let matchedRole = null;
+    for (const [role, record2] of records) {
+      if (record2.record.recordKind === pointer.successor.record.recordKind && record2.record.localId === pointer.successor.record.localId && record2.semanticState === pointer.successor.semanticState && record2.version === pointer.successor.version && record2.digest === pointer.successor.digest) {
+        matchedRole = role;
+        break;
+      }
+    }
+    if (matchedRole === null || matchedRole === "aggregate_reservation" || targetedRoles.has(matchedRole)) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+    if ((matchedRole === "outcome" || matchedRole === "greenlight_issuance" || matchedRole === "policy_idempotency") && (pointer.pointer.pointerKind !== "idempotency_claim" || pointer.expected.kind !== "absent")) {
+      throw new Error("Policy-admission codec-3 policy pointer is invalid.");
+    }
+    targetedRoles.add(matchedRole);
+  }
+  for (const role of records.keys()) {
+    if (role !== "aggregate_reservation" && !targetedRoles.has(role)) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+  }
+}
+function validateExactProjection(mutation, outcome, disposition) {
+  const intent = mutation.projectionIntents[0];
+  if (intent === null || typeof intent !== "object") {
+    throw new Error("Policy-admission codec-3 projection set is invalid.");
+  }
+  const projection = intent;
+  if (projection.projection?.projectionKind !== "protocol_record" || projection.source?.record?.recordKind !== outcome.record.recordKind || projection.source.record.localId !== outcome.record.localId || projection.source.digest !== outcome.digest) {
+    throw new Error("Policy-admission codec-3 projection source is invalid.");
+  }
+  if (disposition.kind !== "exact_refusal_protocol_record_v2") {
+    throw new Error("Policy-admission codec-3 projection disposition is invalid.");
+  }
+  const descriptor = projection.descriptor;
+  if (descriptor === null || typeof descriptor !== "object" || descriptor.descriptorVersion !== disposition.intentDescriptorBinding.descriptorVersion || canonicalize(descriptor.sourceCommit?.identity) !== canonicalize(mutation.identity) || descriptor.sourceCommit?.requestDigest !== mutation.requestDigest || canonicalize(descriptor.source) !== canonicalize(projection.source) || canonicalize(descriptor.route) !== canonicalize(disposition.intentDescriptorBinding.route) || canonicalize(descriptor.destination) !== canonicalize(disposition.intentDescriptorBinding.destination) || descriptor.recordEnvelopeDigest !== disposition.intentDescriptorBinding.recordEnvelopeDigest) {
+    throw new Error("Policy-admission codec-3 projection binding is invalid.");
+  }
+}
+function parseOutcomePayload(value) {
+  const keys = [
+    "policyAdmissionOutcomeSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "transactionBinding",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "policyInputDigest",
+    "aggregateSnapshotDigest",
+    "isolationSnapshotDigest",
+    "aggregatePosture",
+    "outcome",
+    "greenlightId",
+    "refusalId",
+    "proofGapId",
+    "embeddedProtocolRecords"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 outcome payload is invalid.");
+  }
+  const payload = value;
+  if (payload.policyAdmissionOutcomeSourceVersion !== "policy-admission-outcome-source-3" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isDigest(payload.policyInputDigest) || !isDigest(payload.aggregateSnapshotDigest) || !isDigest(payload.isolationSnapshotDigest) || !isAggregatePosture(payload.aggregatePosture) || !isPolicyOutcome(payload.outcome) || !(payload.greenlightId === null || isNonemptyString(payload.greenlightId)) || !(payload.refusalId === null || isNonemptyString(payload.refusalId)) || !(payload.proofGapId === null || isNonemptyString(payload.proofGapId)) || !Array.isArray(payload.embeddedProtocolRecords)) {
+    throw new Error("Policy-admission codec-3 outcome payload is invalid.");
+  }
+  const bindingKeys = [
+    "policyAdmissionTransactionBindingVersion",
+    "logicalAttempt",
+    "logicalAttemptDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyInput",
+    "policyInputDigest",
+    "aggregateSnapshot",
+    "aggregateSnapshotDigest",
+    "isolationSnapshotDigest",
+    "aggregatePosture",
+    "pointerGuardSetDigest",
+    "pointerGuards",
+    "temporalFence",
+    "outcome",
+    "decision",
+    "greenlight",
+    "refusal",
+    "proofGap",
+    "embeddedRecordWitnesses",
+    "projectionDisposition"
+  ];
+  if (!hasExactKeys(payload.transactionBinding, bindingKeys)) {
+    throw new Error("Policy-admission codec-3 transaction binding is invalid.");
+  }
+  const binding = payload.transactionBinding;
+  if (binding.policyAdmissionTransactionBindingVersion !== "policy-admission-transaction-binding-3" || !isDigest(binding.logicalAttemptDigest) || !isNonemptyString(binding.actionContractId) || !isDigest(binding.actionContractDigest) || !isDigest(binding.policyInputDigest) || !isDigest(binding.aggregateSnapshotDigest) || !isDigest(binding.isolationSnapshotDigest) || !isAggregatePosture(binding.aggregatePosture) || !isPolicyOutcome(binding.outcome) || !isDigest(binding.pointerGuardSetDigest) || !Array.isArray(binding.pointerGuards) || !Array.isArray(binding.embeddedRecordWitnesses)) {
+    throw new Error("Policy-admission codec-3 transaction binding is invalid.");
+  }
+  const projectionDisposition = parseProjectionDisposition(binding.projectionDisposition);
+  return {
+    attemptDigest: payload.attemptDigest,
+    transactionDigest: payload.transactionDigest,
+    actionContractId: payload.actionContractId,
+    actionContractDigest: payload.actionContractDigest,
+    policyDecisionId: payload.policyDecisionId,
+    policyInputDigest: payload.policyInputDigest,
+    aggregateSnapshotDigest: payload.aggregateSnapshotDigest,
+    isolationSnapshotDigest: payload.isolationSnapshotDigest,
+    aggregatePosture: payload.aggregatePosture,
+    outcome: payload.outcome,
+    greenlightId: payload.greenlightId,
+    transactionBinding: {
+      logicalAttemptDigest: binding.logicalAttemptDigest,
+      actionContractId: binding.actionContractId,
+      actionContractDigest: binding.actionContractDigest,
+      policyInputDigest: binding.policyInputDigest,
+      aggregateSnapshotDigest: binding.aggregateSnapshotDigest,
+      isolationSnapshotDigest: binding.isolationSnapshotDigest,
+      aggregatePosture: binding.aggregatePosture,
+      outcome: binding.outcome,
+      pointerGuards: binding.pointerGuards,
+      temporalFence: binding.temporalFence,
+      projectionDisposition
+    }
+  };
+}
+function parseGreenlightIssuancePayload(value) {
+  const keys = [
+    "greenlightIssuanceSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "policyInputDigest",
+    "greenlightId",
+    "maxUses",
+    "expiresAt"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 greenlight issuance payload is invalid.");
+  }
+  const payload = value;
+  if (payload.greenlightIssuanceSourceVersion !== "greenlight-issuance-source-1" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isDigest(payload.policyInputDigest) || !isNonemptyString(payload.greenlightId) || payload.maxUses !== 1 || !isNonemptyString(payload.expiresAt)) {
+    throw new Error("Policy-admission codec-3 greenlight issuance payload is invalid.");
+  }
+  return payload;
+}
+function parsePolicyIdempotencyPayload(value) {
+  const keys = [
+    "policyIdempotencyClaimSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "ledgerKeyDigest",
+    "idempotencyKey",
+    "paramsDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "greenlightId",
+    "state"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 idempotency payload is invalid.");
+  }
+  const payload = value;
+  if (payload.policyIdempotencyClaimSourceVersion !== "policy-idempotency-claim-source-1" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isDigest(payload.ledgerKeyDigest) || !isNonemptyString(payload.idempotencyKey) || !isDigest(payload.paramsDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isNonemptyString(payload.greenlightId) || payload.state !== "authority_reserved") {
+    throw new Error("Policy-admission codec-3 idempotency payload is invalid.");
+  }
+  return payload;
+}
+function parseProjectionDisposition(value) {
+  if (hasExactKeys(value, [
+    "policyAdmissionProjectionDispositionVersion",
+    "kind",
+    "reason",
+    "projectionIntentCount",
+    "materializationPosture"
+  ])) {
+    const disposition = value;
+    if (disposition.policyAdmissionProjectionDispositionVersion === "policy-admission-projection-disposition-1" && disposition.kind === "none" && disposition.projectionIntentCount === 0 && disposition.materializationPosture === "not_requested" && (disposition.reason === "greenlight" || disposition.reason === "proof_gap" || disposition.reason === "review_required")) {
+      return { kind: "none", projectionIntentCount: 0 };
+    }
+  }
+  if (hasExactKeys(value, [
+    "policyAdmissionProjectionDispositionVersion",
+    "kind",
+    "projectionIntentCount",
+    "materializationPosture",
+    "intentDescriptorBinding"
+  ])) {
+    const disposition = value;
+    const binding = disposition.intentDescriptorBinding;
+    if (disposition.policyAdmissionProjectionDispositionVersion === "policy-admission-projection-disposition-1" && disposition.kind === "exact_refusal_protocol_record_v2" && disposition.projectionIntentCount === 1 && disposition.materializationPosture === "intent_only_uncomposed" && hasExactKeys(binding, ["descriptorVersion", "route", "destination", "recordEnvelopeDigest"])) {
+      const exact = binding;
+      if (exact.descriptorVersion === "authority-projection-outbox-protocol-record-descriptor-2" && isDigest(exact.recordEnvelopeDigest)) {
+        return {
+          kind: "exact_refusal_protocol_record_v2",
+          projectionIntentCount: 1,
+          intentDescriptorBinding: {
+            descriptorVersion: exact.descriptorVersion,
+            route: exact.route,
+            destination: exact.destination,
+            recordEnvelopeDigest: exact.recordEnvelopeDigest
+          }
+        };
+      }
+    }
+  }
+  throw new Error("Policy-admission codec-3 projection disposition is invalid.");
+}
+function hasExactKeys(value, expected) {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+    return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== expected.length)
+    return false;
+  for (const key of keys) {
+    if (typeof key !== "string" || !expected.includes(key))
+      return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor))
+      return false;
+  }
+  return true;
+}
+function isDigest(value) {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
+}
+function isNonemptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function isAggregatePosture(value) {
+  return value === "required" || value === "not_applicable" || value === "missing";
+}
+function isPolicyOutcome(value) {
+  return value === "greenlight" || value === "refuse" || value === "review_required" || value === "halt" || value === "quarantine" || value === "proof_gap";
+}
+function canonicalGuardSet(guards2) {
+  const snapshot = [...structuredClone(guards2)];
+  snapshot.sort((left, right) => {
+    const leftKey = guardIdentityKey(left);
+    const rightKey = guardIdentityKey(right);
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  return canonicalize(snapshot);
+}
+function guardIdentityKey(value) {
+  if (value === null || typeof value !== "object")
+    return "";
+  const pointer = value.pointer;
+  if (pointer === null || typeof pointer !== "object")
+    return "";
+  const identity = pointer;
+  return typeof identity.pointerKind === "string" && typeof identity.localId === "string" ? `${identity.pointerKind}:${identity.localId}` : "";
+}
+
+// src/protocol/store/consequence-cutoff-codecs/consequence-cutoff-codec1.ts
+async function validateConsequenceCutoffCodec1Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_cutoff_") ? mutation.identity.localId.slice("consequence_cutoff_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 1 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 3 || mutation.projectionIntents.length !== 0) {
+    invalid("semantic envelope");
+  }
+  const cutoff = mutation.records[0];
+  if (cutoff === undefined || cutoff.record.recordKind !== "authority_evidence" || cutoff.record.localId !== `consequence_cutoff_${transactionHex}_v2` || cutoff.semanticState !== "consequence_cutoff_crossed" || cutoff.version !== 2 || cutoff.predecessor === null || cutoff.predecessor.record.recordKind !== "authority_evidence" || cutoff.predecessor.record.localId !== `gateway_admission_${transactionHex}` || cutoff.predecessor.semanticState !== "gateway_admitted_pending_effect" || cutoff.predecessor.version !== 1) {
+    invalid("record lineage");
+  }
+  const payload = objectPayload(cutoff);
+  const gatewayCommit = objectField(payload, "gatewayAdmissionCommit");
+  const aggregateTerminalLineage = objectField(payload, "aggregateTerminalLineage");
+  const reservationLineage = objectField(aggregateTerminalLineage, "reservationLineage");
+  const payloadTemporalFence = objectField(payload, "temporalFence");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.consequenceCutoffSourceVersion !== "consequence-cutoff-source-1" || payload.gatewayTransactionDigest !== transactionDigest || payload.cutoffState !== "crossed" || payload.effectInvocationStarted !== false || gatewayCommit.manifestVersion !== "authority-source-manifest-6" || objectField(gatewayCommit, "identity").mutationKind !== "gateway_admission" || objectField(gatewayCommit, "identity").localId !== `gateway_tx_${transactionHex}` || reservationLineage.lineageDigest !== payload.reservationLineageDigest || reservationLineage.reservationRef !== payload.reservationRef || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "adapterDigest",
+    "payloadDigest"
+  ]) {
+    requireDigest(payload[field]);
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness(pointer.expected.witness, cutoff.predecessor) || !sameWitness(pointer.successor, cutoff)) {
+      invalid("pointer lineage");
+    }
+  }
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      consequenceCutoffRequestVersion: "consequence-cutoff-request-1",
+      gatewayTransactionDigest: transactionDigest,
+      gatewayAdmissionDigest: cutoff.predecessor.digest,
+      cutoffDigest: cutoff.digest
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid("request digest");
+}
+function requiredPointer(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid("pointer set");
+  return matches[0];
+}
+function objectPayload(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid("record payload");
+  }
+  return record2.payload;
+}
+function objectField(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid(field);
+  return candidate;
+}
+function requireDigest(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid("digest binding");
+}
+function sameWitness(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid(part) {
+  throw new Error(`Consequence-cutoff codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/consequence-cutoff-codecs/consequence-cutoff-codec2.ts
+async function validateConsequenceCutoffCodec2Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_cutoff_") ? mutation.identity.localId.slice("consequence_cutoff_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 1 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 3 || mutation.projectionIntents.length !== 0) {
+    invalid2("semantic envelope");
+  }
+  const cutoff = mutation.records[0];
+  if (cutoff === undefined || cutoff.record.recordKind !== "authority_evidence" || cutoff.record.localId !== `consequence_cutoff_${transactionHex}_v2` || cutoff.semanticState !== "consequence_cutoff_crossed" || cutoff.version !== 2 || cutoff.predecessor === null || cutoff.predecessor.record.recordKind !== "authority_evidence" || cutoff.predecessor.record.localId !== `gateway_admission_${transactionHex}` || cutoff.predecessor.semanticState !== "gateway_admitted_pending_effect" || cutoff.predecessor.version !== 1) {
+    invalid2("record lineage");
+  }
+  const payload = objectPayload2(cutoff);
+  const gatewayCommit = objectField2(payload, "gatewayAdmissionCommit");
+  const aggregateTerminalLineage = objectField2(payload, "aggregateTerminalLineage");
+  const reservationLineage = objectField2(aggregateTerminalLineage, "reservationLineage");
+  const payloadTemporalFence = objectField2(payload, "temporalFence");
+  const exactConsequenceDescriptor = objectField2(payload, "exactConsequenceDescriptor");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.consequenceCutoffSourceVersion !== "consequence-cutoff-source-2" || payload.gatewayTransactionDigest !== transactionDigest || payload.cutoffState !== "crossed" || payload.effectInvocationStarted !== false || gatewayCommit.manifestVersion !== "authority-source-manifest-10" || objectField2(gatewayCommit, "identity").mutationKind !== "gateway_admission" || objectField2(gatewayCommit, "identity").localId !== `gateway_tx_${transactionHex}` || reservationLineage.lineageDigest !== payload.reservationLineageDigest || reservationLineage.reservationRef !== payload.reservationRef || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter || exactConsequenceDescriptor.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || typeof exactConsequenceDescriptor.actionContractId !== "string" || exactConsequenceDescriptor.actionContractId.length === 0 || exactConsequenceDescriptor.actionContractId !== payload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== payload.actionContractDigest || typeof exactConsequenceDescriptor.adapterRef !== "string" || exactConsequenceDescriptor.adapterRef.length === 0 || typeof exactConsequenceDescriptor.effectOperationRef !== "string" || exactConsequenceDescriptor.effectOperationRef.length === 0 || await digestCanonical(exactConsequenceDescriptor) !== payload.exactConsequenceDescriptorDigest) {
+    invalid2("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "exactConsequenceDescriptorDigest"
+  ]) {
+    requireDigest2(payload[field]);
+  }
+  for (const descriptorField of ["actionContractDigest", "adapterDigest", "payloadDigest"]) {
+    requireDigest2(exactConsequenceDescriptor[descriptorField]);
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer2(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness2(pointer.expected.witness, cutoff.predecessor) || !sameWitness2(pointer.successor, cutoff)) {
+      invalid2("pointer lineage");
+    }
+  }
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      consequenceCutoffRequestVersion: "consequence-cutoff-request-2",
+      gatewayTransactionDigest: transactionDigest,
+      gatewayAdmissionDigest: cutoff.predecessor.digest,
+      cutoffDigest: cutoff.digest,
+      exactConsequenceDescriptorDigest: payload.exactConsequenceDescriptorDigest
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid2("request digest");
+}
+function requiredPointer2(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid2("pointer set");
+  return matches[0];
+}
+function objectPayload2(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid2("record payload");
+  }
+  return record2.payload;
+}
+function objectField2(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid2(field);
+  return candidate;
+}
+function requireDigest2(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid2("digest binding");
+}
+function sameWitness2(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid2(part) {
+  throw new Error(`Consequence-cutoff codec-2 ${part} is invalid.`);
+}
+// src/protocol/store/gateway-admission-codecs/gateway-admission-envelope.ts
+async function validateGatewayAdmissionEnvelope(mutation, codecVersion) {
+  const transactionHex = mutation.identity.localId.startsWith("gateway_tx_") ? mutation.identity.localId.slice("gateway_tx_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 6 || mutation.pointerMutations.length !== 7 || mutation.projectionIntents.length !== 0) {
+    invalid3("semantic envelope");
+  }
+  const byState = new Map;
+  for (const record2 of mutation.records) {
+    if (byState.has(record2.semanticState))
+      invalid3("duplicate record role");
+    byState.set(record2.semanticState, record2);
+  }
+  const issuance = requiredRecord(byState, "greenlight_consumed", 2, true);
+  const idempotency = requiredRecord(byState, "policy_idempotency_consumed", 2, true);
+  const reservation = requiredRecord(byState, "effect_in_flight", null, true);
+  const bucket = requiredRecord(byState, "aggregate_exposure_bucket", null, true);
+  const checkpoint = requiredRecord(byState, "aggregate_induction_checkpoint", null, true);
+  const outcome = requiredRecord(byState, "gateway_admitted_pending_effect", 1, false);
+  if (byState.size !== 6)
+    invalid3("record role set");
+  const issuancePayload = objectPayload3(issuance);
+  const idempotencyPayload = objectPayload3(idempotency);
+  const outcomePayload = objectPayload3(outcome);
+  const embeddedIssuance = objectField3(issuancePayload, "issuance");
+  const embeddedReservation = objectField3(idempotencyPayload, "reservation");
+  const transactionDigest = `sha256:${transactionHex}`;
+  for (const payload of [issuancePayload, idempotencyPayload, outcomePayload]) {
+    if (payload.gatewayTransactionDigest !== undefined && payload.gatewayTransactionDigest !== transactionDigest) {
+      invalid3("transaction binding");
+    }
+  }
+  if (issuancePayload.greenlightConsumptionSourceVersion !== "greenlight-consumption-source-1" || idempotencyPayload.policyIdempotencyConsumptionSourceVersion !== "policy-idempotency-consumption-source-1" || issuancePayload.state !== "effect_in_flight" || idempotencyPayload.state !== "effect_in_flight" || outcomePayload.gatewayAdmissionSourceVersion !== `gateway-admission-source-${codecVersion}` || outcomePayload.transactionDigest !== transactionDigest || outcomePayload.greenlightId !== embeddedIssuance.greenlightId || embeddedReservation.greenlightId !== embeddedIssuance.greenlightId || embeddedReservation.actionContractDigest !== embeddedIssuance.actionContractDigest || outcomePayload.actionContractDigest !== embeddedIssuance.actionContractDigest || outcomePayload.effectState !== "effect_in_flight" || outcomePayload.authorizationReleased !== false || outcomePayload.effectInvocationStarted !== false || outcomePayload.streamOffsetsIncluded !== false || codecVersion === 1 && outcomePayload.aggregateTerminalLineage !== undefined) {
+    invalid3("payload binding");
+  }
+  if (codecVersion === 2) {
+    const aggregateTerminalLineage = objectField3(outcomePayload, "aggregateTerminalLineage");
+    const reservationLineage = objectField3(aggregateTerminalLineage, "reservationLineage");
+    const bindingArtifact = objectField3(aggregateTerminalLineage, "bindingArtifact");
+    const domainArtifact = objectField3(aggregateTerminalLineage, "domainArtifact");
+    if (reservationLineage.lineageDigest !== outcomePayload.reservationLineageDigest || reservationLineage.reservationRef !== outcomePayload.reservationRef || bindingArtifact.bindingDigest !== objectField3(reservationLineage, "origin").bindingDigest || bindingArtifact.locatorDigest !== domainArtifact.locatorDigest || !sameRecordWitness(objectField3(aggregateTerminalLineage, "reservationWitness"), reservation) || !sameRecordWitness(objectField3(aggregateTerminalLineage, "bucketWitness"), bucket) || !sameRecordWitness(objectField3(aggregateTerminalLineage, "checkpointWitness"), checkpoint)) {
+      invalid3("aggregate terminal lineage");
+    }
+  }
+  const consumptionPointers = [
+    {
+      localId: `greenlight_issuance_${digestHex(embeddedIssuance.actionContractDigest)}`,
+      record: issuance
+    },
+    {
+      localId: `policy_idempotency_${digestHex(embeddedReservation.ledgerKeyDigest)}`,
+      record: idempotency
+    }
+  ];
+  for (const expected of consumptionPointers) {
+    const pointer = requiredPointer3(mutation.pointerMutations, "idempotency_claim", expected.localId);
+    requireExactAdvance(pointer, expected.record);
+  }
+  requireAggregateAdvance(mutation.pointerMutations, bucket);
+  requireAggregateAdvance(mutation.pointerMutations, checkpoint);
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer3(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "absent" || !sameSuccessor(pointer, outcome)) {
+      invalid3("gateway lineage pointer");
+    }
+  }
+  const contextGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "authority_context");
+  const configurationGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "configuration_state");
+  const isolationGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "isolation_state");
+  if (contextGuards.length !== 1 || configurationGuards.length !== 1 || isolationGuards.length < 1 || contextGuards.length + configurationGuards.length + isolationGuards.length !== mutation.pointerGuards.length) {
+    invalid3("guard partition");
+  }
+  const isolationSnapshotDigest = await digestCanonical({
+    isolationAuthoritySnapshotVersion: "isolation-authority-snapshot-1",
+    pointerGuards: sortedGuards(isolationGuards)
+  });
+  if (outcomePayload.isolationSnapshotDigest !== isolationSnapshotDigest) {
+    invalid3("isolation guard digest");
+  }
+  const temporalFence = objectField3(outcomePayload, "temporalFence");
+  if (temporalFence.kind !== mutation.temporalFence.kind || temporalFence.notBefore !== mutation.temporalFence.notBefore || temporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid3("temporal fence binding");
+  }
+  const credentialSelectionBinding = objectField3(outcomePayload, "credentialSelectionBinding");
+  const exactConsequenceDescriptor = codecVersion === 2 ? objectField3(outcomePayload, "exactConsequenceDescriptor") : null;
+  if (codecVersion === 2 && (exactConsequenceDescriptor?.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || exactConsequenceDescriptor.actionContractId !== outcomePayload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== outcomePayload.actionContractDigest || await digestCanonical(exactConsequenceDescriptor) !== outcomePayload.exactConsequenceDescriptorDigest)) {
+    invalid3("exact consequence descriptor");
+  }
+  const expectedTransactionDigest = await digestCanonical({
+    gatewayAdmissionTransactionVersion: `gateway-admission-transaction-${codecVersion}`,
+    sourceScope: mutation.scope,
+    actionContractId: outcomePayload.actionContractId,
+    actionContractDigest: outcomePayload.actionContractDigest,
+    greenlightId: outcomePayload.greenlightId,
+    reservationLineageDigest: outcomePayload.reservationLineageDigest,
+    reservationRef: outcomePayload.reservationRef,
+    gatewayId: outcomePayload.gatewayId,
+    credentialSelectionBinding,
+    credentialSelectionBindingDigest: outcomePayload.credentialSelectionBindingDigest,
+    ...codecVersion === 2 ? {
+      exactConsequenceDescriptor,
+      exactConsequenceDescriptorDigest: outcomePayload.exactConsequenceDescriptorDigest
+    } : {},
+    isolationSnapshotDigest,
+    temporalFence
+  });
+  if (expectedTransactionDigest !== transactionDigest)
+    invalid3("transaction digest");
+  const requestMaterial = {
+    gatewayAdmissionRequestVersion: `gateway-admission-request-${codecVersion}`,
+    transactionDigest,
+    reservationSuccessorDigest: reservation.digest,
+    bucketSuccessorDigest: bucket.digest,
+    checkpointSuccessorDigest: checkpoint.digest,
+    outcomeDigest: outcome.digest,
+    greenlightConsumptionDigests: [issuance.digest, idempotency.digest]
+  };
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: requestMaterial
+  });
+  if (expectedRequestDigest !== mutation.requestDigest)
+    invalid3("request digest");
+}
+function requiredRecord(records, state, version2, hasPredecessor) {
+  const record2 = records.get(state);
+  if (record2 === undefined || version2 !== null && record2.version !== version2 || record2.predecessor !== null !== hasPredecessor) {
+    invalid3(`${state} record`);
+  }
+  return record2;
+}
+function requiredPointer3(pointers, pointerKind, localId) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === pointerKind && pointer.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid3("pointer role");
+  return matches[0];
+}
+function requireExactAdvance(pointer, record2) {
+  if (record2.predecessor === null || pointer.expected.kind !== "exact" || JSON.stringify(pointer.expected.witness) !== JSON.stringify(record2.predecessor) || !sameSuccessor(pointer, record2)) {
+    invalid3("exact pointer advance");
+  }
+}
+function requireAggregateAdvance(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameSuccessor(pointer, record2));
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid3("aggregate pointer role");
+  requireExactAdvance(matches[0], record2);
+}
+function sameSuccessor(pointer, record2) {
+  return pointer.successor.record.recordKind === record2.record.recordKind && pointer.successor.record.localId === record2.record.localId && pointer.successor.semanticState === record2.semanticState && pointer.successor.version === record2.version && pointer.successor.digest === record2.digest;
+}
+function sameRecordWitness(candidate, record2) {
+  const identity = objectField3(candidate, "record");
+  return identity.recordKind === record2.record.recordKind && identity.localId === record2.record.localId && candidate.semanticState === record2.semanticState && candidate.version === record2.version && candidate.digest === record2.digest;
+}
+function objectPayload3(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid3("record payload");
+  }
+  return record2.payload;
+}
+function objectField3(value, key) {
+  const field = value[key];
+  if (field === null || typeof field !== "object" || Array.isArray(field))
+    invalid3(`${key} field`);
+  return field;
+}
+function digestHex(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid3("digest");
+  return value.slice("sha256:".length);
+}
+function sortedGuards(guards2) {
+  return structuredClone([...guards2]).sort((left, right) => {
+    const a = `${left.pointer.pointerKind}\x00${left.pointer.localId}`;
+    const b = `${right.pointer.pointerKind}\x00${right.pointer.localId}`;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+function invalid3(part) {
+  throw new Error(`Gateway-admission codec-1 ${part} is invalid.`);
+}
+
+// src/protocol/store/gateway-admission-codecs/gateway-admission-codec1.ts
+async function validateGatewayAdmissionCodec1Envelope(mutation) {
+  return validateGatewayAdmissionEnvelope(mutation, 1);
+}
+// src/protocol/store/gateway-admission-codecs/gateway-admission-codec2.ts
+async function validateGatewayAdmissionCodec2Envelope(mutation) {
+  return validateGatewayAdmissionEnvelope(mutation, 2);
+}
+// src/protocol/store/isolation-transition-codecs/isolation-transition-codec1.ts
+async function validateIsolationTransitionCodec1Envelope(mutation) {
+  return validateIsolationTransitionEnvelope(mutation, {
+    additionRequestVersion: "isolation-transition-request-2",
+    clearanceRequestVersion: "isolation-clearance-request-1",
+    includeTemporalFence: false,
+    codecName: "codec-1"
+  });
+}
+async function validateIsolationTransitionEnvelope(mutation, profile) {
+  if (mutation.identity.mutationKind !== "isolation_transition" || mutation.records.length !== 2 && mutation.records.length !== 3 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 1 || mutation.projectionIntents.length !== 2) {
+    invalid4("semantic envelope");
+  }
+  const pointer = mutation.pointerMutations[0];
+  if (pointer === undefined)
+    invalid4("pointer lineage");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && (record2.semanticState === "isolation_active" || record2.semanticState === "isolation_cleared") && sameWitness3(pointer.successor, record2));
+  if (head === undefined)
+    invalid4("head record");
+  const payload = objectPayload4(head);
+  const scopeDigest = requireDigest3(payload.scopeDigest);
+  const activeCauses = arrayField(payload, "activeCauses");
+  const activeCauseSetDigest = requireDigest3(payload.activeCauseSetDigest);
+  const state = objectField4(payload, "isolationState");
+  if (state.tenantId !== mutation.scope.tenantId || state.organizationId !== mutation.scope.organizationId || state.version !== head.version || head.semanticState === "isolation_active" && (state.state === "active" || state.clearedAt !== null) || head.semanticState === "isolation_cleared" && (state.state !== "active" || typeof state.clearedAt !== "string" || activeCauses.length !== 0)) {
+    invalid4("head state binding");
+  }
+  if (payload.isolationAuthoritySourceVersion === "isolation-authority-source-2") {
+    if (head.semanticState !== "isolation_active" || activeCauses.length === 0 || activeCauses.length !== head.version || "chronologyVersion" in payload) {
+      invalid4("v2 chronology");
+    }
+  } else if (payload.isolationAuthoritySourceVersion === "isolation-authority-source-3") {
+    if (payload.chronologyVersion !== head.version) {
+      invalid4("v3 chronology");
+    }
+  } else {
+    invalid4("payload version");
+  }
+  const expectedSetDigest = await digestCanonical({
+    isolationActiveCauseSetVersion: "isolation-active-cause-set-1",
+    causes: activeCauses
+  });
+  if (expectedSetDigest !== activeCauseSetDigest || head.record.localId !== `isolation_head_${digestHex2(scopeDigest)}_v${head.version}_${digestHex2(activeCauseSetDigest)}`) {
+    invalid4("cause-set binding");
+  }
+  if (pointer.pointer.pointerKind !== "isolation_state" || pointer.pointer.localId !== `isolation_current_${digestHex2(scopeDigest)}` || !sameWitness3(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness3(pointer.expected.witness, head.predecessor))) {
+    invalid4("pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid4("projection binding");
+    }
+  }
+  const evidence = mutation.records.find((record2) => record2.semanticState === "isolation_cause" || record2.semanticState === "isolation_clearance");
+  if (evidence === undefined)
+    invalid4("evidence record");
+  if (evidence.semanticState === "isolation_cause") {
+    if (mutation.records.length !== 2)
+      invalid4("cause addition record set");
+    await validateCauseAddition(mutation, evidence, head, payload, profile);
+    return;
+  }
+  if (evidence.semanticState === "isolation_clearance") {
+    if (mutation.records.length !== 3)
+      invalid4("clearance record set");
+    await validateCauseClearance(mutation, evidence, head, payload, profile);
+    return;
+  }
+  invalid4("transition kind");
+}
+async function validateCauseAddition(mutation, causeRecord, head, headPayload, profile) {
+  const causePayload = objectPayload4(causeRecord);
+  const causeId = requireText(causePayload.causeId);
+  const causeDigest = requireDigest3(causePayload.causeDigest);
+  if (profile.includeTemporalFence) {
+    validateOpenEndedFence(mutation, requireText(objectField4(causePayload, "cause").effectiveAt));
+  }
+  if (causeRecord.record.recordKind !== "authority_evidence" || causeRecord.record.localId !== `isolation_cause_${causeId}_v1` || causeRecord.version !== 1 || causeRecord.predecessor !== null || causePayload.isolationCauseRecordVersion !== "isolation-cause-record-1" || mutation.identity.localId !== `isolation_add_${causeId}` || !arrayField(headPayload, "activeCauses").some((candidate) => {
+    const binding = objectValue(candidate);
+    const witness = objectField4(binding, "causeRecord");
+    return binding.causeId === causeId && binding.causeDigest === causeDigest && sameWitness3(witness, causeRecord);
+  })) {
+    invalid4("cause addition binding");
+  }
+  const expected = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      isolationTransitionRequestVersion: profile.additionRequestVersion,
+      scope: mutation.scope,
+      causeId,
+      causeDigest,
+      ...profile.includeTemporalFence ? { temporalFence: requireHalfOpenFence(mutation) } : {}
+    }
+  });
+  if (mutation.requestDigest !== expected)
+    invalid4("cause addition request");
+}
+async function validateCauseClearance(mutation, clearanceRecord, head, headPayload, profile) {
+  const payload = objectPayload4(clearanceRecord);
+  const causeId = requireText(payload.causeId);
+  const causeDigest = requireDigest3(payload.causeDigest);
+  if (profile.includeTemporalFence) {
+    validateOpenEndedFence(mutation, requireText(payload.resolvedAt));
+  }
+  const sourceHead = objectField4(payload, "sourceHead");
+  const causeRecord = objectField4(payload, "causeRecord");
+  const successor = objectField4(payload, "successor");
+  const headVersionText = mutation.identity.localId.slice(`isolation_clear_${causeId}_`.length);
+  const predecessorRecord = mutation.records.find((record2) => head.predecessor !== null && sameWitness3(head.predecessor, record2));
+  const predecessorPayload = predecessorRecord === undefined ? null : objectPayload4(predecessorRecord);
+  const predecessorCauseBindings = predecessorPayload === null ? [] : arrayField(predecessorPayload, "activeCauses");
+  if (clearanceRecord.record.recordKind !== "authority_evidence" || clearanceRecord.version !== 1 || clearanceRecord.predecessor !== null || payload.isolationClearanceEvidenceVersion !== "isolation-clearance-evidence-1" || mutation.identity.localId !== `isolation_clear_${causeId}_${headVersionText}` || !/^[1-9][0-9]*$/u.test(headVersionText) || Number(headVersionText) !== head.version - 1 || head.predecessor === null || predecessorRecord === undefined || !sameWitness3(sourceHead, head.predecessor) || !sameWitness3(successor, head) || causeRecord.semanticState !== "isolation_cause" || causeRecord.digest === undefined || !predecessorCauseBindings.some((candidate) => {
+    const binding = objectValue(candidate);
+    return binding.causeId === causeId && binding.causeDigest === causeDigest && sameWitness3(objectField4(binding, "causeRecord"), causeRecord);
+  }) || arrayField(headPayload, "activeCauses").some((candidate) => objectValue(candidate).causeId === causeId)) {
+    invalid4("clearance binding");
+  }
+  const resolverAuthorityDigest = requireDigest3(payload.resolverAuthorityDigest);
+  const evidenceDigest = requireDigest3(payload.evidenceDigest);
+  const expected = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      isolationClearanceRequestVersion: profile.clearanceRequestVersion,
+      sourceHead,
+      causeId,
+      causeDigest,
+      resolverAuthorityRef: requireText(payload.resolverAuthorityRef),
+      resolverAuthorityDigest,
+      resolverVersion: requireText(payload.resolverVersion),
+      evidenceRef: requireText(payload.evidenceRef),
+      evidenceDigest,
+      resolvedAt: requireText(payload.resolvedAt),
+      clearanceRecordDigest: clearanceRecord.digest,
+      successorDigest: head.digest,
+      ...profile.includeTemporalFence ? { temporalFence: requireHalfOpenFence(mutation) } : {}
+    }
+  });
+  if (mutation.requestDigest !== expected)
+    invalid4("clearance request");
+}
+function requireHalfOpenFence(mutation) {
+  if (!("temporalFence" in mutation) || mutation.temporalFence.kind !== "store_time_in_half_open_interval") {
+    invalid4("temporal fence");
+  }
+  return mutation.temporalFence;
+}
+function validateOpenEndedFence(mutation, expectedNotBefore) {
+  const fence = requireHalfOpenFence(mutation);
+  if (fence.notBefore !== expectedNotBefore || fence.notAfter !== "9999-12-31T23:59:59.999Z") {
+    invalid4("temporal chronology binding");
+  }
+}
+function arrayField(value, field) {
+  const candidate = value[field];
+  if (!Array.isArray(candidate))
+    invalid4(field);
+  return candidate;
+}
+function objectPayload4(record2) {
+  return objectValue(record2.payload);
+}
+function objectField4(value, field) {
+  return objectValue(value[field]);
+}
+function objectValue(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    invalid4("object binding");
+  }
+  return value;
+}
+function requireText(value) {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    invalid4("text binding");
+  }
+  return value;
+}
+function requireDigest3(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value)) {
+    invalid4("digest binding");
+  }
+  return value;
+}
+function digestHex2(value) {
+  return requireDigest3(value).slice("sha256:".length);
+}
+function sameWitness3(left, right) {
+  const record2 = objectValue(left.record);
+  const rightRecord = objectValue(right.record);
+  return record2.recordKind === rightRecord.recordKind && record2.localId === rightRecord.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid4(part) {
+  throw new Error(`Isolation-transition codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/isolation-transition-codecs/isolation-transition-codec2.ts
+async function validateIsolationTransitionCodec2Envelope(mutation) {
+  await validateIsolationTransitionEnvelope(mutation, {
+    additionRequestVersion: "isolation-transition-request-3",
+    clearanceRequestVersion: "isolation-clearance-request-2",
+    includeTemporalFence: true,
+    codecName: "codec-2"
+  });
+}
+// src/protocol/store/terminal-observation-codecs/terminal-observation-codec1.ts
+async function validateTerminalObservationCodec1Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_terminal_") ? mutation.identity.localId.slice("consequence_terminal_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.pointerGuards.length !== 0) {
+    invalid5("semantic envelope");
+  }
+  const terminal = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.record.localId === `consequence_terminal_${transactionHex}_v3`);
+  if (terminal === undefined || terminal.record.recordKind !== "authority_evidence" || terminal.record.localId !== `consequence_terminal_${transactionHex}_v3` || terminal.semanticState !== "terminal_committed" && terminal.semanticState !== "blocked_unknown" || terminal.version !== 3 || terminal.predecessor === null || terminal.predecessor.record.recordKind !== "authority_evidence" || terminal.predecessor.record.localId !== `consequence_cutoff_${transactionHex}_v2` || terminal.predecessor.semanticState !== "consequence_cutoff_crossed" || terminal.predecessor.version !== 2) {
+    invalid5("record lineage");
+  }
+  const payload = objectPayload5(terminal);
+  const unknown2 = terminal.semanticState === "blocked_unknown";
+  if (mutation.records.length !== (unknown2 ? 6 : 4) || mutation.pointerMutations.length !== (unknown2 ? 6 : 5) || mutation.projectionIntents.length !== (unknown2 ? 2 : 0)) {
+    invalid5("semantic envelope");
+  }
+  const reservation = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.record.localId.startsWith(`${String(payload.reservationRef)}_v`) && record2.semanticState === terminal.semanticState);
+  const bucket = mutation.records.find((record2) => record2.semanticState === "aggregate_exposure_bucket");
+  const checkpoint = mutation.records.find((record2) => record2.semanticState === "aggregate_induction_checkpoint");
+  if (reservation === undefined || reservation.predecessor === null || reservation.predecessor.semanticState !== "effect_in_flight" || bucket === undefined || bucket.predecessor === null || checkpoint === undefined || checkpoint.predecessor === null) {
+    invalid5("aggregate record lineage");
+  }
+  const cutoffCommit = objectField5(payload, "cutoffCommit");
+  const payloadTemporalFence = objectField5(payload, "temporalFence");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.terminalObservationSourceVersion !== "terminal-observation-source-1" || payload.gatewayTransactionDigest !== transactionDigest || payload.resultingState !== terminal.semanticState || cutoffCommit.manifestVersion !== "authority-source-manifest-7" || objectField5(cutoffCommit, "identity").mutationKind !== "effect_observation" || objectField5(cutoffCommit, "identity").localId !== `consequence_cutoff_${transactionHex}` || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid5("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "adapterDigest",
+    "payloadDigest",
+    "observerAuthorityDigest",
+    "observationDigest"
+  ]) {
+    requireDigest4(payload[field]);
+  }
+  if (typeof payload.observerAuthorityRef !== "string" || typeof payload.observerVersion !== "string" || typeof payload.observationRef !== "string" || payload.observationKind !== "provider_committed" && payload.observationKind !== "observation_unavailable" || payload.observationKind === "provider_committed" && terminal.semanticState !== "terminal_committed" || payload.observationKind === "observation_unavailable" && terminal.semanticState !== "blocked_unknown") {
+    invalid5("observation binding");
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer4(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness4(pointer.expected.witness, terminal.predecessor) || !sameWitness4(pointer.successor, terminal)) {
+      invalid5("pointer lineage");
+    }
+  }
+  requireAggregateAdvance2(mutation.pointerMutations, bucket);
+  requireAggregateAdvance2(mutation.pointerMutations, checkpoint);
+  const isolation = unknown2 ? requireUnknownIsolation(mutation, payload, transactionHex) : null;
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      terminalObservationRequestVersion: "terminal-observation-request-1",
+      gatewayTransactionDigest: transactionDigest,
+      cutoffDigest: terminal.predecessor.digest,
+      terminalDigest: terminal.digest,
+      reservationSuccessorDigest: reservation.digest,
+      bucketSuccessorDigest: bucket.digest,
+      checkpointSuccessorDigest: checkpoint.digest,
+      observationDigest: payload.observationDigest,
+      isolationCauseDigest: isolation?.causeDigest ?? null,
+      isolationHeadDigest: isolation?.head.digest ?? null
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid5("request digest");
+}
+function requireUnknownIsolation(mutation, terminalPayload, transactionHex) {
+  const cause = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.semanticState === "isolation_cause");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.semanticState === "isolation_active");
+  if (cause === undefined || head === undefined)
+    invalid5("isolation records");
+  const causePayload = objectPayload5(cause);
+  const headPayload = objectPayload5(head);
+  const isolationState = objectField5(headPayload, "isolationState");
+  const credential = objectField5(terminalPayload, "credentialSelectionBinding");
+  if (terminalPayload.isolationCauseDigest !== causePayload.causeDigest || terminalPayload.isolationHeadDigest !== head.digest || causePayload.causeDigest === undefined || objectField5(causePayload, "cause").sourceDecisionRef !== `terminal-observation:${transactionHex}:effect-commit-unknown` || isolationState.state !== "state_suspect" || isolationState.reasonCode !== "effect_commit_unknown" || isolationState.scopeType !== "resource" || isolationState.scopeId !== credential.resourceRef || isolationState.tenantId !== mutation.scope.tenantId || isolationState.organizationId !== mutation.scope.organizationId || headPayload.scopeDigest === undefined) {
+    invalid5("isolation binding");
+  }
+  const pointer = requiredPointer4(mutation.pointerMutations, "isolation_state", `isolation_current_${String(headPayload.scopeDigest).slice("sha256:".length)}`);
+  if (!sameWitness4(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness4(pointer.expected.witness, head.predecessor))) {
+    invalid5("isolation pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid5("isolation projection binding");
+    }
+  }
+  return { cause, causeDigest: causePayload.causeDigest ?? null, head };
+}
+function requireAggregateAdvance2(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameWitness4(pointer.successor, record2));
+  if (matches.length !== 1 || matches[0] === undefined || matches[0].expected.kind !== "exact" || record2.predecessor === null || !sameWitness4(matches[0].expected.witness, record2.predecessor)) {
+    invalid5("aggregate pointer lineage");
+  }
+}
+function requiredPointer4(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid5("pointer set");
+  return matches[0];
+}
+function objectPayload5(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid5("record payload");
+  }
+  return record2.payload;
+}
+function objectField5(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
+    invalid5(field);
+  }
+  return candidate;
+}
+function requireDigest4(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value)) {
+    invalid5("digest binding");
+  }
+}
+function sameWitness4(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid5(part) {
+  throw new Error(`Terminal-observation codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/terminal-observation-codecs/terminal-observation-codec2.ts
+async function validateTerminalObservationCodec2Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_terminal_") ? mutation.identity.localId.slice("consequence_terminal_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.pointerGuards.length !== 0) {
+    invalid6("semantic envelope");
+  }
+  const terminal = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.record.localId === `consequence_terminal_${transactionHex}_v3`);
+  if (terminal === undefined || terminal.record.recordKind !== "authority_evidence" || terminal.record.localId !== `consequence_terminal_${transactionHex}_v3` || terminal.semanticState !== "terminal_committed" && terminal.semanticState !== "blocked_unknown" || terminal.version !== 3 || terminal.predecessor === null || terminal.predecessor.record.recordKind !== "authority_evidence" || terminal.predecessor.record.localId !== `consequence_cutoff_${transactionHex}_v2` || terminal.predecessor.semanticState !== "consequence_cutoff_crossed" || terminal.predecessor.version !== 2) {
+    invalid6("record lineage");
+  }
+  const payload = objectPayload6(terminal);
+  const unknown2 = terminal.semanticState === "blocked_unknown";
+  if (mutation.records.length !== (unknown2 ? 6 : 4) || mutation.pointerMutations.length !== (unknown2 ? 6 : 5) || mutation.projectionIntents.length !== (unknown2 ? 2 : 0)) {
+    invalid6("semantic envelope");
+  }
+  const reservation = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.record.localId.startsWith(`${String(payload.reservationRef)}_v`) && record2.semanticState === terminal.semanticState);
+  const bucket = mutation.records.find((record2) => record2.semanticState === "aggregate_exposure_bucket");
+  const checkpoint = mutation.records.find((record2) => record2.semanticState === "aggregate_induction_checkpoint");
+  if (reservation === undefined || reservation.predecessor === null || reservation.predecessor.semanticState !== "effect_in_flight" || bucket === undefined || bucket.predecessor === null || checkpoint === undefined || checkpoint.predecessor === null) {
+    invalid6("aggregate record lineage");
+  }
+  const cutoffCommit = objectField6(payload, "cutoffCommit");
+  const payloadTemporalFence = objectField6(payload, "temporalFence");
+  const exactConsequenceDescriptor = objectField6(payload, "exactConsequenceDescriptor");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.terminalObservationSourceVersion !== "terminal-observation-source-2" || payload.gatewayTransactionDigest !== transactionDigest || payload.resultingState !== terminal.semanticState || cutoffCommit.manifestVersion !== "authority-source-manifest-11" || objectField6(cutoffCommit, "identity").mutationKind !== "effect_observation" || objectField6(cutoffCommit, "identity").localId !== `consequence_cutoff_${transactionHex}` || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter || exactConsequenceDescriptor.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || typeof exactConsequenceDescriptor.actionContractId !== "string" || exactConsequenceDescriptor.actionContractId.length === 0 || exactConsequenceDescriptor.actionContractId !== payload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== payload.actionContractDigest || typeof exactConsequenceDescriptor.adapterRef !== "string" || exactConsequenceDescriptor.adapterRef.length === 0 || typeof exactConsequenceDescriptor.effectOperationRef !== "string" || exactConsequenceDescriptor.effectOperationRef.length === 0 || await digestCanonical(exactConsequenceDescriptor) !== payload.exactConsequenceDescriptorDigest) {
+    invalid6("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "observerAuthorityDigest",
+    "observationDigest",
+    "exactConsequenceDescriptorDigest"
+  ]) {
+    requireDigest5(payload[field]);
+  }
+  for (const descriptorField of ["actionContractDigest", "adapterDigest", "payloadDigest"]) {
+    requireDigest5(exactConsequenceDescriptor[descriptorField]);
+  }
+  if (typeof payload.observerAuthorityRef !== "string" || typeof payload.observerVersion !== "string" || typeof payload.observationRef !== "string" || payload.observationKind !== "provider_committed" && payload.observationKind !== "observation_unavailable" || payload.observationKind === "provider_committed" && terminal.semanticState !== "terminal_committed" || payload.observationKind === "observation_unavailable" && terminal.semanticState !== "blocked_unknown") {
+    invalid6("observation binding");
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer5(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness5(pointer.expected.witness, terminal.predecessor) || !sameWitness5(pointer.successor, terminal)) {
+      invalid6("pointer lineage");
+    }
+  }
+  requireAggregateAdvance3(mutation.pointerMutations, bucket);
+  requireAggregateAdvance3(mutation.pointerMutations, checkpoint);
+  const isolation = unknown2 ? requireUnknownIsolation2(mutation, payload, transactionHex) : null;
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      terminalObservationRequestVersion: "terminal-observation-request-2",
+      gatewayTransactionDigest: transactionDigest,
+      cutoffDigest: terminal.predecessor.digest,
+      terminalDigest: terminal.digest,
+      reservationSuccessorDigest: reservation.digest,
+      bucketSuccessorDigest: bucket.digest,
+      checkpointSuccessorDigest: checkpoint.digest,
+      observationDigest: payload.observationDigest,
+      exactConsequenceDescriptorDigest: payload.exactConsequenceDescriptorDigest,
+      isolationCauseDigest: isolation?.causeDigest ?? null,
+      isolationHeadDigest: isolation?.head.digest ?? null
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid6("request digest");
+}
+function requireUnknownIsolation2(mutation, terminalPayload, transactionHex) {
+  const cause = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.semanticState === "isolation_cause");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.semanticState === "isolation_active");
+  if (cause === undefined || head === undefined)
+    invalid6("isolation records");
+  const causePayload = objectPayload6(cause);
+  const headPayload = objectPayload6(head);
+  const isolationState = objectField6(headPayload, "isolationState");
+  const credential = objectField6(terminalPayload, "credentialSelectionBinding");
+  if (terminalPayload.isolationCauseDigest !== causePayload.causeDigest || terminalPayload.isolationHeadDigest !== head.digest || causePayload.causeDigest === undefined || objectField6(causePayload, "cause").sourceDecisionRef !== `terminal-observation:${transactionHex}:effect-commit-unknown` || isolationState.state !== "state_suspect" || isolationState.reasonCode !== "effect_commit_unknown" || isolationState.scopeType !== "resource" || isolationState.scopeId !== credential.resourceRef || isolationState.tenantId !== mutation.scope.tenantId || isolationState.organizationId !== mutation.scope.organizationId || headPayload.scopeDigest === undefined) {
+    invalid6("isolation binding");
+  }
+  const pointer = requiredPointer5(mutation.pointerMutations, "isolation_state", `isolation_current_${String(headPayload.scopeDigest).slice("sha256:".length)}`);
+  if (!sameWitness5(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness5(pointer.expected.witness, head.predecessor))) {
+    invalid6("isolation pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid6("isolation projection binding");
+    }
+  }
+  return { causeDigest: causePayload.causeDigest ?? null, head };
+}
+function requireAggregateAdvance3(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameWitness5(pointer.successor, record2));
+  if (matches.length !== 1 || matches[0] === undefined || matches[0].expected.kind !== "exact" || record2.predecessor === null || !sameWitness5(matches[0].expected.witness, record2.predecessor)) {
+    invalid6("aggregate pointer lineage");
+  }
+}
+function requiredPointer5(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid6("pointer set");
+  return matches[0];
+}
+function objectPayload6(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid6("record payload");
+  }
+  return record2.payload;
+}
+function objectField6(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid6(field);
+  return candidate;
+}
+function requireDigest5(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid6("digest binding");
+}
+function sameWitness5(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid6(part) {
+  throw new Error(`Terminal-observation codec-2 ${part} is invalid.`);
+}
+// src/protocol/store/authority-grammar.ts
+var AUTHORITY_SOURCE_WRITE_GRAMMARS = Object.freeze([
+  "policy-admission-codec-3",
+  "gateway-admission-codec-1",
+  "gateway-admission-codec-2",
+  "consequence-cutoff-codec-1",
+  "consequence-cutoff-codec-2",
+  "terminal-observation-codec-1",
+  "terminal-observation-codec-2",
+  "isolation-transition-codec-1",
+  "isolation-transition-codec-2"
+]);
+var PACKET_01_AUTHORITY_GRAMMAR_REGISTRY = Object.freeze([
+  Object.freeze({
+    writerGrammar: "policy-admission-codec-3",
+    validate: validatePolicyAdmissionCodec3Grammar
+  }),
+  Object.freeze({
+    writerGrammar: "gateway-admission-codec-1",
+    validate: (mutation) => validateGatewayAdmissionCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "gateway-admission-codec-2",
+    validate: (mutation) => validateGatewayAdmissionCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "consequence-cutoff-codec-1",
+    validate: (mutation) => validateConsequenceCutoffCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "consequence-cutoff-codec-2",
+    validate: (mutation) => validateConsequenceCutoffCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "terminal-observation-codec-1",
+    validate: (mutation) => validateTerminalObservationCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "terminal-observation-codec-2",
+    validate: (mutation) => validateTerminalObservationCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "isolation-transition-codec-1",
+    validate: (mutation) => validateIsolationTransitionCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "isolation-transition-codec-2",
+    validate: (mutation) => validateIsolationTransitionCodec2Envelope(mutation)
+  })
+]);
+// src/protocol/store/authority-record-read.ts
+var trustedArrayIncludes = Array.prototype.includes;
+var trustedNumberMaxSafeInteger2 = Number.MAX_SAFE_INTEGER;
+var trustedObjectPrototype2 = Object.prototype;
+var trustedReflectApply2 = Reflect.apply;
+var trustedRegExpTest = RegExp.prototype.test;
+var trustedSetAdd2 = Set.prototype.add;
+var trustedSetHas2 = Set.prototype.has;
+var trustedStringCharCodeAt2 = String.prototype.charCodeAt;
+var trustedStringTrim = String.prototype.trim;
+var trustedStructuredClone = structuredClone;
+var trustedWeakSetAdd = WeakSet.prototype.add;
+var trustedWeakSetDelete = WeakSet.prototype.delete;
+var trustedWeakSetHas = WeakSet.prototype.has;
+var AUTHORITY_RECORD_KINDS = Object.freeze([
+  "authority_binding",
+  "authority_state",
+  "authority_evidence",
+  "projection_state"
+]);
+var AUTHORITY_POINTER_KINDS = Object.freeze([
+  "authority_context",
+  "configuration_state",
+  "aggregate_authority",
+  "idempotency_claim",
+  "operation_claim",
+  "effect_lineage",
+  "effect_observation",
+  "isolation_state",
+  "access_lease",
+  "access_usage",
+  "projection_delivery"
+]);
+var AUTHORITY_MUTATION_KINDS = Object.freeze([
+  "configuration_write",
+  "policy_admission",
+  "gateway_admission",
+  "lifecycle_transition",
+  "isolation_transition",
+  "projection_delivery",
+  "effect_observation"
+]);
+var AUTHORITY_MANIFEST_VERSIONS = Object.freeze([
+  "authority-source-manifest-1",
+  "authority-source-manifest-2",
+  "authority-source-manifest-3",
+  "authority-source-manifest-4",
+  "authority-source-manifest-5",
+  "authority-source-manifest-6",
+  "authority-source-manifest-7",
+  "authority-source-manifest-8",
+  "authority-source-manifest-9",
+  "authority-source-manifest-10",
+  "authority-source-manifest-11",
+  "authority-source-manifest-12",
+  "authority-source-manifest-13"
+]);
+function authorityPointerIdentity(pointerKind, localId) {
+  requireClosedKind("authority pointer", pointerKind, AUTHORITY_POINTER_KINDS);
+  requireLocalId("authority pointer", localId);
+  return { pointerKind, localId };
+}
+function requireClosedKind(label, value, allowed) {
+  if (typeof value !== "string" || !trustedReflectApply2(trustedArrayIncludes, allowed, [value])) {
+    throw new Error(`${label} kind is not registered.`);
+  }
+}
+function requireLocalId(label, value) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 160 || trustedReflectApply2(trustedStringTrim, value, []) !== value) {
+    throw new Error(`${label} local identity must be a non-empty, trimmed string of at most 160 characters.`);
+  }
+  if (trustedReflectApply2(trustedRegExpTest, /[\u0000-\u001f\u007f]/, [value])) {
+    throw new Error(`${label} local identity contains control characters.`);
+  }
+  if (!isWellFormedUnicode(value)) {
+    throw new Error(`${label} local identity contains an unpaired UTF-16 surrogate.`);
+  }
+}
+function isWellFormedUnicode(value) {
+  for (let index = 0;index < value.length; index += 1) {
+    const codeUnit = trustedReflectApply2(trustedStringCharCodeAt2, value, [index]);
+    if (codeUnit >= 55296 && codeUnit <= 56319) {
+      if (index + 1 >= value.length)
+        return false;
+      const next = trustedReflectApply2(trustedStringCharCodeAt2, value, [index + 1]);
+      if (next < 56320 || next > 57343)
+        return false;
+      index += 1;
+    } else if (codeUnit >= 56320 && codeUnit <= 57343) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// src/protocol/store/authority-projection-intent.ts
+var trustedStructuredClone2 = structuredClone;
+var AUTHORITY_PROJECTION_KINDS = Object.freeze(["protocol_record", "contract_stream_event"]);
+// src/protocol/store/authority-source.ts
+var trustedArraySort2 = Array.prototype.sort;
+var trustedDateParse = Date.parse;
+var trustedDateToISOString = Date.prototype.toISOString;
+var trustedNumberMaxSafeInteger3 = Number.MAX_SAFE_INTEGER;
+var trustedRegExpTest2 = RegExp.prototype.test;
+var trustedReflectApply3 = Reflect.apply;
+var trustedSetAdd3 = Set.prototype.add;
+var trustedSetHas3 = Set.prototype.has;
+var trustedStringTrim2 = String.prototype.trim;
+var trustedStructuredClone3 = structuredClone;
+var trustedTextEncoder2 = new TextEncoder;
+var trustedTextEncoderEncode2 = TextEncoder.prototype.encode;
+var trustedWeakSetAdd2 = WeakSet.prototype.add;
+var trustedWeakSetConstructor = WeakSet;
+var trustedWeakSetHas2 = WeakSet.prototype.has;
+var AUTHORITY_RECORD_REFERENCE_ROLES = Object.freeze([
+  "record_member",
+  "record_predecessor",
+  "pointer_expected",
+  "pointer_successor",
+  "projection_source"
+]);
+var AUTHORITY_MUTATION_READBACK_AMBIGUITY_REASONS = Object.freeze([
+  "conflicting_duplicate_rows",
+  "artifacts_without_marker",
+  "marker_artifact_mismatch",
+  "malformed_snapshot",
+  "post_attempt_absence_unproven",
+  "post_attempt_readback_unavailable"
+]);
+var currentGatewayAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentConsequenceCutoffAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentTerminalObservationAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentIsolationTransitionAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+function createCurrentIsolationTransitionAuthorityCommitCapability() {
+  const capability = {
+    kind: "current-isolation-transition-authority-commit"
+  };
+  trustedReflectApply3(trustedWeakSetAdd2, currentIsolationTransitionAuthorityCommitCapabilities, [capability]);
+  return capability;
+}
+
+// src/protocol/store/authority-commit.ts
+var trustedSetAdd4 = Set.prototype.add;
+var trustedSetHas4 = Set.prototype.has;
+var trustedStructuredClone4 = structuredClone;
+
+// src/protocol/areas/isolation-breaker/authority-source/authority-state-schemas.ts
+var ISOLATION_AUTHORITY_SOURCE_VERSION = "isolation-authority-source-2";
+var ISOLATION_AUTHORITY_SOURCE_VERSION_V3 = "isolation-authority-source-3";
+var ISOLATION_CAUSE_RECORD_VERSION = "isolation-cause-record-1";
+var IsolationScopeSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  scopeType: IsolationStateSchema.shape.scopeType,
+  scopeId: IdSchema
+});
+var IsolationCauseSemanticsSchema = exports_external.strictObject({
+  state: BreakerIsolationDecisionSchema,
+  reasonCode: ReasonCodeSchema,
+  reasonSummary: exports_external.string().min(1).max(1000),
+  sourceDecisionRef: exports_external.string().min(1),
+  effectiveAt: IsoDateSchema,
+  expiresAt: IsoDateSchema.nullable(),
+  observedStreamOffsets: exports_external.array(StreamWatermarkSchema)
+});
+var IsolationCauseRecordWitnessSchema = exports_external.strictObject({
+  record: exports_external.strictObject({
+    recordKind: exports_external.literal("authority_evidence"),
+    localId: exports_external.string().min(1)
+  }),
+  semanticState: exports_external.literal("isolation_cause"),
+  version: exports_external.literal(1),
+  digest: DigestSchema
+});
+var IsolationCauseRecordPayloadSchema = exports_external.strictObject({
+  isolationCauseRecordVersion: exports_external.literal(ISOLATION_CAUSE_RECORD_VERSION),
+  scope: IsolationScopeSchema,
+  scopeDigest: DigestSchema,
+  causeId: IdSchema,
+  causeDigest: DigestSchema,
+  cause: IsolationCauseSemanticsSchema,
+  originalResult: IsolationStateSchema
+});
+var IsolationActiveCauseBindingSchema = exports_external.strictObject({
+  causeId: IdSchema,
+  causeDigest: DigestSchema,
+  causeRecord: IsolationCauseRecordWitnessSchema
+});
+var IsolationAuthoritySourcePayloadSchema = exports_external.strictObject({
+  isolationAuthoritySourceVersion: exports_external.literal(ISOLATION_AUTHORITY_SOURCE_VERSION),
+  scopeDigest: DigestSchema,
+  activeCauses: exports_external.array(IsolationActiveCauseBindingSchema).min(1),
+  activeCauseSetDigest: DigestSchema,
+  isolationState: IsolationStateSchema
+});
+var IsolationAuthoritySourcePayloadV3Schema = exports_external.strictObject({
+  isolationAuthoritySourceVersion: exports_external.literal(ISOLATION_AUTHORITY_SOURCE_VERSION_V3),
+  scopeDigest: DigestSchema,
+  chronologyVersion: exports_external.number().int().positive(),
+  activeCauses: exports_external.array(IsolationActiveCauseBindingSchema),
+  activeCauseSetDigest: DigestSchema,
+  isolationState: IsolationStateSchema
+});
+var IsolationAuthoritySourcePayloadAnySchema = exports_external.union([
+  IsolationAuthoritySourcePayloadSchema,
+  IsolationAuthoritySourcePayloadV3Schema
+]);
+
+// src/protocol/events/schemas.ts
+var ContractStreamEventSchema = ProtocolBaseSchema.extend({
+  streamEventId: IdSchema,
+  streamId: IdSchema,
+  streamScope: exports_external.enum(["tenant", "organization", "run", "protected_surface_resource"]),
+  offset: exports_external.number().int().nonnegative(),
+  partitionKey: exports_external.string().min(1),
+  eventType: exports_external.enum([
+    "intent_compiled",
+    "runtime_execution_recorded",
+    "generated_execution_graph_recorded",
+    "install_setup_recorded",
+    "install_setup_refused",
+    "gateway_credential_ref_registered",
+    "delegated_authority_ref_registered",
+    "delegated_authority_status_changed",
+    "gateway_custody_proof_packet_recorded",
+    "credential_resolution_recorded",
+    "typed_action_commitment_recorded",
+    "idempotency_ledger_recorded",
+    "bypass_probe_recorded",
+    "tool_call_draft_recorded",
+    "protected_path_posture_recorded",
+    "negotiation_session_recorded",
+    "negotiation_offer_recorded",
+    "negotiation_decision_recorded",
+    "linked_agreement_recorded",
+    "agreement_obligation_binding_recorded",
+    "agreement_status_transition_recorded",
+    "action_proposed",
+    "policy_decision_recorded",
+    "action_greenlit",
+    "action_refused",
+    "review_required",
+    "review_artifact_recorded",
+    "gateway_checked",
+    "mutation_attempted",
+    "protected_surface_operation_claimed",
+    "protected_surface_operation_released",
+    "surface_operation_reconciled",
+    "gateway_refused",
+    "review_decision_recorded",
+    "breaker_decision_recorded",
+    "receipt_emitted",
+    "authority_certificate_emitted",
+    "receipt_exported",
+    "raw_evidence_read_audited",
+    "recovery_recommended",
+    "recovery_status_changed",
+    "proof_gap_recorded",
+    "proof_gap_resolved",
+    "isolation_changed"
+  ]),
+  eventTime: IsoDateSchema,
+  producerRef: exports_external.string().min(1),
+  objectRefs: exports_external.array(exports_external.string().min(1)),
+  previousEventDigest: DigestSchema.nullable(),
+  eventDigest: DigestSchema,
+  payload: exports_external.record(exports_external.string(), JsonValueSchema)
+});
+
+// src/protocol/areas/generated-execution-graph/schemas.ts
+var GeneratedExecutionCoverageStatusSchema = exports_external.enum([
+  "fully_covered_no_unsupported_nodes",
+  "nonconsequential_only",
+  "contains_refusal",
+  "contains_coverage_gap",
+  "contains_bypass_risk",
+  "unsupported_or_ambiguous",
+  "unknown"
+]);
+var GeneratedExecutionNodeKindSchema = exports_external.enum([
+  "shell_command",
+  "codemode_action",
+  "observer_event",
+  "hidden_trigger",
+  "unknown"
+]);
+var GeneratedExecutionNodeClassificationSchema = exports_external.enum([
+  "candidate_action_eligible",
+  "read_only",
+  "nonconsequential",
+  "unsupported",
+  "ambiguous",
+  "bypass_risk",
+  "hidden_trigger",
+  "observer_only"
+]);
+var GraphIssuerAuthoritySchema = exports_external.enum(["host_runtime_adapter", "kernel_fixture", "conformance_fixture"]);
+var GraphTruncationStatusSchema = exports_external.enum(["complete", "truncated", "over_limit", "unknown"]);
+var GraphRedactionStatusSchema = exports_external.enum([
+  "redacted",
+  "digest_only",
+  "secret_refs_only",
+  "raw_material_present",
+  "unknown"
+]);
+var CommandRiskClassifierPostureSchema = exports_external.enum([
+  "absent",
+  "advisory_allow",
+  "advisory_no_match",
+  "deny",
+  "warn",
+  "fail_open",
+  "allowlist",
+  "allow_once",
+  "bypass_detected",
+  "skipped",
+  "unknown"
+]);
+var GeneratedExecutionGraphEdgeSchema = exports_external.strictObject({
+  fromNodeId: IdSchema,
+  toNodeId: IdSchema,
+  edgeKind: exports_external.enum(["sequence", "branch", "retry", "callback", "watcher", "unknown"])
+});
+var GeneratedExecutionNodeSchema = exports_external.strictObject({
+  nodeId: IdSchema,
+  nodeKind: GeneratedExecutionNodeKindSchema,
+  classification: GeneratedExecutionNodeClassificationSchema,
+  actionClass: exports_external.string().min(1).nullable().default(null),
+  toolCapabilityId: IdSchema.nullable().default(null),
+  actionTypeId: IdSchema.nullable().default(null),
+  gatewayRegistryEntryId: IdSchema.nullable().default(null),
+  resourceRef: ResourceRefSchema.nullable().default(null),
+  paramsDigest: DigestSchema.nullable().default(null),
+  nodeDigest: DigestSchema,
+  nodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  sourceSpanDigest: DigestSchema.nullable().default(null),
+  redactedArgvSummary: exports_external.array(exports_external.string()).default([]),
+  argvDigest: DigestSchema.nullable().default(null),
+  argvRedactionStatus: GraphRedactionStatusSchema,
+  stdinDigest: DigestSchema.nullable().default(null),
+  stdinRedactionStatus: GraphRedactionStatusSchema,
+  envAllowlistDigest: DigestSchema.nullable().default(null),
+  rawSecretMaterialDetected: exports_external.boolean().default(false),
+  commandRiskClassifierRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  commandRiskClassifierPosture: CommandRiskClassifierPostureSchema.default("absent"),
+  commandRiskRuleRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  commandRiskBypassRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  unsupportedReasonCodes: exports_external.array(ReasonCodeSchema).default([])
+});
+var GeneratedExecutionNodeInputSchema = GeneratedExecutionNodeSchema.omit({
+  nodeDigest: true
+});
+var GeneratedExecutionGraphSchema = ProtocolBaseSchema.extend({
+  generatedExecutionGraphId: IdSchema,
+  runtimeExecutionId: IdSchema,
+  runtimeExecutionDigest: DigestSchema,
+  executionBlockDigest: DigestSchema,
+  graphIssuerRef: exports_external.string().min(1),
+  graphIssuerAuthority: GraphIssuerAuthoritySchema,
+  graphIssuedAt: IsoDateSchema,
+  graphNonce: exports_external.string().min(8),
+  graphInputDigest: DigestSchema,
+  graphSchemaVersion: exports_external.string().min(1),
+  parserVersion: exports_external.string().min(1),
+  supportedGrammarVersion: exports_external.string().min(1),
+  coverageValidatorVersion: exports_external.string().min(1),
+  graphDigest: DigestSchema,
+  coverageStatus: GeneratedExecutionCoverageStatusSchema,
+  terminalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  entryNodeIds: exports_external.array(IdSchema).default([]),
+  edges: exports_external.array(GeneratedExecutionGraphEdgeSchema).default([]),
+  nodeCount: exports_external.number().int().nonnegative(),
+  edgeCount: exports_external.number().int().nonnegative(),
+  maxNodeCount: exports_external.number().int().positive(),
+  maxEdgeCount: exports_external.number().int().nonnegative(),
+  maxDepth: exports_external.number().int().positive(),
+  graphByteSize: exports_external.number().int().nonnegative(),
+  maxGraphByteSize: exports_external.number().int().positive(),
+  truncationStatus: GraphTruncationStatusSchema,
+  catalogSnapshotDigest: DigestSchema,
+  gatewayRegistrySnapshotDigest: DigestSchema,
+  registryBindingSetDigest: DigestSchema,
+  nodes: exports_external.array(GeneratedExecutionNodeSchema).default([])
+});
+var GeneratedGraphNodeProjectionRefSchema = exports_external.strictObject({
+  nodeId: IdSchema,
+  nodeDigest: DigestSchema,
+  classification: GeneratedExecutionNodeClassificationSchema,
+  actionTypeId: IdSchema.nullable().default(null),
+  gatewayRegistryEntryId: IdSchema.nullable().default(null),
+  nodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  unsupportedReasonCodes: exports_external.array(ReasonCodeSchema).default([])
+});
+var GeneratedGraphEvidenceProjectionSchema = exports_external.strictObject({
+  graphRef: IdSchema,
+  runtimeExecutionRef: IdSchema,
+  executionBlockDigest: DigestSchema,
+  coverageStatus: GeneratedExecutionCoverageStatusSchema,
+  terminalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  contractableNodeRefs: exports_external.array(GeneratedGraphNodeProjectionRefSchema).default([]),
+  refusedNodeRefs: exports_external.array(GeneratedGraphNodeProjectionRefSchema).default([]),
+  catalogDigest: DigestSchema,
+  gatewayRegistryDigest: DigestSchema,
+  redactionPosture: GraphRedactionStatusSchema,
+  graphDigest: DigestSchema
+});
+
+// src/protocol/areas/action-contract/schemas.ts
+var ActionContractSchema = ProtocolBaseSchema.extend({
+  actionContractId: IdSchema,
+  intentCompilationId: IdSchema,
+  candidateActionId: IdSchema,
+  candidateDigest: DigestSchema,
+  envelopeId: IdSchema,
+  operatingEnvelopeDigest: DigestSchema,
+  agentId: IdSchema,
+  principalId: IdSchema,
+  participantIdentityBindings: exports_external.array(ParticipantIdentityBindingSchema).default([]),
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  sequenceNumber: exports_external.number().int().nonnegative(),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
+  recoveryRecommendationId: IdSchema.nullable(),
+  recoverySourceReceiptId: IdSchema.nullable(),
+  recoveryRecommendationDigest: DigestSchema.nullable(),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema,
+  gatewayRegistryVersion: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  gatewayPolicyContractId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  credentialCustodyStatus: CredentialCustodyStatusSchema,
+  enforcementMode: GatewayEnforcementModeSchema,
+  mutationCredentialHolderRef: exports_external.string().min(1),
+  gatewayAuthorityHolderRef: exports_external.string().min(1),
+  toolCapabilityId: IdSchema,
+  toolCapabilityDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionTypeDigest: DigestSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  requiredProtectedPathState: RequiredProtectedPathStateSchema,
+  runtimeExecutionId: IdSchema.nullable(),
+  runtimeExecutionDigest: DigestSchema.nullable(),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
+  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  purposeCode: exports_external.string().min(1),
+  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  rollbackHint: exports_external.string().max(500).nullable(),
+  canonicalizerVersion: exports_external.string().min(1),
+  actionContractDigest: DigestSchema,
+  contractSignature: SignatureSchema.nullable(),
+  signaturePosture: SignaturePostureSchema,
+  keyIdentityRef: exports_external.string().min(1).nullable(),
+  verificationPolicyRef: exports_external.string().min(1).nullable()
+});
+
+// src/protocol/foundation/authority-safe-reference/index.ts
+var AuthoritySafeReferenceSchema = exports_external.string().min(1).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "authority references must carry opaque refs or digests, not raw authority material"
+});
+function looksLikeEndpointAccessSecret(value) {
+  return endpointAccessStringVariants(value).some((variant) => [
+    /BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE KEY/i,
+    /PAYMENT-SIGNATURE\s*:/i,
+    /raw[_-]?payment[_-]?signature/i,
+    /private[_-]?key/i,
+    /api[_-]?key\s*=/i,
+    /access[_-]?token\s*=/i,
+    /bearer\s+[A-Za-z0-9._~+/-]+=*/i,
+    /secret\s*=/i,
+    /password\s*=/i,
+    /vault:\/\/.*\/secret/i,
+    /infisical:\/\/.*\/secret/i
+  ].some((pattern) => pattern.test(variant)));
+}
+function endpointAccessStringVariants(value) {
+  const variants = new Set([value]);
+  try {
+    variants.add(decodeURIComponent(value));
+  } catch {}
+  for (const token of value.match(/[A-Za-z0-9+/_=-]{16,}/g) ?? []) {
+    const decoded = decodeBase64Like4(token);
+    if (decoded)
+      variants.add(decoded);
+  }
+  return [...variants];
+}
+function decodeBase64Like4(token) {
+  const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+    return null;
+  const paddingLength = (4 - normalized.length % 4) % 4;
+  try {
+    const decoded = atob(`${normalized}${"=".repeat(paddingLength)}`);
+    return /^[\x09\x0a\x0d\x20-\x7e]+$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/protocol/areas/agentic-endpoint-access/schemas.ts
+var agenticEndpointAccessSchemaVersion = "handshake.agentic-endpoint-access.v0.3.0";
+var AgenticEndpointAccessSafeReferenceSchema = AuthoritySafeReferenceSchema.describe("Rejects raw authority material such as PAYMENT-SIGNATURE, private keys, API keys, access tokens, and bearer tokens.");
+var AuthoritySafeStringSchema2 = AgenticEndpointAccessSafeReferenceSchema;
+var NonNegativeCounterSchema = exports_external.number().finite().nonnegative();
+var PositiveLimitSchema = exports_external.number().finite().positive();
+var BudgetSchema = exports_external.record(exports_external.string(), JsonValueSchema).default({});
+var EndpointAccessSurfaceBindingSourceSchema = exports_external.enum([
+  "protocol_config",
+  "cloud_config",
+  "ae_projection",
+  "operator_config",
+  "fixture"
+]);
+var EndpointAccessSurfaceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  actionClass: AuthoritySafeStringSchema2,
+  protectedSurfaceIntegrationRef: ResourceRefSchema.nullable().default(null),
+  bindingSource: EndpointAccessSurfaceBindingSourceSchema,
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  bindingDigest: DigestSchema
+});
+var AgenticEndpointAccessAuthorityBoundarySchema = exports_external.strictObject({
+  permitsEndpointAccess: exports_external.literal(true),
+  permitsMutation: exports_external.literal(false),
+  createsIndependentPolicyDecision: exports_external.literal(false),
+  createsIndependentGreenlight: exports_external.literal(false),
+  performsIndependentGatewayCheck: exports_external.literal(false),
+  exportsDownstreamReceipt: exports_external.literal(false),
+  mintsTerminalCertificate: exports_external.literal(false),
+  containsCredentialMaterial: exports_external.literal(false),
+  containsPaymentMaterial: exports_external.literal(false),
+  widensOperatingBounds: exports_external.literal(false),
+  freshActionContractRequiredForDownstreamAction: exports_external.literal(true)
+});
+var AgenticEndpointAccessBypassPostureSchema = exports_external.enum([
+  "blocked",
+  "unblocked",
+  "unknown",
+  "stale",
+  "inconclusive"
+]);
+var AgenticEndpointAccessStateSchema = exports_external.enum([
+  "attempted",
+  "leased",
+  "refused",
+  "proof_gap",
+  "expired",
+  "exhausted",
+  "quarantined",
+  "revoked"
+]);
+var AgenticEndpointAccessClearanceStatusSchema = exports_external.enum(["leased", "refused", "proof_gap"]);
+var AgenticEndpointAccessFailClosedBehaviorSchema = exports_external.enum(["refuse", "proof_gap", "quarantine"]);
+var AgenticEndpointAccessUsageKindSchema = exports_external.enum(["request", "token", "tool_call", "cost_unit"]);
+var AgenticEndpointAccessCapabilityStatusSchema = exports_external.enum(["supported", "unsupported", "stale", "unknown"]);
+var AgenticEndpointAccessRequestEvidenceSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  requestMethod: AuthoritySafeStringSchema2,
+  requestUrlDigest: DigestSchema,
+  requestHeaderDigest: DigestSchema,
+  requestBodyDigest: DigestSchema,
+  redactionPolicyId: AuthoritySafeStringSchema2,
+  requestEvidenceDigest: DigestSchema
+});
+var AgenticEndpointAccessPolicySchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  policyId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  operatingBoundsId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  requiredDelegationEvidence: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  acceptedAgentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  principalBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  agentBindingRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  runtimePostureRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  rawBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  siblingBypassPostureRequirements: exports_external.array(AgenticEndpointAccessBypassPostureSchema).default(["blocked"]),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  leaseTtlSeconds: PositiveLimitSchema,
+  failClosedBehavior: AgenticEndpointAccessFailClosedBehaviorSchema,
+  capabilityRequirements: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema
+});
+var AgenticEndpointAccessAttemptSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  generatedCodeOrSpecRef: AuthoritySafeStringSchema2,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  objectiveRef: AuthoritySafeStringSchema2,
+  delegationEvidenceRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  agentRegistrationRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  runtimePostureRefs: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
+  requestedLeaseTtlSeconds: PositiveLimitSchema,
+  requestedBudget: BudgetSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  capabilitiesPresented: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  attemptedAt: IsoDateSchema
+});
+var AgenticEndpointAccessClearanceBindingSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  clearanceBindingId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema.nullable(),
+  greenlightId: IdSchema.nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema.nullable(),
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  refusalRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  clearanceStatus: AgenticEndpointAccessClearanceStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evaluatedAt: IsoDateSchema
+});
+var AgenticEndpointAccessLeaseSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  leaseId: IdSchema,
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  gatewayCheckAttemptId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  operatingBoundsId: IdSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  allowedUse: exports_external.literal("bounded_endpoint_entry_only"),
+  rateLimit: BudgetSchema,
+  tokenBudget: BudgetSchema,
+  toolBudget: BudgetSchema,
+  costBudget: BudgetSchema,
+  usageCounters: exports_external.record(exports_external.string(), NonNegativeCounterSchema).default({}),
+  issuedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  revokedAt: IsoDateSchema.nullable().default(null),
+  authorityBoundary: AgenticEndpointAccessAuthorityBoundarySchema
+});
+var AgenticEndpointAccessUsageEventSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  usageEventId: IdSchema,
+  leaseId: IdSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  usageKind: AgenticEndpointAccessUsageKindSchema,
+  amount: PositiveLimitSchema,
+  counterAfter: NonNegativeCounterSchema,
+  occurredAt: IsoDateSchema,
+  proofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([])
+});
+var AgenticEndpointAccessReadbackSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  readbackId: IdSchema,
+  leaseId: IdSchema.nullable(),
+  attemptId: IdSchema,
+  candidateActionId: IdSchema,
+  attemptDigest: DigestSchema,
+  requestEvidence: AgenticEndpointAccessRequestEvidenceSchema,
+  protectedSurfaceBindingId: IdSchema,
+  protectedSurfaceBindingDigest: DigestSchema,
+  protectedSurfaceRef: ResourceRefSchema,
+  protectedSurfaceKind: AuthoritySafeStringSchema2,
+  resourceRef: ResourceRefSchema,
+  policyVersionId: IdSchema,
+  configRevision: AuthoritySafeStringSchema2,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  runtimePostureRef: AuthoritySafeStringSchema2,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityHolderRef: AuthoritySafeStringSchema2,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  capabilityReportRef: AuthoritySafeStringSchema2,
+  healthReportRef: AuthoritySafeStringSchema2,
+  usageSummary: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  linkedActionRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedReceiptRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  linkedProofGapRefs: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  publicVerifyUrl: exports_external.string().url(),
+  downstreamReceiptBoundary: exports_external.literal("linked_receipts_are_not_endpoint_access_authorization")
+});
+var AgenticEndpointAccessCapabilitiesSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(agenticEndpointAccessSchemaVersion),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  createdAt: IsoDateSchema,
+  capabilityReportId: IdSchema,
+  kernelVersion: AuthoritySafeStringSchema2,
+  middlewareVersion: AuthoritySafeStringSchema2,
+  cloudConfigRevision: AuthoritySafeStringSchema2,
+  runtimePostureStatus: AgenticEndpointAccessCapabilityStatusSchema,
+  rawBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  siblingBypassPosture: AgenticEndpointAccessBypassPostureSchema,
+  supportedEndpointAccessSchemaVersions: exports_external.array(AuthoritySafeStringSchema2).min(1),
+  supportedDelegationEvidenceKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedPolicyFeatures: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  supportedReadbackKinds: exports_external.array(AuthoritySafeStringSchema2).default([]),
+  failClosedReasons: exports_external.array(ReasonCodeSchema).default([]),
+  reportedAt: IsoDateSchema
+});
+
 // src/protocol/areas/protected-path-posture/schemas.ts
 var ProtectedPathStateSchema = exports_external.enum(["gateway_checked", "advisory", "bypass_risk", "blind", "fixture_only"]);
 var RawSiblingToolStatusSchema = exports_external.enum(["absent", "blocked", "present", "unknown"]);
@@ -15746,6 +18313,1400 @@ var ProtectedPathPostureSchema = ProtocolBaseSchema.extend({
   postureDigest: DigestSchema
 });
 
+// src/protocol/areas/gateway-gate/schemas.ts
+var GateDecisionSchema = exports_external.enum(["passed", "refused", "proof_gap"]);
+var GatewayCheckAttemptSchema = ProtocolBaseSchema.extend({
+  gateAttemptId: IdSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyContractId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  pinnedGatewayPolicyVersion: exports_external.string().min(1),
+  currentGatewayPolicyVersion: exports_external.string().min(1).nullable(),
+  gatewayPolicyDriftStatus: exports_external.enum(["same_version", "compatible_stricter", "incompatible", "unknown"]),
+  actionContractId: IdSchema,
+  greenlightId: IdSchema,
+  contractDigestSeen: DigestSchema,
+  greenlightDigestSeen: DigestSchema,
+  paramsDigestSeen: DigestSchema,
+  idempotencyKeySeen: IdSchema,
+  isolationSnapshotRef: exports_external.string().min(1),
+  protectedPathPostureIdSeen: IdSchema.nullable(),
+  protectedPathPostureDigestSeen: DigestSchema.nullable(),
+  protectedPathPostureStateSeen: ProtectedPathStateSchema.nullable(),
+  observedTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  observedTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentRefusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  gateDecision: GateDecisionSchema,
+  gateDecisionReasonCode: ReasonCodeSchema,
+  consumedGreenlight: exports_external.boolean(),
+  mutationAttemptId: IdSchema.nullable()
+});
+var MutationAttemptSchema = ProtocolBaseSchema.extend({
+  mutationAttemptId: IdSchema,
+  gateAttemptId: IdSchema,
+  actionContractId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  idempotencyKey: IdSchema,
+  outcome: exports_external.enum(["not_attempted", "submitted", "succeeded", "downstream_refused", "failed", "unknown"]),
+  outcomeReasonCode: ReasonCodeSchema,
+  surfaceOperationRef: exports_external.string().min(1).nullable(),
+  startedAt: IsoDateSchema,
+  finishedAt: IsoDateSchema.nullable()
+});
+
+// src/protocol/areas/idempotency-ledger/schemas.ts
+var IdempotencyLedgerStateSchema = exports_external.enum([
+  "authority_reserved",
+  "mutation_started",
+  "terminal_succeeded",
+  "terminal_failed",
+  "terminal_refused",
+  "terminal_unknown"
+]);
+var IdempotencyLedgerEntrySchema = ProtocolBaseSchema.extend({
+  idempotencyLedgerEntryId: IdSchema,
+  ledgerKeyDigest: DigestSchema,
+  gatewayId: IdSchema,
+  protectedSurfaceKind: exports_external.string().min(1),
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  idempotencyKey: IdSchema,
+  paramsDigest: DigestSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema.nullable(),
+  gateAttemptId: IdSchema.nullable(),
+  mutationAttemptId: IdSchema.nullable(),
+  receiptId: IdSchema.nullable(),
+  ledgerState: IdempotencyLedgerStateSchema,
+  reasonCode: ReasonCodeSchema,
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  firstReservedAt: IsoDateSchema,
+  updatedAt: IsoDateSchema,
+  ledgerDigest: DigestSchema
+});
+
+// src/protocol/areas/operation-lifecycle/schemas.ts
+var ProtectedSurfaceOperationClaimStateSchema = exports_external.enum([
+  "active",
+  "terminal_succeeded",
+  "terminal_refused",
+  "terminal_failed",
+  "terminal_unknown",
+  "isolated"
+]);
+var DownstreamRetryabilitySchema = exports_external.enum(["retryable", "non_retryable", "unknown"]);
+var DownstreamDiagnosticsRedactionPostureSchema = exports_external.enum(["redacted", "digest_only", "none", "unknown"]);
+var ProtectedSurfaceOperationClaimSchema = ProtocolBaseSchema.extend({
+  protectedSurfaceOperationClaimId: IdSchema,
+  claimKeyDigest: DigestSchema,
+  gatewayId: IdSchema,
+  protectedSurfaceKind: exports_external.string().min(1),
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  actionContractId: IdSchema,
+  greenlightId: IdSchema,
+  gateAttemptId: IdSchema,
+  mutationAttemptId: IdSchema.nullable(),
+  claimState: ProtectedSurfaceOperationClaimStateSchema,
+  claimedAt: IsoDateSchema,
+  terminalAt: IsoDateSchema.nullable(),
+  terminalReasonCode: ReasonCodeSchema.nullable(),
+  releasedByRef: exports_external.string().min(1).nullable(),
+  claimDigest: DigestSchema
+});
+var SurfaceOperationReconciliationSchema = ProtocolBaseSchema.extend({
+  reconciliationId: IdSchema,
+  mutationAttemptId: IdSchema,
+  gateAttemptId: IdSchema,
+  actionContractId: IdSchema,
+  greenlightId: IdSchema,
+  gatewayId: IdSchema,
+  idempotencyKey: IdSchema,
+  surfaceOperationRef: exports_external.string().min(1).nullable(),
+  previousMutationOutcome: MutationAttemptSchema.shape.outcome,
+  observedDownstreamStatus: exports_external.enum(["pending", "succeeded", "refused", "failed", "unknown"]),
+  downstreamRetryability: DownstreamRetryabilitySchema.default("unknown"),
+  providerRequestRef: exports_external.string().min(1).nullable().default(null),
+  providerOperationRef: exports_external.string().min(1).nullable().default(null),
+  redactedDiagnosticsDigest: DigestSchema.nullable().default(null),
+  traceRef: exports_external.string().min(1).nullable().default(null),
+  spanRef: exports_external.string().min(1).nullable().default(null),
+  diagnosticsRedactionPosture: DownstreamDiagnosticsRedactionPostureSchema.default("unknown"),
+  observedAt: IsoDateSchema,
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  resolvedProofGapIds: exports_external.array(IdSchema).default([]),
+  reconciliationStatus: exports_external.enum(["pending", "resolved", "still_unknown", "failed"]),
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"])
+});
+
+// src/protocol/areas/policy-greenlight/schemas.ts
+var PolicyDecisionValueSchema = exports_external.enum([
+  "greenlight",
+  "refuse",
+  "review_required",
+  "halt",
+  "quarantine",
+  "proof_gap"
+]);
+var PolicyDecisionSchema = ProtocolBaseSchema.extend({
+  policyDecisionId: IdSchema,
+  actionContractId: IdSchema,
+  envelopeId: IdSchema,
+  policyPackRef: exports_external.string().min(1),
+  policyPackVersion: exports_external.string().min(1),
+  policyEvaluatorVersion: exports_external.string().min(1),
+  policyInputDigest: DigestSchema,
+  decision: PolicyDecisionValueSchema,
+  decisionReasonCode: ReasonCodeSchema,
+  decisionReason: exports_external.string().min(1).max(1000),
+  matchedRuleIds: exports_external.array(exports_external.string()).default([]),
+  requiredReceipt: exports_external.enum(["none", "gate", "mutation", "downstream_finality"]),
+  isolationSnapshotRef: exports_external.string().min(1),
+  expiresAt: IsoDateSchema,
+  decisionSignature: SignatureSchema.nullable(),
+  signaturePosture: SignaturePostureSchema,
+  keyIdentityRef: exports_external.string().min(1).nullable(),
+  verificationPolicyRef: exports_external.string().min(1).nullable()
+});
+var GreenlightSchema = ProtocolBaseSchema.extend({
+  greenlightId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema.nullable().default(null),
+  gatewayRegistryVersion: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  policyVersionRef: exports_external.string().min(1).nullable().default(null),
+  policyVersionDigest: DigestSchema.nullable().default(null),
+  gatewayReadinessRef: exports_external.string().min(1).nullable().default(null),
+  gatewayReadinessDigest: DigestSchema.nullable().default(null),
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  requiredProtectedPathState: RequiredProtectedPathStateSchema,
+  protectedPathPostureId: IdSchema.nullable(),
+  protectedPathPostureDigest: DigestSchema.nullable(),
+  gatewayCredentialRefIds: exports_external.array(IdSchema).default([]),
+  gatewayCredentialRefDigests: exports_external.array(DigestSchema).default([]),
+  delegatedAuthorityRefIds: exports_external.array(IdSchema).default([]),
+  delegatedAuthorityRefDigests: exports_external.array(DigestSchema).default([]),
+  requiredTypedCommitmentRefs: exports_external.array(IdSchema).default([]),
+  requiredTypedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  paramsDigest: DigestSchema,
+  contractDigest: DigestSchema,
+  idempotencyKey: IdSchema.nullable().default(null),
+  idempotencyLedgerKeyDigest: DigestSchema.nullable().default(null),
+  maxUses: exports_external.literal(1),
+  issuedAt: IsoDateSchema,
+  notBefore: IsoDateSchema,
+  expiresAt: IsoDateSchema,
+  isolationSnapshotRef: exports_external.string().min(1),
+  requiredReceipt: exports_external.enum(["none", "gate", "mutation", "downstream_finality"]),
+  decisionSignature: SignatureSchema.nullable(),
+  signaturePosture: SignaturePostureSchema,
+  keyIdentityRef: exports_external.string().min(1).nullable(),
+  verificationPolicyRef: exports_external.string().min(1).nullable(),
+  consumedAt: IsoDateSchema.nullable(),
+  consumedByGateAttemptId: IdSchema.nullable()
+});
+
+// src/protocol/areas/intent-compilation/delegation-evidence-ref.ts
+var DelegationEvidenceRefSchema = exports_external.object({
+  delegationEvidenceRefId: IdSchema,
+  evidenceBindingDigest: DigestSchema,
+  a1ChainFingerprint: DigestSchema,
+  storeRef: exports_external.string().min(1).refine((value) => !/signedChain|certs|signature|delegator_pk|delegate_pk/i.test(value), {
+    message: "storeRef must not embed raw A1 wire payloads"
+  }),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  a1VerifierVersion: exports_external.string().min(1)
+}).strict();
+
+// src/protocol/areas/intent-compilation/schemas.ts
+var CandidateActionStatusSchema = exports_external.enum(["contractable", "rejected"]);
+var CandidateActionSchema = exports_external.strictObject({
+  candidateActionId: IdSchema,
+  candidateStatus: CandidateActionStatusSchema,
+  candidateDigest: DigestSchema.nullable(),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  toolCapabilityId: IdSchema,
+  toolCapabilityDigest: DigestSchema.nullable(),
+  toolCatalogVersion: exports_external.string().min(1).nullable(),
+  actionTypeId: IdSchema,
+  actionTypeDigest: DigestSchema.nullable(),
+  actionCatalogVersion: exports_external.string().min(1).nullable(),
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema.nullable(),
+  gatewayRegistryVersion: exports_external.string().min(1).nullable(),
+  operatingEnvelopeId: IdSchema,
+  operatingEnvelopeDigest: DigestSchema.nullable(),
+  actionClass: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  sequenceNumber: exports_external.number().int().nonnegative(),
+  requiredPriorActionContractIds: exports_external.array(IdSchema).default([]),
+  recoveryRecommendationId: IdSchema.nullable(),
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  purposeCode: exports_external.string().min(1),
+  expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  idempotencyKey: IdSchema,
+  rollbackHint: exports_external.string().max(500).nullable(),
+  expiresAt: IsoDateSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionGraphDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCoverageStatus: GeneratedExecutionCoverageStatusSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  generatedExecutionNodeDigest: DigestSchema.nullable().default(null),
+  generatedExecutionCatalogSnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionGatewayRegistrySnapshotDigest: DigestSchema.nullable().default(null),
+  generatedExecutionRegistryBindingSetDigest: DigestSchema.nullable().default(null),
+  generatedExecutionNodeGatewayBindingDigest: DigestSchema.nullable().default(null),
+  toolCallDraftId: IdSchema.nullable().default(null),
+  toolCallDraftDigest: DigestSchema.nullable().default(null),
+  toolCallDraftState: exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]).nullable().default(null),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null)
+});
+var IntentCompilationRecordSchema = ProtocolBaseSchema.extend({
+  intentCompilationId: IdSchema,
+  principalIntentRef: exports_external.string().min(1),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  operatingEnvelopeId: IdSchema,
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  runtimeExecutionDigest: DigestSchema.nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string()).default([]),
+  candidateAction: CandidateActionSchema,
+  candidateActionContractRefs: exports_external.array(IdSchema).default([]),
+  rejectedCandidateRefs: exports_external.array(IdSchema).default([]),
+  overreachReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  compilationRefusalId: IdSchema.nullable().default(null),
+  compilerVersion: exports_external.string().min(1)
+});
+// src/protocol/areas/intent-compilation/inputs.ts
+var CompileIntentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  principalIntentRef: exports_external.string().min(1),
+  principalId: exports_external.string().min(1),
+  agentId: exports_external.string().min(1),
+  runId: exports_external.string().min(1),
+  runtimeAdapterId: exports_external.string().min(1),
+  operatingEnvelopeId: exports_external.string().min(1),
+  toolCatalogRef: exports_external.string().min(1),
+  actionCatalogRef: exports_external.string().min(1),
+  gatewayRegistryRef: exports_external.string().min(1),
+  runtimeExecutionId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionGraphId: exports_external.string().min(1).nullable().default(null),
+  generatedExecutionNodeId: exports_external.string().min(1).nullable().default(null),
+  toolCallDraftId: exports_external.string().min(1).nullable().default(null),
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string()).default([]),
+  requiredEvidenceRefs: exports_external.array(exports_external.string()).default([]),
+  delegationEvidenceRef: DelegationEvidenceRefSchema.nullable().default(null),
+  candidate: exports_external.strictObject({
+    toolCapabilityId: exports_external.string().min(1),
+    actionTypeId: exports_external.string().min(1),
+    gatewayRegistryEntryId: exports_external.string().min(1),
+    actionClass: exports_external.string().min(1),
+    gatewayId: exports_external.string().min(1),
+    resourceRef: exports_external.string().min(1),
+    sequenceNumber: exports_external.number().int().nonnegative(),
+    requiredPriorActionContractIds: exports_external.array(exports_external.string().min(1)).default([]),
+    recoveryRecommendationId: exports_external.string().min(1).nullable().default(null),
+    parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+    nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+    secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+    gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+    delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+    purposeCode: exports_external.string().min(1),
+    expectedSideEffectCodes: exports_external.array(exports_external.string().min(1)),
+    evidenceRefs: exports_external.array(exports_external.string()).default([]),
+    clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+    bounds: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+    idempotencyKey: exports_external.string().min(1),
+    rollbackHint: exports_external.string().max(500).nullable().default(null),
+    expiresAt: exports_external.string().datetime({ offset: true })
+  }),
+  compilerVersion: exports_external.string().min(1).default("handshake-compiler-0.2")
+});
+// src/protocol/areas/refusal/schemas.ts
+var RefusalPhaseSchema = exports_external.enum([
+  "compilation",
+  "policy",
+  "gateway",
+  "receipt_export",
+  "recovery",
+  "review",
+  "transition"
+]);
+var RefusalSchema = ProtocolBaseSchema.extend({
+  refusalId: IdSchema,
+  phase: RefusalPhaseSchema,
+  actionContractId: IdSchema.nullable(),
+  policyDecisionId: IdSchema.nullable(),
+  greenlightId: IdSchema.nullable(),
+  gateAttemptId: IdSchema.nullable(),
+  refusedObjectRef: exports_external.string().min(1).nullable(),
+  reasonCode: ReasonCodeSchema,
+  reason: exports_external.string().min(1).max(1000),
+  mutationAttempted: exports_external.literal(false),
+  authorityCreated: exports_external.literal(false),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  refusedAt: IsoDateSchema
+});
+// src/protocol/areas/receipt-export/delegation-provenance.ts
+var ReceiptDelegationProvenanceSchema = exports_external.strictObject({
+  a1ChainFingerprint: DigestSchema,
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: DigestSchema,
+  terminalDelegatePkFingerprint: DigestSchema,
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: DigestSchema,
+  a1VerifierVersion: exports_external.string().min(1),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+});
+
+// src/protocol/areas/receipt-export/schemas.ts
+var GatewayAdmissionStatusSchema = exports_external.enum(["not_requested", "admitted", "refused", "proof_gap", "replayed"]);
+var DownstreamOutcomeStatusSchema = exports_external.enum([
+  "not_started",
+  "pending",
+  "succeeded",
+  "refused",
+  "failed",
+  "unknown"
+]);
+var ReceiptStreamReferenceSchema = exports_external.strictObject({
+  streamId: IdSchema,
+  streamScope: exports_external.enum(["tenant", "organization", "run", "protected_surface_resource"]),
+  partitionKey: exports_external.string().min(1),
+  offsetStart: exports_external.number().int().nonnegative(),
+  offsetEnd: exports_external.number().int().nonnegative(),
+  terminalEventDigest: DigestSchema
+}).refine((reference) => reference.offsetStart <= reference.offsetEnd, {
+  message: "offsetEnd must be greater than or equal to offsetStart",
+  path: ["offsetEnd"]
+});
+var ReceiptSchema = ProtocolBaseSchema.extend({
+  receiptId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema.nullable(),
+  gateAttemptId: IdSchema.nullable(),
+  mutationAttemptId: IdSchema.nullable(),
+  gatewayId: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  gatewayCheckStatus: GateDecisionSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  greenlightConsumptionStatus: exports_external.enum(["not_applicable", "not_consumed", "consumed", "replayed"]),
+  mutationAttemptStatus: exports_external.enum(["not_attempted", "submitted", "succeeded", "downstream_refused", "failed", "unknown"]),
+  downstreamExecutionStatus: exports_external.enum(["not_started", "pending", "succeeded", "refused", "failed", "unknown"]),
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  proofGapIds: exports_external.array(IdSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  streamEventIds: exports_external.array(IdSchema).default([]),
+  streamOffsets: exports_external.array(ReceiptStreamReferenceSchema).default([]),
+  receiptDigest: DigestSchema.nullable(),
+  auditChainDigest: DigestSchema.nullable(),
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]),
+  emittedAt: IsoDateSchema
+});
+var ReceiptExportSchema = ProtocolBaseSchema.extend({
+  receiptExportId: IdSchema,
+  receiptId: IdSchema,
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema.nullable(),
+  gateAttemptId: IdSchema.nullable(),
+  mutationAttemptId: IdSchema.nullable(),
+  gatewayId: IdSchema,
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  gatewayCheckStatus: GateDecisionSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  gatewayCheckedAt: IsoDateSchema.nullable(),
+  greenlightConsumptionStatus: ReceiptSchema.shape.greenlightConsumptionStatus,
+  mutationAttemptStatus: ReceiptSchema.shape.mutationAttemptStatus,
+  downstreamExecutionStatus: ReceiptSchema.shape.downstreamExecutionStatus,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  proofGapStatus: exports_external.enum(["none", "present"]),
+  proofGapIds: exports_external.array(IdSchema).default([]),
+  proofGapReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  finalityStatus: ReceiptSchema.shape.finalityStatus,
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  streamOffsets: exports_external.array(ReceiptStreamReferenceSchema).default([]),
+  receiptDigest: DigestSchema,
+  auditChainDigest: DigestSchema,
+  signaturePosture: SignaturePostureSchema,
+  keyIdentityRef: exports_external.string().min(1).nullable(),
+  verificationPolicyRef: exports_external.string().min(1).nullable(),
+  exportFormat: exports_external.enum(["json", "redacted_json"]),
+  redactionProfileRef: exports_external.string().min(1),
+  exportPurposeCode: exports_external.string().min(1),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: IsoDateSchema.nullable(),
+  exportedAt: IsoDateSchema,
+  exportDigest: DigestSchema,
+  delegationProvenance: ReceiptDelegationProvenanceSchema.optional()
+});
+
+// src/protocol/areas/typed-action-commitment/schemas.ts
+var TypedActionCommitmentProfileSchema = exports_external.enum(["handshake_jcs_typed", "eip712"]);
+var TypedActionCommitmentPurposeSchema = exports_external.enum([
+  "external_commitment_evidence",
+  "policy_required_evidence",
+  "service_workflow_readback",
+  "post_gateway_payment_evidence",
+  "display_binding_evidence"
+]);
+var TypedActionCommitmentProjectionClassSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_export"
+]);
+var TypedActionCommitmentVerificationStatusSchema = exports_external.enum([
+  "unverified",
+  "verified",
+  "refused",
+  "proof_gap",
+  "unsupported"
+]);
+var TypedActionCommitmentReplayStatusSchema = exports_external.enum([
+  "fresh",
+  "stale",
+  "replayed",
+  "missing",
+  "not_applicable"
+]);
+var TypedActionCommitmentSafetyPostureSchema = exports_external.enum([
+  "display_bound",
+  "digest_bound",
+  "verifier_bound",
+  "provider_observed",
+  "proof_gap",
+  "refused"
+]);
+var TypedCommitmentSafeReferenceSchema = AuthoritySafeReferenceSchema;
+var TypedActionCommitmentSubjectSchema = exports_external.strictObject({
+  kind: exports_external.enum([
+    "action_contract",
+    "service_workflow",
+    "x402_payment",
+    "agentic_endpoint_access",
+    "protected_surface",
+    "external_evidence"
+  ]),
+  ref: ResourceRefSchema,
+  digest: DigestSchema
+});
+var TypedActionCommitmentDomainSchema = exports_external.strictObject({
+  domainRef: TypedCommitmentSafeReferenceSchema,
+  domainDigest: DigestSchema.nullable().default(null),
+  tenantId: IdSchema.nullable().default(null),
+  organizationId: IdSchema.nullable().default(null),
+  gatewayId: IdSchema.nullable().default(null),
+  actionClass: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  providerEnvironmentRef: TypedCommitmentSafeReferenceSchema.nullable().default(null)
+});
+var TypedActionCommitmentTypedPayloadSchema = exports_external.record(exports_external.string(), JsonValueSchema).superRefine((payload, ctx) => {
+  for (const issue2 of rawMaterialIssues(payload)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: issue2
+    });
+  }
+});
+var TypedActionCommitmentReplayPostureSchema = exports_external.strictObject({
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  nonceDigest: DigestSchema.nullable().default(null),
+  issuedAt: IsoDateSchema.nullable().default(null),
+  expiresAt: IsoDateSchema.nullable().default(null),
+  replayWindowSeconds: exports_external.number().int().positive().nullable().default(null)
+});
+var TypedActionCommitmentSignerOrVerifierSchema = exports_external.strictObject({
+  verifierRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  keyId: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureRef: TypedCommitmentSafeReferenceSchema.nullable().default(null),
+  signatureDigest: DigestSchema.nullable().default(null),
+  providerNativeDigest: DigestSchema.nullable().default(null),
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable().default(null)
+});
+var TypedActionCommitmentAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  authorizesMutation: exports_external.literal(false),
+  createsReceipt: exports_external.literal(false),
+  mintsCertificate: exports_external.literal(false),
+  provesPrincipalConsent: exports_external.literal(false),
+  provesSignerCustody: exports_external.literal(false),
+  provesPaymentCustody: exports_external.literal(false),
+  createsEndpointLease: exports_external.literal(false),
+  provesDownstreamSuccess: exports_external.literal(false)
+});
+var typedActionCommitmentAuthorityBoundary = {
+  createsPolicyDecision: false,
+  createsGreenlight: false,
+  performsGatewayCheck: false,
+  authorizesMutation: false,
+  createsReceipt: false,
+  mintsCertificate: false,
+  provesPrincipalConsent: false,
+  provesSignerCustody: false,
+  provesPaymentCustody: false,
+  createsEndpointLease: false,
+  provesDownstreamSuccess: false
+};
+var TypedActionCommitmentSummarySchema = exports_external.strictObject({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  subjectDigest: DigestSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  verifierContextDigest: DigestSchema.nullable().default(null),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema
+});
+var TypedActionCommitmentRecordSchema = ProtocolBaseSchema.extend({
+  typedActionCommitmentId: IdSchema,
+  commitmentDigest: DigestSchema,
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema,
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema,
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  proofGapRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  evidenceRefs: exports_external.array(TypedCommitmentSafeReferenceSchema).default([]),
+  recordedAt: IsoDateSchema
+});
+function rawMaterialIssues(value, path = []) {
+  if (value === null || value === undefined)
+    return [];
+  if (typeof value === "string") {
+    return looksLikeEndpointAccessSecret(value) ? [`typed action commitments must store refs or digests, not raw authority material at ${path.join(".")}`] : [];
+  }
+  if (typeof value !== "object")
+    return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => rawMaterialIssues(item, [...path, String(index)]));
+  }
+  const issues = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (isForbiddenRawMaterialKey(key)) {
+      issues.push(`typed action commitments must not store raw material field ${[...path, key].join(".")}`);
+    }
+    issues.push(...rawMaterialIssues(nested, [...path, key]));
+  }
+  return issues;
+}
+function isForbiddenRawMaterialKey(key) {
+  return /raw.*(secret|credential|payment|private.*key|signature)|private.*key|secret.*material/i.test(key);
+}
+// src/protocol/areas/typed-action-commitment/inputs.ts
+var RecordTypedActionCommitmentInputSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  typedActionCommitmentId: exports_external.string().min(1).optional(),
+  actionContractId: IdSchema.nullable().default(null),
+  subject: TypedActionCommitmentSubjectSchema,
+  domain: TypedActionCommitmentDomainSchema.default({
+    domainRef: "typed-action-commitment:default-domain",
+    domainDigest: null,
+    tenantId: null,
+    organizationId: null,
+    gatewayId: null,
+    actionClass: null,
+    providerEnvironmentRef: null
+  }),
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  typedPayload: TypedActionCommitmentTypedPayloadSchema,
+  replayPosture: TypedActionCommitmentReplayPostureSchema.default({
+    replayStatus: "not_applicable",
+    idempotencyKey: null,
+    nonceRef: null,
+    nonceDigest: null,
+    issuedAt: null,
+    expiresAt: null,
+    replayWindowSeconds: null
+  }),
+  signerOrVerifier: TypedActionCommitmentSignerOrVerifierSchema.default({
+    verifierRef: null,
+    verifierContextDigest: null,
+    keyId: null,
+    signatureRef: null,
+    signatureDigest: null,
+    providerNativeDigest: null,
+    verificationStatus: "unverified",
+    verificationReasonCode: null
+  }),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema.default("digest_bound"),
+  projectionClass: TypedActionCommitmentProjectionClassSchema.default("public_redacted"),
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema.default(typedActionCommitmentAuthorityBoundary),
+  refusalRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  recordedAt: exports_external.string().datetime({ offset: true }).optional()
+});
+// src/protocol/areas/typed-action-commitment/profiles.ts
+var typedActionCommitmentProfiles = TypedActionCommitmentProfileSchema.options;
+// src/protocol/areas/typed-action-commitment/projections.ts
+var TypedActionCommitmentProjectionRedactionPostureSchema = exports_external.enum([
+  "public_redacted",
+  "operator_redacted",
+  "auditor_signature_digest_only"
+]);
+var TypedActionCommitmentSignatureEvidenceProjectionSchema = exports_external.strictObject({
+  signatureRef: ResourceRefSchema.nullable(),
+  signatureDigest: DigestSchema.nullable()
+});
+var TypedActionCommitmentRawReadAuditLinkSchema = exports_external.strictObject({
+  rawRecordReadAuditRef: ResourceRefSchema,
+  rawRecordReadAuditDigest: DigestSchema,
+  redactionPosture: exports_external.literal("auditor_signature_digest_only")
+});
+var TypedActionCommitmentProjectionSchema = exports_external.strictObject({
+  typedActionCommitmentRef: IdSchema,
+  actionContractRef: IdSchema.nullable(),
+  projectionClass: TypedActionCommitmentProjectionClassSchema,
+  commitmentDigest: DigestSchema,
+  subject: TypedActionCommitmentSubjectSchema,
+  purpose: TypedActionCommitmentPurposeSchema,
+  profile: TypedActionCommitmentProfileSchema,
+  domain: TypedActionCommitmentDomainSchema,
+  verificationStatus: TypedActionCommitmentVerificationStatusSchema,
+  verificationReasonCode: ReasonCodeSchema.nullable(),
+  replayStatus: TypedActionCommitmentReplayStatusSchema,
+  idempotencyKey: ResourceRefSchema.nullable(),
+  nonceRef: ResourceRefSchema.nullable(),
+  nonceDigest: DigestSchema.nullable(),
+  replayWindowSeconds: exports_external.number().int().positive().nullable(),
+  verifierRef: ResourceRefSchema.nullable(),
+  verifierContextDigest: DigestSchema.nullable(),
+  keyId: ResourceRefSchema.nullable(),
+  providerNativeDigest: DigestSchema.nullable(),
+  safetyPosture: TypedActionCommitmentSafetyPostureSchema,
+  displayBindingStatus: TypedActionCommitmentSafetyPostureSchema,
+  authorityBoundary: TypedActionCommitmentAuthorityBoundarySchema,
+  refusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  signatureEvidence: TypedActionCommitmentSignatureEvidenceProjectionSchema.nullable(),
+  rawReadAudit: TypedActionCommitmentRawReadAuditLinkSchema.nullable(),
+  rawTypedPayloadIncluded: exports_external.literal(false),
+  rawSignatureIncluded: exports_external.literal(false),
+  rawCredentialMaterialIncluded: exports_external.literal(false),
+  rawPaymentMaterialIncluded: exports_external.literal(false),
+  rawRequestBodyIncluded: exports_external.literal(false),
+  commandMaterialIncluded: exports_external.literal(false),
+  redactionProfileRef: TypedActionCommitmentProjectionRedactionPostureSchema,
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+}).superRefine((projection, ctx) => {
+  if (projection.projectionClass === "auditor_export") {
+    if (!projection.rawReadAudit) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "auditor_export typed commitment projection requires raw-read audit linkage",
+        path: ["rawReadAudit"]
+      });
+    }
+    return;
+  }
+  if (projection.signatureEvidence) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include signature evidence",
+      path: ["signatureEvidence"]
+    });
+  }
+  if (projection.rawReadAudit) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "public/operator typed commitment projections must not include raw-read audit linkage",
+      path: ["rawReadAudit"]
+    });
+  }
+});
+// src/protocol/areas/receipt-export/inputs.ts
+var CreateReceiptExportInputSchema = exports_external.strictObject({
+  receiptId: exports_external.string().min(1),
+  exportFormat: exports_external.enum(["json", "redacted_json"]).default("redacted_json"),
+  redactionProfileRef: exports_external.string().min(1).default("redaction:default"),
+  exportPurposeCode: exports_external.string().min(1).default("audit_drop_copy"),
+  requestedByRef: exports_external.string().min(1),
+  evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
+});
+// src/protocol/evidence-projections/schemas.ts
+var ContractEvidenceProjectionSchema = exports_external.strictObject({
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  intentCompilationRef: IdSchema,
+  candidateActionRef: IdSchema,
+  candidateDigest: DigestSchema,
+  envelopeRef: IdSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  participantIdentityBindings: exports_external.array(ParticipantIdentityBindingSchema).default([]),
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  requiredProtectedPathState: RequiredProtectedPathStateSchema,
+  idempotencyKey: IdSchema,
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string()).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  signaturePosture: SignaturePostureSchema,
+  keyIdentityRef: exports_external.string().min(1).nullable(),
+  verificationPolicyRef: exports_external.string().min(1).nullable(),
+  generatedExecutionGraphRef: IdSchema.nullable(),
+  generatedExecutionNodeRef: IdSchema.nullable(),
+  redactionProfileRef: exports_external.literal("contract-view:v0.2-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var IdempotencyRecoveryDispositionSchema = exports_external.enum([
+  "missing",
+  "same_params_result_available",
+  "same_params_duplicate_refused",
+  "different_params_refused",
+  "terminal_unknown_requires_recovery"
+]);
+var IdempotencyRecoveryProjectionSchema = exports_external.strictObject({
+  actionContractRef: IdSchema,
+  ledgerKeyDigest: DigestSchema,
+  idempotencyKey: IdSchema,
+  paramsDigest: DigestSchema,
+  currentLedgerRef: IdSchema.nullable(),
+  currentLedgerState: IdempotencyLedgerStateSchema.nullable(),
+  paramsDigestMatch: exports_external.boolean().nullable(),
+  priorActionContractRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema.nullable(),
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  priorResultRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  recoveryDisposition: IdempotencyRecoveryDispositionSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  redactionProfileRef: exports_external.literal("idempotency-recovery:v0.2-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var ReceiptTimelineEventProjectionSchema = exports_external.strictObject({
+  streamId: IdSchema,
+  streamScope: ContractStreamEventSchema.shape.streamScope,
+  partitionKey: exports_external.string().min(1),
+  offset: exports_external.number().int().nonnegative(),
+  eventType: ContractStreamEventSchema.shape.eventType,
+  eventTime: IsoDateSchema,
+  eventDigest: DigestSchema,
+  objectRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+var ReceiptTimelineFailureEvidenceProjectionSchema = exports_external.strictObject({
+  downstreamRetryability: DownstreamRetryabilitySchema,
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  redactedDiagnosticsDigest: DigestSchema.nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  diagnosticsRedactionPosture: DownstreamDiagnosticsRedactionPostureSchema
+});
+var ReceiptTimelineProjectionSchema = exports_external.strictObject({
+  receiptRef: IdSchema,
+  actionContractRef: IdSchema,
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  gatewayId: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  gatewayCheckStatus: GateDecisionSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  greenlightConsumptionStatus: exports_external.enum(["not_applicable", "not_consumed", "consumed", "replayed"]),
+  mutationAttemptStatus: exports_external.enum(["not_attempted", "submitted", "succeeded", "downstream_refused", "failed", "unknown"]),
+  downstreamExecutionStatus: exports_external.enum(["not_started", "pending", "succeeded", "refused", "failed", "unknown"]),
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]),
+  receiptDigest: DigestSchema.nullable(),
+  auditChainDigest: DigestSchema.nullable(),
+  streamOffsets: exports_external.array(ReceiptStreamReferenceSchema).default([]),
+  events: exports_external.array(ReceiptTimelineEventProjectionSchema).default([]),
+  missingEventCount: exports_external.number().int().nonnegative(),
+  failureEvidence: ReceiptTimelineFailureEvidenceProjectionSchema.nullable(),
+  delegationProvenance: ReceiptDelegationProvenanceSchema.nullable().default(null),
+  redactionProfileRef: exports_external.literal("receipt-timeline:v0.2-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var AuthMdEvidenceRefsProjectionSchema = exports_external.strictObject({
+  discoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorizationServerRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  identityAssertionRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  registrationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  claimRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  revocationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  credentialCustodyRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  credentialResolutionRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  protectedApiCallRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  downstreamEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+var AgentTransactionEnvelopeProjectionSchema = exports_external.strictObject({
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  participantIdentityBindings: exports_external.array(ParticipantIdentityBindingSchema).default([]),
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  idempotencyKey: IdSchema,
+  paramsDigest: DigestSchema,
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  surfaceOperationRef: exports_external.string().min(1).nullable(),
+  surfaceOperationReconciliationRef: IdSchema.nullable(),
+  surfaceOperationEvidenceLabels: exports_external.array(exports_external.string().min(1)).default([]),
+  surfaceOperationEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  gatewayCredentialEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  delegatedAuthorityEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  credentialResolutionEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  signerInvocationEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  downstreamEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authMdEvidenceRefs: AuthMdEvidenceRefsProjectionSchema,
+  authMdEvidenceLabels: exports_external.array(exports_external.string().min(1)).default([]),
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  downstreamRetryability: DownstreamRetryabilitySchema.nullable(),
+  reconciliationFinalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  greenlightConsumptionStatus: exports_external.enum(["not_applicable", "not_consumed", "consumed", "replayed"]).nullable(),
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  proofGapReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  idempotencyLedgerRef: IdSchema.nullable(),
+  idempotencyLedgerState: IdempotencyLedgerStateSchema.nullable(),
+  idempotencyRecoveryDisposition: IdempotencyRecoveryDispositionSchema.nullable(),
+  idempotencyReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  streamOffsets: exports_external.array(ReceiptStreamReferenceSchema).default([]),
+  receiptDigest: DigestSchema.nullable(),
+  auditChainDigest: DigestSchema.nullable(),
+  receiptExportRef: IdSchema.nullable(),
+  redactionProfileRef: exports_external.literal("agent-transaction-envelope:v0.2-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  envelopeDigest: DigestSchema
+});
+var OperationReadbackAgreementObligationPolicySchema = exports_external.strictObject({
+  sourceAuthority: exports_external.literal("policy_decision_snapshot"),
+  evaluationStatus: exports_external.enum(["greenlight", "refuse", "proof_gap"]),
+  ok: exports_external.boolean(),
+  reasonCode: ReasonCodeSchema.nullable(),
+  reason: exports_external.string().min(1).max(1000).nullable(),
+  policyInput: exports_external.strictObject({
+    posture: exports_external.enum(["not_applicable", "bound", "proof_gap", "refused"]),
+    obligationRef: ResourceRefSchema.nullable(),
+    linkedAgreementId: IdSchema.nullable(),
+    acceptedNegotiationResolutionId: IdSchema.nullable()
+  })
+});
+var OperationReadbackStatusSchema = exports_external.enum([
+  "policy_refused",
+  "review_required",
+  "halted",
+  "quarantined",
+  "policy_proof_gap",
+  "greenlight_available",
+  "gateway_admitted",
+  "gateway_refused",
+  "gateway_proof_gap",
+  "replay_refused",
+  "downstream_pending",
+  "downstream_succeeded",
+  "downstream_refused",
+  "downstream_failed",
+  "downstream_unknown",
+  "recovery_required",
+  "isolated"
+]);
+var OperationReadbackStageSchema = exports_external.enum([
+  "intent_compilation",
+  "candidate_action",
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check",
+  "mutation_attempt",
+  "receipt",
+  "recovery",
+  "isolation"
+]);
+var OperationCorrelationIndexSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-correlation.v0.1"),
+  actionContractRef: IdSchema,
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  authorityCreatedByProjection: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  intentCompilationRef: IdSchema.nullable(),
+  candidateActionRef: IdSchema.nullable(),
+  policyDecisionRef: IdSchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  redactionProfileRef: exports_external.literal("operation-correlation:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+var OperationReadbackNextMechanismSchema = exports_external.enum([
+  "read_evidence",
+  "use_greenlight_at_gateway",
+  "request_review",
+  "recraft_request",
+  "create_new_contract",
+  "recover_terminal_unknown",
+  "stop",
+  "wait_for_downstream"
+]);
+var OperationReadbackSupportSeveritySchema = exports_external.enum(["none", "info", "warning", "urgent"]);
+var OperationReadbackGreenlightUsePostureSchema = exports_external.enum([
+  "none",
+  "available_for_one_gateway_check",
+  "consumed",
+  "replayed_or_unusable",
+  "unknown"
+]);
+var OperationReadbackProjectionFreshnessStatusSchema = exports_external.enum([
+  "current",
+  "stale_or_concurrent_update",
+  "stream_tail_missing",
+  "not_observed"
+]);
+var OperationReadbackProjectionFreshnessSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback-freshness.v0.1"),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  readModelKind: exports_external.literal("direct_protocol_store_projection"),
+  status: OperationReadbackProjectionFreshnessStatusSchema,
+  streamId: IdSchema.nullable(),
+  partitionKey: exports_external.string().min(1).nullable(),
+  observedOffset: exports_external.number().int().nonnegative().nullable(),
+  observedEventDigest: DigestSchema.nullable(),
+  latestOffset: exports_external.number().int().nonnegative().nullable(),
+  latestEventDigest: DigestSchema.nullable(),
+  lagEvents: exports_external.number().int().nonnegative().nullable(),
+  rawStreamEventsIncluded: exports_external.literal(false),
+  authorityCreatedByFreshness: exports_external.literal(false)
+});
+var OperationSupportContextSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.support-context.v0.1"),
+  supportContextRef: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  surface: exports_external.literal("operation_readback"),
+  actionContractRef: IdSchema,
+  requestIdentity: exports_external.string().min(1).nullable(),
+  operationStatus: OperationReadbackStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  supportSeverity: OperationReadbackSupportSeveritySchema,
+  docsUrl: exports_external.string().url().nullable(),
+  nextCommand: exports_external.string().min(1).nullable(),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted")
+});
+var OperationReadbackProjectionSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal("handshake.operation-readback.v0.1"),
+  actionContractRef: IdSchema,
+  contractDigest: DigestSchema,
+  principalRef: IdSchema,
+  agentRef: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterRef: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  gatewayId: IdSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  sourceAuthority: exports_external.literal("protocol_store_projection"),
+  operationStatus: OperationReadbackStatusSchema,
+  latestAuthoritativeStage: OperationReadbackStageSchema,
+  policyDecisionRef: IdSchema,
+  policyDecisionStatus: PolicyDecisionValueSchema,
+  agreementObligationPolicy: OperationReadbackAgreementObligationPolicySchema,
+  greenlightRef: IdSchema.nullable(),
+  gateAttemptRef: IdSchema.nullable(),
+  mutationAttemptRef: IdSchema.nullable(),
+  receiptRef: IdSchema.nullable(),
+  gatewayAdmissionStatus: GatewayAdmissionStatusSchema,
+  downstreamOutcomeStatus: DownstreamOutcomeStatusSchema,
+  finalityStatus: exports_external.enum(["final", "pending", "suspect", "unknown"]).nullable(),
+  greenlightUsePosture: OperationReadbackGreenlightUsePostureSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  nextMechanism: OperationReadbackNextMechanismSchema,
+  safeToRetryReadback: exports_external.literal(true),
+  safeToReuseGreenlight: exports_external.boolean(),
+  requiresNewContract: exports_external.boolean(),
+  authorityCreatedByReadback: exports_external.literal(false),
+  greenlightCreatedByReadback: exports_external.literal(false),
+  gatewayCheckPerformedByReadback: exports_external.literal(false),
+  mutationAttemptedByReadback: exports_external.literal(false),
+  receiptExportCreatedByReadback: exports_external.literal(false),
+  rawInternalRecordIncluded: exports_external.literal(false),
+  credentialMaterialIncluded: exports_external.literal(false),
+  paymentMaterialIncluded: exports_external.literal(false),
+  typedCommitmentRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentSetDigest: DigestSchema.nullable().default(null),
+  typedCommitmentProjectionClass: TypedActionCommitmentProjectionClassSchema.nullable().default(null),
+  typedCommitmentSummaries: exports_external.array(TypedActionCommitmentSummarySchema).default([]),
+  typedCommitmentProjections: exports_external.array(TypedActionCommitmentProjectionSchema).default([]),
+  typedCommitmentRefusalRefs: exports_external.array(ResourceRefSchema).default([]),
+  typedCommitmentProofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  proofGapRefs: exports_external.array(IdSchema).default([]),
+  refusalRefs: exports_external.array(IdSchema).default([]),
+  recoveryRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  isolationRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCertificateRefs: exports_external.array(IdSchema).default([]),
+  projectionFreshness: OperationReadbackProjectionFreshnessSchema,
+  providerRequestRef: exports_external.string().min(1).nullable(),
+  providerOperationRef: exports_external.string().min(1).nullable(),
+  traceRef: exports_external.string().min(1).nullable(),
+  spanRef: exports_external.string().min(1).nullable(),
+  redactionProfileRef: exports_external.literal("operation-readback:v0.1-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([]),
+  supportContext: OperationSupportContextSchema
+});
+var ProtectedPathInstallHealthStatusSchema = exports_external.enum([
+  "not_required",
+  "satisfies_gateway_checked",
+  "missing",
+  "stale",
+  "unsafe",
+  "unknown"
+]);
+var ProtectedPathInstallHealthProjectionSchema = exports_external.strictObject({
+  actionContractRef: IdSchema,
+  postureScopeKey: exports_external.string().min(1),
+  runtimeAdapterRef: IdSchema,
+  gatewayId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  protectedSurfaceKind: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  requiredProtectedPathState: RequiredProtectedPathStateSchema,
+  installHealthStatus: ProtectedPathInstallHealthStatusSchema,
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  currentPostureRef: IdSchema.nullable(),
+  currentPostureDigest: DigestSchema.nullable(),
+  postureState: ProtectedPathStateSchema.nullable(),
+  credentialCustodyStatus: CredentialCustodyStatusSchema.nullable(),
+  rawSiblingToolStatus: RawSiblingToolStatusSchema.nullable(),
+  sourceAuthority: PostureSourceAuthoritySchema.nullable(),
+  bypassProbeCoverage: exports_external.array(ProtectedPathBypassProbeCoverageSchema).default([]),
+  observedAt: IsoDateSchema.nullable(),
+  expiresAt: IsoDateSchema.nullable(),
+  redactionProfileRef: exports_external.literal("protected-path-install-health:v0.2-redacted"),
+  omittedFields: exports_external.array(exports_external.string().min(1)).default([])
+});
+
+// src/protocol/areas/authority-certificate/schemas.ts
+var AuthorityCertificateVersionSchema = exports_external.literal("1.0.0");
+var AuthorityCertificateTerminalKindSchema = exports_external.enum([
+  "receipt",
+  "durable_refusal",
+  "proof_gap",
+  "replay_refusal"
+]);
+var AuthorityCertificateArtifactKindSchema = exports_external.enum([
+  "action_contract",
+  "policy_decision",
+  "greenlight",
+  "gateway_check_attempt",
+  "mutation_attempt",
+  "refusal",
+  "proof_gap",
+  "receipt",
+  "receipt_export",
+  "surface_operation_reconciliation",
+  "credential_resolution_evidence",
+  "typed_action_commitment",
+  "idempotency_ledger_entry",
+  "recovery_recommendation",
+  "recovery_recommendation_status_transition",
+  "isolation_state"
+]);
+var AuthorityCertificateArtifactSchema = exports_external.strictObject({
+  kind: AuthorityCertificateArtifactKindSchema,
+  objectRef: exports_external.string().min(1),
+  digest: DigestSchema
+});
+var AuthorityCertificateSignerRoleSchema = exports_external.enum(["operator_policy", "gateway"]);
+var AuthorityCertificateSignatureAlgorithmSchema = exports_external.enum(["ed25519", "hmac-sha256"]);
+var AuthorityCertificateSignatureEntrySchema = exports_external.strictObject({
+  signerRole: AuthorityCertificateSignerRoleSchema,
+  keyIdentityRef: exports_external.string().min(1),
+  algorithm: AuthorityCertificateSignatureAlgorithmSchema,
+  signedOver: DigestSchema,
+  signature: SignatureSchema
+});
+var AuthorityCertificateVerificationPolicySchema = exports_external.strictObject({
+  verificationPolicyId: exports_external.string().min(1),
+  terminalKind: AuthorityCertificateTerminalKindSchema,
+  actionClass: exports_external.string().min(1),
+  gatewayAdmissionRequired: exports_external.boolean(),
+  requiredSignerRoles: exports_external.array(AuthorityCertificateSignerRoleSchema).min(1),
+  requiredArtifactKinds: exports_external.array(AuthorityCertificateArtifactKindSchema).default([])
+});
+var AuthorityCertificateTerminalSchema = exports_external.strictObject({
+  terminalKind: AuthorityCertificateTerminalKindSchema,
+  terminalObjectRef: exports_external.string().min(1),
+  actionContractId: IdSchema,
+  policyDecisionId: IdSchema.nullable(),
+  greenlightId: IdSchema.nullable(),
+  gatewayId: IdSchema.nullable()
+});
+var AuthorityCertificateConsumerBindingSchema = exports_external.strictObject({
+  bindingKind: exports_external.string().min(1),
+  bindingRef: ResourceRefSchema,
+  digest: DigestSchema.nullable().default(null)
+});
+var AuthorityCertificateSchema = ProtocolBaseSchema.extend({
+  authorityCertificateId: IdSchema,
+  authorityCertificateVersion: AuthorityCertificateVersionSchema,
+  canonicalizerVersion: exports_external.string().min(1),
+  terminalizedAt: IsoDateSchema,
+  terminal: AuthorityCertificateTerminalSchema,
+  envelope: AgentTransactionEnvelopeProjectionSchema,
+  envelopeDigest: DigestSchema,
+  artifacts: exports_external.array(AuthorityCertificateArtifactSchema).min(1),
+  verificationPolicy: AuthorityCertificateVerificationPolicySchema,
+  signatures: exports_external.array(AuthorityCertificateSignatureEntrySchema).min(1),
+  consumerBindings: exports_external.array(AuthorityCertificateConsumerBindingSchema).default([]),
+  extensions: exports_external.record(exports_external.string(), JsonValueSchema).default({}),
+  emittedAt: IsoDateSchema,
+  signingInputDigest: DigestSchema
+});
+var AuthorityCertificateTrustKeySchema = exports_external.strictObject({
+  keyIdentityRef: exports_external.string().min(1),
+  issuerRef: exports_external.string().min(1).nullable().default(null),
+  keyVersion: exports_external.string().min(1).nullable().default(null),
+  signerRole: AuthorityCertificateSignerRoleSchema.nullable().default(null),
+  algorithm: AuthorityCertificateSignatureAlgorithmSchema,
+  publicKeyEd25519: exports_external.string().min(1).nullable().default(null),
+  hmacSecret: exports_external.string().min(1).nullable().default(null),
+  status: exports_external.enum(["active", "retired", "revoked", "stale", "status_unavailable"]),
+  validFrom: IsoDateSchema.nullable().default(null),
+  validUntil: IsoDateSchema.nullable().default(null)
+});
+var AuthorityCertificateIssuerStatusSchema = exports_external.enum([
+  "active",
+  "retired",
+  "revoked",
+  "stale",
+  "status_unavailable"
+]);
+var AuthorityCertificateIssuerSchema = exports_external.strictObject({
+  issuerRef: exports_external.string().min(1),
+  issuerDigest: DigestSchema.nullable().default(null),
+  status: AuthorityCertificateIssuerStatusSchema,
+  validFrom: IsoDateSchema.nullable().default(null),
+  validUntil: IsoDateSchema.nullable().default(null),
+  metadataRefs: exports_external.array(exports_external.string().min(1)).default([])
+});
+var AuthorityCertificateStatusSubjectKindSchema = exports_external.enum(["issuer", "key", "certificate"]);
+var AuthorityCertificateStatusRecordSchema = exports_external.strictObject({
+  statusRecordId: IdSchema,
+  subjectKind: AuthorityCertificateStatusSubjectKindSchema,
+  subjectRef: exports_external.string().min(1),
+  status: AuthorityCertificateIssuerStatusSchema,
+  reasonCode: exports_external.string().min(1),
+  observedAt: IsoDateSchema,
+  expiresAt: IsoDateSchema.nullable().default(null),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  authorityCreated: exports_external.literal(false).default(false)
+});
+var AuthorityCertificateTrustMaterialSchema = exports_external.strictObject({
+  keys: exports_external.array(AuthorityCertificateTrustKeySchema).default([]),
+  issuers: exports_external.array(AuthorityCertificateIssuerSchema).default([]),
+  statusRecords: exports_external.array(AuthorityCertificateStatusRecordSchema).default([]),
+  verificationTime: IsoDateSchema.nullable().default(null),
+  allowDevHmac: exports_external.boolean().default(false)
+});
+var AuthorityCertificateVerificationOutcomeSchema = exports_external.enum(["verified", "refused", "proof_gap"]);
+var AuthorityCertificateVerificationCheckStatusSchema = exports_external.enum(["passed", "failed", "proof_gap"]);
+var AuthorityCertificateVerificationFailureCodeSchema = exports_external.enum([
+  "schema_invalid",
+  "envelope_digest_mismatch",
+  "signing_input_digest_mismatch",
+  "signature_signed_over_mismatch",
+  "signature_algorithm_mismatch",
+  "hmac_not_allowed",
+  "trust_key_missing",
+  "trust_key_inactive",
+  "trust_issuer_unknown",
+  "trust_key_role_mismatch",
+  "trust_key_retired",
+  "trust_key_revoked",
+  "trust_key_stale",
+  "trust_status_unavailable",
+  "trust_key_window_invalid",
+  "trust_certificate_status_revoked",
+  "trust_certificate_status_stale",
+  "signature_invalid",
+  "required_signer_missing",
+  "required_artifact_missing",
+  "gateway_admission_binding_missing",
+  "terminal_binding_mismatch"
+]);
+var AuthorityCertificateVerificationFailureSchema = exports_external.strictObject({
+  code: AuthorityCertificateVerificationFailureCodeSchema,
+  message: exports_external.string().min(1),
+  ref: exports_external.string().min(1).nullable().default(null)
+});
+var AuthorityCertificateVerificationResponseSchema = exports_external.strictObject({
+  verificationResponseId: IdSchema,
+  outcome: AuthorityCertificateVerificationOutcomeSchema,
+  verificationPlane: exports_external.literal("local_pinned_trust_material"),
+  authorityCreated: exports_external.literal(false),
+  redactionProfileRef: exports_external.literal("authority-certificate-verification:v1-redacted"),
+  checks: exports_external.strictObject({
+    schema: AuthorityCertificateVerificationCheckStatusSchema,
+    cryptographicSignature: AuthorityCertificateVerificationCheckStatusSchema,
+    signingInputDigest: AuthorityCertificateVerificationCheckStatusSchema,
+    artifactBinding: AuthorityCertificateVerificationCheckStatusSchema,
+    terminalBinding: AuthorityCertificateVerificationCheckStatusSchema,
+    gatewayAdmissionBinding: AuthorityCertificateVerificationCheckStatusSchema,
+    trustMaterial: AuthorityCertificateVerificationCheckStatusSchema,
+    status: AuthorityCertificateVerificationCheckStatusSchema
+  }),
+  failures: exports_external.array(AuthorityCertificateVerificationFailureSchema),
+  envelope: AgentTransactionEnvelopeProjectionSchema.nullable(),
+  signingInputDigest: DigestSchema.nullable()
+});
+var AuthorityCertificateVerificationRequestSchema = exports_external.strictObject({
+  certificate: exports_external.unknown(),
+  trustMaterial: AuthorityCertificateTrustMaterialSchema
+});
+var AuthorityCertificateVerifierKeyProjectionSchema = exports_external.strictObject({
+  keyIdentityRef: exports_external.string().min(1),
+  issuerRef: exports_external.string().min(1).nullable(),
+  keyVersion: exports_external.string().min(1).nullable(),
+  signerRole: AuthorityCertificateSignerRoleSchema.nullable(),
+  algorithm: AuthorityCertificateSignatureAlgorithmSchema,
+  publicKeyEd25519: exports_external.string().min(1),
+  status: AuthorityCertificateIssuerStatusSchema,
+  validFrom: IsoDateSchema.nullable(),
+  validUntil: IsoDateSchema.nullable(),
+  privateMaterialIncluded: exports_external.literal(false),
+  authorityCreated: exports_external.literal(false)
+});
+var AuthorityCertificateVerifierKeySetProjectionSchema = exports_external.strictObject({
+  projectionKind: exports_external.literal("authority_certificate_verifier_key_set"),
+  trustDecision: exports_external.literal("caller_pinned_trust_material_only"),
+  authorityCreated: exports_external.literal(false),
+  redactionProfileRef: exports_external.literal("authority-certificate-verifier-key-set:v1-redacted"),
+  issuers: exports_external.array(AuthorityCertificateIssuerSchema),
+  keys: exports_external.array(AuthorityCertificateVerifierKeyProjectionSchema),
+  omittedPrivateKeyCount: exports_external.number().int().nonnegative()
+});
+var AuthorityCertificateJwkProjectionSchema = exports_external.strictObject({
+  kty: exports_external.literal("OKP"),
+  crv: exports_external.literal("Ed25519"),
+  kid: exports_external.string().min(1),
+  alg: exports_external.literal("EdDSA"),
+  use: exports_external.literal("sig"),
+  key_ops: exports_external.array(exports_external.literal("verify")),
+  x: exports_external.string().min(1)
+});
+var AuthorityCertificateJwksProjectionSchema = exports_external.strictObject({
+  projectionKind: exports_external.literal("authority_certificate_jwks_projection"),
+  trustDecision: exports_external.literal("jwks_projection_only"),
+  authorityCreated: exports_external.literal(false),
+  redactionProfileRef: exports_external.literal("authority-certificate-jwks:v1-public"),
+  jwks: exports_external.strictObject({
+    keys: exports_external.array(AuthorityCertificateJwkProjectionSchema)
+  }),
+  omittedPrivateKeyCount: exports_external.number().int().nonnegative()
+});
+
 // src/protocol/areas/bypass-probe/schemas.ts
 var BypassProbeKindSchema = exports_external.enum([
   "credential_custody",
@@ -15774,6 +19735,1017 @@ var BypassProbeSchema = ProtocolBaseSchema.extend({
   probeDigest: DigestSchema
 });
 var requiredGatewayCheckedBypassProbeKinds = BypassProbeKindSchema.options;
+
+// src/protocol/areas/tool-call-draft/schemas.ts
+var ToolCallDraftStateSchema = exports_external.enum(["opened", "streaming", "finalized", "invalid", "abandoned"]);
+var ToolCallDraftSchema = ProtocolBaseSchema.extend({
+  toolCallDraftId: IdSchema,
+  runtimeExecutionId: IdSchema.nullable().default(null),
+  generatedExecutionGraphId: IdSchema.nullable().default(null),
+  generatedExecutionNodeId: IdSchema.nullable().default(null),
+  toolCapabilityId: IdSchema,
+  actionTypeId: IdSchema,
+  gatewayRegistryEntryId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  draftState: ToolCallDraftStateSchema,
+  parameters: exports_external.record(exports_external.string(), JsonValueSchema),
+  nonSecretParamsSummary: exports_external.record(exports_external.string(), JsonValueSchema),
+  secretRefs: exports_external.record(exports_external.string(), exports_external.string().min(1)).default({}),
+  gatewayCredentialRefs: exports_external.array(GatewayCredentialBindingSchema).default([]),
+  delegatedAuthorityRefs: exports_external.array(DelegatedAuthorityBindingSchema).default([]),
+  paramsDigest: DigestSchema,
+  finalizedAt: IsoDateSchema.nullable().default(null),
+  expiresAt: IsoDateSchema,
+  invalidReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  draftDigest: DigestSchema
+});
+
+// src/integrations/a1-evidence/delegation-evidence-record.ts
+var Hex32Schema = exports_external.string().regex(/^[0-9a-f]{64}$/);
+var DelegationEvidenceRecordSchema = exports_external.object({
+  schemaId: exports_external.literal("delegation-evidence-record"),
+  schemaVersion: exports_external.literal(1),
+  a1ChainFingerprint: Hex32Schema,
+  certFingerprints: exports_external.array(Hex32Schema),
+  chainDepth: exports_external.number().int().nonnegative(),
+  principalPkFingerprint: Hex32Schema,
+  terminalDelegatePkFingerprint: Hex32Schema,
+  a1VerifierVersion: exports_external.string().min(1),
+  verifyPath: exports_external.enum(["ts", "sidecar"]),
+  verifyOutcome: exports_external.enum(["valid", "invalid"]),
+  reasonCodes: exports_external.array(exports_external.string()),
+  evidenceBindingDigest: Hex32Schema.nullable(),
+  presentedAtUnix: exports_external.number().int().nonnegative(),
+  mutationAuthorityCreated: exports_external.literal(false),
+  greenlightCreated: exports_external.literal(false)
+}).strict();
+
+// src/protocol/areas/delegation-evidence-record/schemas.ts
+var StoredDelegationEvidenceRecordSchema = ProtocolBaseSchema.extend({
+  delegationEvidenceRecordId: IdSchema,
+  evidenceRecord: DelegationEvidenceRecordSchema
+});
+// src/protocol/areas/negotiation/schemas.ts
+var NegotiationPartyIdentityProofPostureSchema = exports_external.enum([
+  "self_attested",
+  "host_verified_ref",
+  "proof_gap_recorded"
+]);
+var NegotiationPartyBindingSchema = exports_external.strictObject({
+  partyId: IdSchema,
+  partyRole: exports_external.enum(["initiator", "counterparty", "observer"]),
+  agentRef: ResourceRefSchema,
+  organizationRef: ResourceRefSchema.nullable().default(null),
+  runtimeRef: ResourceRefSchema.nullable().default(null),
+  endpointRef: ResourceRefSchema.nullable().default(null),
+  identityProofPosture: NegotiationPartyIdentityProofPostureSchema,
+  identityEvidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  identityProofDigest: DigestSchema.nullable().default(null),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+}).superRefine((value, ctx) => {
+  if (value.identityProofPosture === "host_verified_ref" && value.identityEvidenceRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "host verified parties require local identity evidence refs",
+      path: ["identityEvidenceRefs"]
+    });
+  }
+  if (value.identityProofPosture === "proof_gap_recorded" && value.proofGapRefs.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "proof-gap parties require proof gap refs",
+      path: ["proofGapRefs"]
+    });
+  }
+});
+var ExternalProtocolEvidenceRefSchema = exports_external.strictObject({
+  protocol: exports_external.enum(["a2a", "acp", "anp", "ap2", "mcp", "runtime_handoff", "other"]),
+  protocolVersion: exports_external.string().min(1).max(80),
+  objectKind: exports_external.string().min(1).max(120),
+  objectRef: ResourceRefSchema,
+  objectDigest: DigestSchema,
+  evidencePosture: exports_external.literal("imported_evidence_only"),
+  evidenceUse: exports_external.enum([
+    "conversation_context",
+    "descriptor_context",
+    "runtime_context",
+    "mandate_context_evidence",
+    "tool_context",
+    "handoff_context",
+    "other_context"
+  ]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var forbiddenOfferVersionAliases = ["latest", "current", "unspecified"];
+var OfferVersionRefSchema = IdSchema.refine((value) => {
+  const normalized = value.toLowerCase();
+  return !forbiddenOfferVersionAliases.some((alias) => normalized.includes(alias));
+}, {
+  message: "offer version refs must bind to a specific offer version"
+});
+var disallowedObligationRefPattern = new RegExp([
+  "greenlight",
+  "gateway[_:-]?check",
+  "gate[_:-]?attempt",
+  "mutation[_:-]?attempt",
+  "policy[_:-]?decision",
+  "receipt",
+  "authority[_:-]?certificate",
+  "settlement",
+  "payment",
+  "signer",
+  "reusable[_:-]?authority"
+].join("|"), "i");
+var EvidenceRefSchema = exports_external.strictObject({
+  refKind: exports_external.enum(["candidate_action", "action_contract", "intent_compilation", "generated_execution_graph"]),
+  ref: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation evidence ref cannot point at a control or terminal artifact"
+  }),
+  digest: DigestSchema.nullable().default(null)
+});
+var NonAuthorityContextRefSchema = ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+  message: "negotiation context ref cannot point at a control or terminal artifact"
+});
+var NegotiationSessionSchema = ProtocolBaseSchema.extend({
+  negotiationSessionId: IdSchema,
+  negotiationSessionDigest: DigestSchema,
+  subjectResourceRef: ResourceRefSchema,
+  subjectProtectedActionContextRefs: exports_external.array(NonAuthorityContextRefSchema).default([]),
+  runtimePosture: exports_external.enum(["declared_runtime_context", "observed_runtime_evidence", "proof_gap_recorded"]),
+  parties: exports_external.array(NegotiationPartyBindingSchema).min(2),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (!value.parties.some((party) => party.partyRole === "initiator")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require an initiator party",
+      path: ["parties"]
+    });
+  }
+  if (!value.parties.some((party) => party.partyRole === "counterparty")) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "negotiation sessions require a counterparty party",
+      path: ["parties"]
+    });
+  }
+});
+var NegotiationOfferSchema = ProtocolBaseSchema.extend({
+  negotiationOfferId: IdSchema,
+  negotiationSessionId: IdSchema,
+  offerVersionId: OfferVersionRefSchema,
+  offerSequence: exports_external.number().int().positive(),
+  offeredByPartyId: IdSchema,
+  previousOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  supersedesOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  offerContentDigest: DigestSchema,
+  offerObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  offerContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  generatedCodeOrSpecRefs: exports_external.array(ResourceRefSchema).default([]),
+  declaredAssumptions: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1).max(500)).default([]),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("offer"));
+var NegotiationDecisionSchema = ProtocolBaseSchema.extend({
+  negotiationDecisionId: IdSchema,
+  negotiationSessionId: IdSchema,
+  decidedOfferVersionId: OfferVersionRefSchema,
+  decidedOfferSequence: exports_external.number().int().positive(),
+  decidedByPartyId: IdSchema,
+  decision: exports_external.enum(["accept", "reject", "counter", "withdraw", "expire"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  counterOfferVersionId: OfferVersionRefSchema.nullable().default(null),
+  decisionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.decision === "counter" && value.counterOfferVersionId === null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "counter decisions require a specific counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+  if (value.decision !== "counter" && value.counterOfferVersionId !== null) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "only counter decisions may reference a counter offer version",
+      path: ["counterOfferVersionId"]
+    });
+  }
+});
+var LinkedAgreementSchema = ProtocolBaseSchema.extend({
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  acceptedNegotiationDecisionId: IdSchema,
+  acceptedOfferVersionId: OfferVersionRefSchema,
+  acceptedOfferSequence: exports_external.number().int().positive(),
+  acceptedOfferContentDigest: DigestSchema,
+  acceptedByPartyId: IdSchema,
+  counterpartyRef: ResourceRefSchema,
+  agreementDigest: DigestSchema,
+  agreementObjectRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementContentRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  agreementEvidencePosture: exports_external.literal("local_evidence_only"),
+  clearingEvidenceRefs: ClearingEvidenceRefsSchema,
+  externalProtocolEvidenceRefs: exports_external.array(ExternalProtocolEvidenceRefSchema).default([]),
+  expiresAt: IsoDateSchema.nullable().default(null)
+}).superRefine(requireReconstructionRefs("agreement"));
+var AgreementObligationBindingSchema = ProtocolBaseSchema.extend({
+  agreementObligationBindingId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  obligationRef: ResourceRefSchema.refine((value) => !disallowedObligationRefPattern.test(value), {
+    message: "obligation ref cannot point at a control or terminal artifact"
+  }),
+  obligationDigest: DigestSchema.nullable().default(null),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  paramsDigest: DigestSchema,
+  actionTypeId: IdSchema,
+  actionClass: exports_external.string().min(1),
+  resourceRef: ResourceRefSchema,
+  counterpartyRef: ResourceRefSchema,
+  maxUses: exports_external.literal(1).default(1),
+  bindingPosture: exports_external.literal("local_evidence_only"),
+  localProtectedActionEvidenceRefs: exports_external.array(EvidenceRefSchema).min(1),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([])
+});
+var AgreementStatusTransitionSchema = ProtocolBaseSchema.extend({
+  agreementStatusTransitionId: IdSchema,
+  linkedAgreementId: IdSchema,
+  negotiationSessionId: IdSchema,
+  fromStatus: exports_external.enum(["proposed", "active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  toStatus: exports_external.enum(["active", "superseded", "expired", "disputed", "resolved", "withdrawn"]),
+  reasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(ResourceRefSchema).default([]),
+  proofGapRefs: exports_external.array(ResourceRefSchema).default([]),
+  transitionDigest: DigestSchema
+}).superRefine((value, ctx) => {
+  if (value.fromStatus === value.toStatus) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreement status transitions must change status",
+      path: ["toStatus"]
+    });
+  }
+});
+function requireReconstructionRefs(kind) {
+  return (value, ctx) => {
+    const objectRefs = kind === "offer" ? value.offerObjectRefs : value.agreementObjectRefs;
+    const contentRefs = kind === "offer" ? value.offerContentRefs : value.agreementContentRefs;
+    if (objectRefs.length > 0 || contentRefs.length > 0 || value.proofGapRefs.length > 0)
+      return;
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `${kind} digest requires object refs, content refs, or proof gap refs`,
+      path: kind === "offer" ? ["offerObjectRefs"] : ["agreementObjectRefs"]
+    });
+  };
+}
+
+// src/protocol/areas/proof-gap/schemas.ts
+var ProofGapSchema = ProtocolBaseSchema.extend({
+  proofGapId: IdSchema,
+  gapPhase: exports_external.enum(["compilation", "policy", "gate", "mutation", "receipt", "stream", "recovery"]),
+  expectedEvidenceType: exports_external.string().min(1),
+  missingOrInvalidEvidenceRef: exports_external.string().min(1),
+  affectedObjectRefs: exports_external.array(exports_external.string().min(1)),
+  gateAttemptId: IdSchema.nullable(),
+  mutationAttemptId: IdSchema.nullable(),
+  receiptId: IdSchema.nullable(),
+  reasonCode: ReasonCodeSchema,
+  finalityImpact: exports_external.enum(["none", "suspect", "unknown", "invalid"]),
+  recoveryRequirement: exports_external.string().min(1),
+  resolvedAt: IsoDateSchema.nullable(),
+  resolvedByRef: exports_external.string().min(1).nullable()
+});
+
+// src/protocol/areas/raw-read-audit/schemas.ts
+var RawRecordReadAuditAuthorityBoundarySchema = exports_external.strictObject({
+  createsPolicyDecision: exports_external.literal(false),
+  createsGreenlight: exports_external.literal(false),
+  performsGatewayCheck: exports_external.literal(false),
+  createsMutationAuthority: exports_external.literal(false),
+  createsRawReadAuthority: exports_external.literal(false),
+  exposesRawRecordInAudit: exports_external.literal(false)
+});
+var RawRecordReadAuditSchema = ProtocolBaseSchema.extend({
+  rawRecordReadAuditId: IdSchema,
+  targetObjectType: exports_external.string().min(1).max(120),
+  targetObjectId: IdSchema,
+  targetRecordDigest: DigestSchema,
+  targetRecordSchemaVersion: exports_external.string().min(1).max(100),
+  targetRecordCreatedAt: IsoDateSchema,
+  callerIdentityRef: exports_external.string().min(1).max(500),
+  callerSubjectDigest: DigestSchema,
+  authProviderRef: exports_external.string().min(1).max(500),
+  authSessionDigest: DigestSchema.nullable(),
+  serviceCredentialDigest: DigestSchema.nullable(),
+  projectId: IdSchema.nullable(),
+  workspaceId: IdSchema.nullable(),
+  custodyRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedRoles: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  hostedScopes: exports_external.array(exports_external.string().min(1).max(120)).min(1),
+  rawReadPurposeDigest: DigestSchema,
+  purposeRedactionPolicyId: exports_external.literal("hosted-raw-read-purpose-digest.v1"),
+  rawReadExpiresAt: IsoDateSchema,
+  routeId: exports_external.literal("readProtocolRecord"),
+  requestMethod: exports_external.literal("GET"),
+  requestedAt: IsoDateSchema,
+  rawRecordReturned: exports_external.literal(true),
+  rawRecordPayloadIncludedInAudit: exports_external.literal(false),
+  authorityBoundary: RawRecordReadAuditAuthorityBoundarySchema
+});
+
+// src/protocol/areas/recovery/schemas.ts
+var RecoveryRecommendedPathSchema = exports_external.enum([
+  "narrower_action_contract_required",
+  "gateway_reconciliation_required",
+  "human_review_required",
+  "compensating_action_contract_required",
+  "halt_without_retry"
+]);
+var RecoveryRecommendationStatusSchema = exports_external.enum(["open", "expired", "superseded"]);
+var RecoveryRecommendationTerminalStatusSchema = exports_external.enum(["expired", "superseded"]);
+var RecoveryRecommendationSchema = ProtocolBaseSchema.extend({
+  recoveryRecommendationId: IdSchema,
+  sourceReceiptId: IdSchema,
+  sourceActionContractId: IdSchema,
+  sourcePolicyDecisionId: IdSchema,
+  sourceGreenlightId: IdSchema.nullable(),
+  sourceGateAttemptId: IdSchema.nullable(),
+  sourceMutationAttemptId: IdSchema.nullable(),
+  sourceRefusalOrGapRef: exports_external.string().min(1),
+  sourceFinalityStatus: ReceiptSchema.shape.finalityStatus,
+  sourceGatewayCheckStatus: GateDecisionSchema.nullable(),
+  sourceMutationAttemptStatus: ReceiptSchema.shape.mutationAttemptStatus,
+  sourceDownstreamExecutionStatus: ReceiptSchema.shape.downstreamExecutionStatus,
+  recommendedPath: RecoveryRecommendedPathSchema,
+  allowedNextActionClasses: exports_external.array(exports_external.string().min(1)).default([]),
+  requiredNewEvidence: exports_external.array(exports_external.string().min(1)).default([]),
+  requiresHumanReview: exports_external.boolean(),
+  safeRetryAvailable: exports_external.boolean(),
+  scopeNarrowingRequired: exports_external.boolean(),
+  policyUpdateCandidate: exports_external.boolean(),
+  agentInstructionUpdateCandidate: exports_external.boolean(),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  gatewayId: IdSchema,
+  resourceRef: ResourceRefSchema,
+  actionClass: exports_external.string().min(1),
+  failureReceiptRef: IdSchema,
+  proofGapIds: exports_external.array(IdSchema).default([]),
+  missingEvidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  reviewDecisionRef: exports_external.string().min(1).nullable(),
+  policyChangeRef: exports_external.string().min(1).nullable(),
+  sourceReceiptDigest: DigestSchema,
+  sourceAuditChainDigest: DigestSchema,
+  sourceStreamOffsets: exports_external.array(ReceiptStreamReferenceSchema).default([]),
+  reasonCode: ReasonCodeSchema,
+  reasonSummary: exports_external.string().min(1).max(1000),
+  recommendedAt: IsoDateSchema,
+  recoveryExpiresAt: IsoDateSchema.nullable(),
+  reviewDueAt: IsoDateSchema.nullable(),
+  retryNotBefore: IsoDateSchema.nullable(),
+  mustCreateNewActionContract: exports_external.literal(true),
+  mayReuseGreenlight: exports_external.literal(false),
+  mayMutateProtectedSurface: exports_external.literal(false),
+  recommendationStatus: RecoveryRecommendationStatusSchema,
+  statusChangedAt: IsoDateSchema.nullable(),
+  statusChangedByRef: exports_external.string().min(1).nullable(),
+  statusReasonCode: ReasonCodeSchema.nullable(),
+  statusReasonSummary: exports_external.string().min(1).max(1000).nullable(),
+  supersededByActionContractId: IdSchema.nullable(),
+  recommendationDigest: DigestSchema
+});
+var RecoveryRecommendationStatusTransitionSchema = ProtocolBaseSchema.extend({
+  recoveryRecommendationStatusTransitionId: IdSchema,
+  recoveryRecommendationId: IdSchema,
+  sourceReceiptId: IdSchema,
+  sourceActionContractId: IdSchema,
+  previousStatus: RecoveryRecommendationStatusSchema,
+  nextStatus: RecoveryRecommendationTerminalStatusSchema,
+  recommendationDigest: DigestSchema,
+  reasonCode: ReasonCodeSchema,
+  reasonSummary: exports_external.string().min(1).max(1000),
+  changedByRef: exports_external.string().min(1),
+  changedAt: IsoDateSchema,
+  supersededByActionContractId: IdSchema.nullable(),
+  transitionDigest: DigestSchema
+});
+
+// src/protocol/areas/review-binding/schemas.ts
+var ReviewHiddenActionPostureSchema = exports_external.enum(["no_hidden_actions_detected", "hidden_action_risk", "unknown"]);
+var ReviewSecondaryActionPostureSchema = exports_external.enum([
+  "no_secondary_actions_detected",
+  "secondary_action_risk",
+  "unknown"
+]);
+var ReviewArtifactRecordSchema = ProtocolBaseSchema.extend({
+  reviewArtifactId: IdSchema,
+  reviewArtifactRef: exports_external.string().min(1),
+  reviewRenderSchemaVersion: exports_external.string().min(1),
+  rendererRef: exports_external.string().min(1),
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyDecisionId: IdSchema,
+  policyInputDigest: DigestSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  renderedContractDigest: DigestSchema,
+  renderedPolicyInputDigest: DigestSchema,
+  renderedUncertaintyDigest: DigestSchema,
+  renderedArtifactDigest: DigestSchema,
+  catalogDigest: DigestSchema.nullable().default(null),
+  rendererDigest: DigestSchema.nullable().default(null),
+  actionBindingDigest: DigestSchema.nullable().default(null),
+  hiddenActionPosture: ReviewHiddenActionPostureSchema.default("unknown"),
+  secondaryActionPosture: ReviewSecondaryActionPostureSchema.default("unknown"),
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1)).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  reviewArtifactDigest: DigestSchema
+});
+var ReviewDecisionSchema = ProtocolBaseSchema.extend({
+  reviewDecisionId: IdSchema,
+  reviewArtifactId: IdSchema,
+  reviewArtifactRef: exports_external.string().min(1),
+  reviewArtifactDigest: DigestSchema,
+  reviewRenderSchemaVersion: exports_external.string().min(1),
+  reviewerPrincipalId: IdSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyInputDigest: DigestSchema,
+  gatewayPolicyVersion: exports_external.string().min(1),
+  decision: exports_external.enum(["approve", "reject", "needs_changes"]),
+  decisionReasonCode: ReasonCodeSchema,
+  decisionExpiresAt: IsoDateSchema,
+  signatureOrAttestationRef: exports_external.string().min(1)
+});
+
+// src/protocol/areas/runtime-evidence/schemas.ts
+var RuntimeExecutionShapeSchema = exports_external.enum([
+  "single_tool_call",
+  "tool_dispatch_chain",
+  "generated_mcp_tool_chain",
+  "codemode_block",
+  "shell_exec_block",
+  "browser_action",
+  "scheduled_job",
+  "gateway_only",
+  "unknown"
+]);
+var RuntimePostureSchema = exports_external.enum([
+  "prompt_guidance",
+  "hook_assisted",
+  "protected_capability",
+  "bounded_generation",
+  "gateway_enforced_only",
+  "hosted_control_plane",
+  "unknown"
+]);
+var RuntimeAccessPostureSchema = exports_external.enum([
+  "isolated",
+  "controlled_outbound",
+  "filesystem_available",
+  "network_available",
+  "secrets_available",
+  "unknown"
+]);
+var RuntimeExecutionRecordSchema = ProtocolBaseSchema.extend({
+  runtimeExecutionId: IdSchema,
+  principalIntentRef: exports_external.string().min(1),
+  principalId: IdSchema,
+  agentId: IdSchema,
+  runId: IdSchema,
+  runtimeAdapterId: IdSchema,
+  executionShape: RuntimeExecutionShapeSchema,
+  runtimePosture: RuntimePostureSchema,
+  executionBlockRef: exports_external.string().min(1),
+  executionBlockDigest: DigestSchema,
+  generatedCodeOrSpecRefs: exports_external.array(exports_external.string()).default([]),
+  allowedToolCapabilityIds: exports_external.array(IdSchema).default([]),
+  observedToolCallRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  observedConsequentialCallCount: exports_external.number().int().nonnegative(),
+  loopDetected: exports_external.boolean(),
+  retryDetected: exports_external.boolean(),
+  branchDetected: exports_external.boolean(),
+  dynamicToolConstructionDetected: exports_external.boolean(),
+  unobservedRegionRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  accessPosture: RuntimeAccessPostureSchema,
+  uncertaintyMarkers: exports_external.array(exports_external.string().min(1)).default([]),
+  refusalReasonCodes: exports_external.array(ReasonCodeSchema).default([]),
+  evidenceRefs: exports_external.array(exports_external.string().min(1)).default([]),
+  runtimeExecutionDigest: DigestSchema
+});
+
+// src/protocol/context/request-context-schemas.ts
+var TransitionRequestContextSchema = ProtocolBaseSchema.extend({
+  transitionRequestContextId: IdSchema,
+  protocolVersionSeen: exports_external.string().min(1).max(40),
+  requestIdentity: exports_external.string().min(1).max(200),
+  originatingIdentityDigest: DigestSchema.nullable(),
+  originatingIdentityRef: exports_external.string().min(1).max(500).nullable(),
+  callerCustodyRole: exports_external.enum(["control_plane", "runtime_evidence", "gateway_custody", "review_custody"]),
+  callerIdentityRef: exports_external.string().min(1).max(500).nullable().default(null),
+  callerSubjectDigest: DigestSchema.nullable().default(null),
+  callerTenantId: IdSchema.nullable().default(null),
+  callerOrganizationId: IdSchema.nullable().default(null),
+  callerIdentityClaimsDigest: DigestSchema.nullable().default(null),
+  authProviderRef: exports_external.string().min(1).max(500).nullable().default(null),
+  authSessionDigest: DigestSchema.nullable().default(null),
+  serviceCredentialDigest: DigestSchema.nullable().default(null),
+  revocationEpochRef: exports_external.string().min(1).max(500).nullable().default(null),
+  callerIdentityIssuedAt: IsoDateSchema.nullable().default(null),
+  callerIdentityExpiresAt: IsoDateSchema.nullable().default(null),
+  transitionName: exports_external.string().min(1).max(160),
+  routePattern: exports_external.string().min(1).max(200),
+  requestDigest: DigestSchema,
+  acceptedAt: IsoDateSchema,
+  requestContextDigest: DigestSchema
+});
+
+// src/protocol/areas/object-registry/schemas.ts
+var ProtocolObjectTypeSchema = exports_external.enum([
+  "tool_capability",
+  "action_type",
+  "gateway_registry_entry",
+  "operating_envelope",
+  "endpoint_access_surface_binding",
+  "agentic_endpoint_access_policy",
+  "agentic_endpoint_access_attempt",
+  "agentic_endpoint_access_clearance_binding",
+  "agentic_endpoint_access_lease",
+  "agentic_endpoint_access_usage_event",
+  "agentic_endpoint_access_readback",
+  "agentic_endpoint_access_capabilities",
+  "gateway_credential_ref",
+  "delegated_authority_ref",
+  "delegated_authority_status_transition",
+  "gateway_custody_proof_packet",
+  "credential_resolution_evidence",
+  "typed_action_commitment",
+  "transition_request_context",
+  "runtime_execution",
+  "generated_execution_graph",
+  "idempotency_ledger_entry",
+  "bypass_probe",
+  "tool_call_draft",
+  "protected_path_posture",
+  "intent_compilation",
+  "delegation_evidence_record",
+  "negotiation_session",
+  "negotiation_offer",
+  "negotiation_decision",
+  "linked_agreement",
+  "agreement_obligation_binding",
+  "agreement_status_transition",
+  "action_contract",
+  "authority_certificate",
+  "policy_decision",
+  "greenlight",
+  "review_artifact",
+  "review_decision",
+  "breaker_decision",
+  "isolation_state",
+  "gateway_check_attempt",
+  "mutation_attempt",
+  "protected_surface_operation_claim",
+  "surface_operation_reconciliation",
+  "proof_gap",
+  "refusal",
+  "receipt",
+  "receipt_export",
+  "raw_record_read_audit",
+  "recovery_recommendation",
+  "recovery_recommendation_status_transition",
+  "contract_stream_event"
+]);
+var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
+  exports_external.strictObject({ objectType: exports_external.literal("tool_capability"), payload: ToolCapabilitySchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("action_type"), payload: ActionTypeSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("gateway_registry_entry"), payload: GatewayRegistryEntrySchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("operating_envelope"), payload: OperatingEnvelopeSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("endpoint_access_surface_binding"),
+    payload: EndpointAccessSurfaceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_policy"),
+    payload: AgenticEndpointAccessPolicySchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_attempt"),
+    payload: AgenticEndpointAccessAttemptSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_clearance_binding"),
+    payload: AgenticEndpointAccessClearanceBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_lease"),
+    payload: AgenticEndpointAccessLeaseSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_usage_event"),
+    payload: AgenticEndpointAccessUsageEventSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_readback"),
+    payload: AgenticEndpointAccessReadbackSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agentic_endpoint_access_capabilities"),
+    payload: AgenticEndpointAccessCapabilitiesSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("gateway_credential_ref"), payload: GatewayCredentialRefSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("delegated_authority_ref"), payload: DelegatedAuthorityRefSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("delegated_authority_status_transition"),
+    payload: DelegatedAuthorityStatusTransitionSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("gateway_custody_proof_packet"),
+    payload: GatewayCustodyProofPacketSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("credential_resolution_evidence"),
+    payload: CredentialResolutionEvidenceSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("typed_action_commitment"),
+    payload: TypedActionCommitmentRecordSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("transition_request_context"), payload: TransitionRequestContextSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("runtime_execution"), payload: RuntimeExecutionRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("generated_execution_graph"), payload: GeneratedExecutionGraphSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("idempotency_ledger_entry"), payload: IdempotencyLedgerEntrySchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("bypass_probe"), payload: BypassProbeSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("tool_call_draft"), payload: ToolCallDraftSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("protected_path_posture"), payload: ProtectedPathPostureSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("intent_compilation"), payload: IntentCompilationRecordSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("delegation_evidence_record"),
+    payload: StoredDelegationEvidenceRecordSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_session"), payload: NegotiationSessionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_offer"), payload: NegotiationOfferSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("negotiation_decision"), payload: NegotiationDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("linked_agreement"), payload: LinkedAgreementSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_obligation_binding"),
+    payload: AgreementObligationBindingSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("agreement_status_transition"),
+    payload: AgreementStatusTransitionSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("action_contract"), payload: ActionContractSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("authority_certificate"), payload: AuthorityCertificateSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("policy_decision"), payload: PolicyDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("greenlight"), payload: GreenlightSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("review_artifact"), payload: ReviewArtifactRecordSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("review_decision"), payload: ReviewDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("breaker_decision"), payload: BreakerDecisionSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("isolation_state"), payload: IsolationStateSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("gateway_check_attempt"), payload: GatewayCheckAttemptSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("mutation_attempt"), payload: MutationAttemptSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("protected_surface_operation_claim"),
+    payload: ProtectedSurfaceOperationClaimSchema
+  }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("surface_operation_reconciliation"),
+    payload: SurfaceOperationReconciliationSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("proof_gap"), payload: ProofGapSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("refusal"), payload: RefusalSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("receipt"), payload: ReceiptSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("receipt_export"), payload: ReceiptExportSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("raw_record_read_audit"), payload: RawRecordReadAuditSchema }),
+  exports_external.strictObject({ objectType: exports_external.literal("recovery_recommendation"), payload: RecoveryRecommendationSchema }),
+  exports_external.strictObject({
+    objectType: exports_external.literal("recovery_recommendation_status_transition"),
+    payload: RecoveryRecommendationStatusTransitionSchema
+  }),
+  exports_external.strictObject({ objectType: exports_external.literal("contract_stream_event"), payload: ContractStreamEventSchema })
+]);
+// src/protocol/areas/object-registry/index.ts
+var protocolObjectTypes = Object.freeze([
+  ...ProtocolObjectTypeSchema.options
+]);
+var protocolObjectRegistryEntries = {
+  tool_capability: entry("tool_capability", ToolCapabilitySchema, (record2) => record2.payload.toolCapabilityId, "catalog_public", "control_plane_read"),
+  action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
+  gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
+  operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
+  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
+  delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
+  delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
+  gateway_custody_proof_packet: entry("gateway_custody_proof_packet", GatewayCustodyProofPacketSchema, (record2) => record2.payload.gatewayCustodyProofPacketId, "transition_evidence", "audit_read"),
+  credential_resolution_evidence: entry("credential_resolution_evidence", CredentialResolutionEvidenceSchema, (record2) => record2.payload.credentialResolutionEvidenceId, "transition_evidence", "audit_read"),
+  typed_action_commitment: entry("typed_action_commitment", TypedActionCommitmentRecordSchema, (record2) => record2.payload.typedActionCommitmentId, "transition_evidence", "audit_read"),
+  transition_request_context: entry("transition_request_context", TransitionRequestContextSchema, (record2) => record2.payload.transitionRequestContextId, "internal_evidence", "internal_only"),
+  runtime_execution: entry("runtime_execution", RuntimeExecutionRecordSchema, (record2) => record2.payload.runtimeExecutionId, "transition_evidence", "audit_read"),
+  generated_execution_graph: entry("generated_execution_graph", GeneratedExecutionGraphSchema, (record2) => record2.payload.generatedExecutionGraphId, "transition_evidence", "audit_read"),
+  idempotency_ledger_entry: entry("idempotency_ledger_entry", IdempotencyLedgerEntrySchema, (record2) => record2.payload.idempotencyLedgerEntryId, "internal_evidence", "internal_only"),
+  bypass_probe: entry("bypass_probe", BypassProbeSchema, (record2) => record2.payload.bypassProbeId, "internal_evidence", "internal_only"),
+  tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
+  protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
+  intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
+  delegation_evidence_record: entry("delegation_evidence_record", StoredDelegationEvidenceRecordSchema, (record2) => record2.payload.delegationEvidenceRecordId, "transition_evidence", "audit_read"),
+  negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
+  negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
+  negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
+  linked_agreement: entry("linked_agreement", LinkedAgreementSchema, (record2) => record2.payload.linkedAgreementId, "transition_evidence", "audit_read"),
+  agreement_obligation_binding: entry("agreement_obligation_binding", AgreementObligationBindingSchema, (record2) => record2.payload.agreementObligationBindingId, "transition_evidence", "audit_read"),
+  agreement_status_transition: entry("agreement_status_transition", AgreementStatusTransitionSchema, (record2) => record2.payload.agreementStatusTransitionId, "transition_evidence", "audit_read"),
+  action_contract: entry("action_contract", ActionContractSchema, (record2) => record2.payload.actionContractId, "transition_evidence", "audit_read"),
+  authority_certificate: entry("authority_certificate", AuthorityCertificateSchema, (record2) => record2.payload.authorityCertificateId, "receipt_evidence", "audit_read"),
+  policy_decision: entry("policy_decision", PolicyDecisionSchema, (record2) => record2.payload.policyDecisionId, "transition_evidence", "audit_read"),
+  greenlight: entry("greenlight", GreenlightSchema, (record2) => record2.payload.greenlightId, "transition_evidence", "audit_read"),
+  review_artifact: entry("review_artifact", ReviewArtifactRecordSchema, (record2) => record2.payload.reviewArtifactId, "transition_evidence", "audit_read"),
+  review_decision: entry("review_decision", ReviewDecisionSchema, (record2) => record2.payload.reviewDecisionId, "transition_evidence", "audit_read"),
+  breaker_decision: entry("breaker_decision", BreakerDecisionSchema, (record2) => record2.payload.breakerDecisionId, "transition_evidence", "audit_read"),
+  isolation_state: entry("isolation_state", IsolationStateSchema, (record2) => record2.payload.isolationStateId, "transition_evidence", "audit_read"),
+  gateway_check_attempt: entry("gateway_check_attempt", GatewayCheckAttemptSchema, (record2) => record2.payload.gateAttemptId, "transition_evidence", "audit_read"),
+  mutation_attempt: entry("mutation_attempt", MutationAttemptSchema, (record2) => record2.payload.mutationAttemptId, "transition_evidence", "audit_read"),
+  protected_surface_operation_claim: entry("protected_surface_operation_claim", ProtectedSurfaceOperationClaimSchema, (record2) => record2.payload.protectedSurfaceOperationClaimId, "internal_evidence", "internal_only"),
+  surface_operation_reconciliation: entry("surface_operation_reconciliation", SurfaceOperationReconciliationSchema, (record2) => record2.payload.reconciliationId, "transition_evidence", "audit_read"),
+  proof_gap: entry("proof_gap", ProofGapSchema, (record2) => record2.payload.proofGapId, "transition_evidence", "audit_read"),
+  refusal: entry("refusal", RefusalSchema, (record2) => record2.payload.refusalId, "transition_evidence", "audit_read"),
+  receipt: entry("receipt", ReceiptSchema, (record2) => record2.payload.receiptId, "receipt_evidence", "audit_read"),
+  receipt_export: entry("receipt_export", ReceiptExportSchema, (record2) => record2.payload.receiptExportId, "receipt_evidence", "audit_read"),
+  raw_record_read_audit: entry("raw_record_read_audit", RawRecordReadAuditSchema, (record2) => record2.payload.rawRecordReadAuditId, "internal_evidence", "internal_only"),
+  recovery_recommendation: entry("recovery_recommendation", RecoveryRecommendationSchema, (record2) => record2.payload.recoveryRecommendationId, "transition_evidence", "audit_read"),
+  recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
+  contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
+};
+var protocolObjectRegistry = Object.freeze(protocolObjectRegistryEntries);
+var protocolRecordSchemas = Object.freeze(Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema])));
+function entry(objectType, schema, idSelector, exportPosture, rawReadPosture, schemaVersion = PROTOCOL_VERSION, additionalSchemaRegistrations = []) {
+  const selectCurrentObjectId = (payload) => idSelector({
+    objectType,
+    payload
+  });
+  const registrations = Object.freeze([
+    Object.freeze({
+      schemaVersion,
+      schema,
+      objectIdSelector: selectCurrentObjectId
+    }),
+    ...additionalSchemaRegistrations.map((registration) => Object.freeze({
+      schemaVersion: registration.schemaVersion,
+      schema: registration.schema,
+      objectIdSelector: registration.objectIdSelector
+    }))
+  ]);
+  return Object.freeze({
+    objectType,
+    schema,
+    idSelector: (record2) => idSelector(record2),
+    schemaRegistrations: registrations,
+    exportPosture,
+    rawReadPosture
+  });
+}
+
+// src/protocol/areas/object-registry/schema-capability.ts
+var trustedArrayIncludes2 = Array.prototype.includes;
+var trustedStringTrim3 = String.prototype.trim;
+
+// src/protocol/store/record-exactness.ts
+var STORED_PROTOCOL_RECORD_KEYS = Object.freeze([
+  "objectId",
+  "objectType",
+  "tenantId",
+  "organizationId",
+  "schemaVersion",
+  "canonicalDigest",
+  "payload",
+  "createdAt",
+  "sourceEventId"
+]);
+var trustedObjectPrototype3 = Object.prototype;
+
+// src/protocol/events/outbox.ts
+var trustedArrayIsArray2 = Array.isArray;
+var trustedArrayIncludes3 = Array.prototype.includes;
+var trustedNumberIsSafeInteger2 = Number.isSafeInteger;
+var trustedObjectHasOwn = Object.hasOwn;
+var trustedObjectKeys2 = Object.keys;
+var trustedRegExpTest3 = RegExp.prototype.test;
+var trustedReflectApply4 = Reflect.apply;
+var trustedStringTrim4 = String.prototype.trim;
+var trustedStructuredClone5 = structuredClone;
+var PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION = "authority-projection-outbox-protocol-record-claim-receipt-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_VERSION = "authority-projection-outbox-protocol-record-claim-command-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_IDENTITY_VERSION_V1 = "authority-projection-outbox-protocol-record-claim-command-identity-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_TRANSITION_VERSION = "authority-projection-outbox-protocol-record-claim-transition-1";
+var PROJECTION_OUTBOX_STATUSES = Object.freeze([
+  "claimed",
+  "materialized",
+  "projection_conflict",
+  "acknowledged",
+  "poisoned",
+  "exhausted"
+]);
+var protocolRecordProjectionRuntimeConfigurations = new WeakMap;
+var protocolRecordProjectionClaimCommandProtocols = Object.freeze([
+  Object.freeze({
+    commandVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_VERSION,
+    receiptVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION,
+    transitionVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_TRANSITION_VERSION,
+    pointerSelector: protocolRecordProjectionClaimCommandPointerIdentityV1,
+    leaseSelector: protocolRecordProjectionClaimLeaseIdentityV1,
+    receiptCodec: parseProtocolRecordProjectionClaimReceiptV1
+  })
+]);
+async function protocolRecordProjectionClaimCommandPointerIdentityV1(input) {
+  const digest = await digestCanonical({
+    protocolRecordProjectionClaimCommandIdentityVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_IDENTITY_VERSION_V1,
+    projection: input.projection,
+    workerId: input.workerId,
+    command: input.command
+  });
+  return authorityPointerIdentity("projection_delivery", `claim:${digest.slice("sha256:".length)}`);
+}
+function protocolRecordProjectionClaimLeaseIdentityV1(commandPointer) {
+  if (commandPointer.pointerKind !== "projection_delivery" || !trustedReflectApply4(trustedRegExpTest3, /^claim:[a-f0-9]{64}$/, [commandPointer.localId])) {
+    throw new Error("Protocol-record projection claim-command pointer is invalid.");
+  }
+  return `lease_${commandPointer.localId.slice("claim:".length)}`;
+}
+function parseProtocolRecordProjectionClaimReceiptV1(record2, item, route, command, workerId, leaseId) {
+  try {
+    const payload = asJsonObject(record2.payload);
+    const claimedState = payload ? parseProtocolRecordProjectionClaimedStateWitness(payload.claimedState) : null;
+    const lease = payload ? parseProtocolRecordProjectionLease(payload.lease) : null;
+    if (!payload || !hasExactKeys2(payload, [
+      "receiptVersion",
+      "commandVersion",
+      "projection",
+      "sourceCommit",
+      "sourceRequestDigest",
+      "sourceManifestDigest",
+      "source",
+      "descriptorDigest",
+      "route",
+      "commandId",
+      "workerId",
+      "lease",
+      "claimedState"
+    ]) || payload.receiptVersion !== PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION || payload.commandVersion !== command.commandVersion || canonicalize(payload.projection) !== canonicalize(item.intent.projection) || canonicalize(payload.sourceCommit) !== canonicalize(item.marker.identity) || payload.sourceRequestDigest !== item.marker.requestDigest || payload.sourceManifestDigest !== item.marker.manifestDigest || canonicalize(payload.source) !== canonicalize(item.intent.source) || payload.descriptorDigest !== item.intent.descriptorDigest || canonicalize(payload.route) !== canonicalize(route) || payload.commandId !== command.commandId || payload.workerId !== workerId || !lease || lease.leaseId !== leaseId || lease.workerId !== workerId || !claimedState || record2.record.recordKind !== "authority_evidence" || !trustedReflectApply4(trustedRegExpTest3, /^projection_claim_[a-f0-9]{64}$/, [record2.record.localId]) || record2.semanticState !== "projection_claim" || record2.version !== 1 || record2.predecessor !== null) {
+      return { ok: false, reason: "projection_claim_receipt_invalid" };
+    }
+    return {
+      ok: true,
+      receipt: {
+        receiptVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION,
+        commandVersion: command.commandVersion,
+        projection: trustedStructuredClone5(item.intent.projection),
+        sourceCommit: trustedStructuredClone5(item.marker.identity),
+        sourceRequestDigest: item.marker.requestDigest,
+        sourceManifestDigest: item.marker.manifestDigest,
+        source: trustedStructuredClone5(item.intent.source),
+        descriptorDigest: item.intent.descriptorDigest,
+        route: trustedStructuredClone5(route),
+        commandId: command.commandId,
+        workerId,
+        lease,
+        claimedState
+      }
+    };
+  } catch {
+    return { ok: false, reason: "projection_claim_receipt_invalid" };
+  }
+}
+function parseProtocolRecordProjectionClaimedStateWitness(value) {
+  const witnessValue = asJsonObject(value);
+  const identity = witnessValue ? asJsonObject(witnessValue.record) : null;
+  if (!witnessValue || !hasExactKeys2(witnessValue, ["record", "semanticState", "version", "digest"]) || !identity || !hasExactKeys2(identity, ["recordKind", "localId"]) || identity.recordKind !== "projection_state" || typeof identity.localId !== "string" || !trustedReflectApply4(trustedRegExpTest3, /^projection_state_[a-f0-9]{64}$/, [identity.localId]) || witnessValue.semanticState !== "claimed" && witnessValue.semanticState !== "materialized" || !trustedNumberIsSafeInteger2(witnessValue.version) || witnessValue.version < 1 || typeof witnessValue.digest !== "string" || !isDigest2(witnessValue.digest)) {
+    return null;
+  }
+  return {
+    record: {
+      recordKind: "projection_state",
+      localId: identity.localId
+    },
+    semanticState: witnessValue.semanticState,
+    version: witnessValue.version,
+    digest: witnessValue.digest
+  };
+}
+function parseProtocolRecordProjectionClockWitness(value) {
+  const clockWitness = asJsonObject(value);
+  const recordWitness = clockWitness ? asJsonObject(clockWitness.record) : null;
+  const recordIdentity = recordWitness ? asJsonObject(recordWitness.record) : null;
+  if (!clockWitness || !hasExactKeys2(clockWitness, ["record", "tick"]) || !trustedNumberIsSafeInteger2(clockWitness.tick) || clockWitness.tick < 0 || !recordWitness || !hasExactKeys2(recordWitness, ["record", "semanticState", "version", "digest"]) || !recordIdentity || !hasExactKeys2(recordIdentity, ["recordKind", "localId"]) || recordIdentity.recordKind !== "authority_state" || typeof recordIdentity.localId !== "string" || !trustedReflectApply4(trustedRegExpTest3, /^projection_clock_[a-f0-9]{64}$/, [recordIdentity.localId]) || recordWitness.semanticState !== "projection_clock" || !trustedNumberIsSafeInteger2(recordWitness.version) || recordWitness.version < 1 || typeof recordWitness.digest !== "string" || !isDigest2(recordWitness.digest) || recordWitness.version !== clockWitness.tick + 1) {
+    return null;
+  }
+  return {
+    record: {
+      record: {
+        recordKind: "authority_state",
+        localId: recordIdentity.localId
+      },
+      semanticState: "projection_clock",
+      version: recordWitness.version,
+      digest: recordWitness.digest
+    },
+    tick: clockWitness.tick
+  };
+}
+function parseProtocolRecordProjectionLease(value) {
+  const lease = asJsonObject(value);
+  if (!lease || !hasExactKeys2(lease, ["leaseId", "workerId", "fence", "acquiredTick", "expiresAtTickExclusive", "clockWitness"]) || !validLocalText(lease.leaseId) || !validLocalText(lease.workerId) || !trustedNumberIsSafeInteger2(lease.fence) || lease.fence < 1 || !trustedNumberIsSafeInteger2(lease.acquiredTick) || lease.acquiredTick < 0 || !trustedNumberIsSafeInteger2(lease.expiresAtTickExclusive) || lease.expiresAtTickExclusive <= lease.acquiredTick) {
+    return null;
+  }
+  const clockWitness = parseProtocolRecordProjectionClockWitness(lease.clockWitness);
+  if (!clockWitness || clockWitness.tick !== lease.acquiredTick || clockWitness.record.version !== lease.acquiredTick + 1) {
+    return null;
+  }
+  return {
+    leaseId: lease.leaseId,
+    workerId: lease.workerId,
+    fence: lease.fence,
+    acquiredTick: lease.acquiredTick,
+    expiresAtTickExclusive: lease.expiresAtTickExclusive,
+    clockWitness
+  };
+}
+function asJsonObject(value) {
+  if (value === null || typeof value !== "object" || trustedArrayIsArray2(value))
+    return null;
+  return value;
+}
+function hasExactKeys2(value, expected) {
+  const actual = trustedObjectKeys2(value);
+  if (actual.length !== expected.length)
+    return false;
+  for (let index = 0;index < expected.length; index += 1) {
+    const key = expected[index];
+    if (key === undefined || !trustedObjectHasOwn(value, key))
+      return false;
+  }
+  return true;
+}
+function validLocalText(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 500 && trustedReflectApply4(trustedStringTrim4, value, []) === value;
+}
+function isDigest2(value) {
+  if (value.length !== 71 || !value.startsWith("sha256:"))
+    return false;
+  for (let index = "sha256:".length;index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    const decimal = code >= 48 && code <= 57;
+    const lowerHex = code >= 97 && code <= 102;
+    if (!decimal && !lowerHex)
+      return false;
+  }
+  return true;
+}
+
+// src/protocol/areas/isolation-breaker/source-read-capability.ts
+var trustedFunctionBind = Function.prototype.bind;
+var trustedWeakMapConstructor = WeakMap;
+var trustedWeakMapGet = WeakMap.prototype.get;
+var trustedWeakMapSet = WeakMap.prototype.set;
+var isolationReaders = new trustedWeakMapConstructor;
+var preparedIsolationReaderBindings = new trustedWeakMapConstructor;
+
+// src/protocol/areas/isolation-breaker/source-mutation-capability.ts
+var trustedFunctionBind2 = Function.prototype.bind;
+var trustedWeakMapConstructor2 = WeakMap;
+var trustedWeakMapGet2 = WeakMap.prototype.get;
+var trustedWeakMapSet2 = WeakMap.prototype.set;
+var isolationSources = new trustedWeakMapConstructor2;
+var isolationCommitters = new trustedWeakMapConstructor2;
+var preparedIsolationMutationBindings = new trustedWeakMapConstructor2;
+var causeAdditionMutations = new trustedWeakMapConstructor2;
+var causeClearanceMutations = new trustedWeakMapConstructor2;
+var isolationCommitCapability = createCurrentIsolationTransitionAuthorityCommitCapability();
 // src/protocol/areas/bypass-probe/inputs.ts
 var CreateBypassProbeInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),

@@ -71,7 +71,7 @@ export type PackageInstallGatewayResult = {
     reconciliation: SurfaceOperationReconciliation;
     mutationEvidence: PackageInstallMutationEvidence;
 } | {
-    outcome: "mutation_failed";
+    outcome: "mutation_failed" | "mutation_outcome_unknown";
     gatewayCheck: GatewayCheckResult;
     reconciliation: SurfaceOperationReconciliation;
     mutationEvidence: null;

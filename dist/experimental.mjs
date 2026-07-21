@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -15340,31 +15344,110 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   expiresAt: exports_external.string().datetime({ offset: true })
 });
 // src/protocol/foundation/canonical.ts
+var HEX_DIGITS = "0123456789abcdef";
+var trustedArrayIsArray = Array.isArray;
+var trustedArrayPrototype = Array.prototype;
+var trustedArraySort = Array.prototype.sort;
+var trustedArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+var trustedDataView = DataView;
+var trustedDataViewGetUint8 = DataView.prototype.getUint8;
+var trustedJsonStringify = JSON.stringify;
+var trustedNumberIsFinite = Number.isFinite;
+var trustedNumberMaxSafeInteger = Number.MAX_SAFE_INTEGER;
+var trustedObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var trustedObjectKeys = Object.keys;
+var trustedObjectPrototype = Object.prototype;
+var trustedReflectApply = Reflect.apply;
+var trustedSetAdd = Set.prototype.add;
+var trustedSetDelete = Set.prototype.delete;
+var trustedSetHas = Set.prototype.has;
+var trustedString = String;
+var trustedStringCharCodeAt = String.prototype.charCodeAt;
+var trustedSubtle = crypto.subtle;
+var trustedSubtleDigest = trustedSubtle.digest;
+var trustedSubtleImportKey = trustedSubtle.importKey;
+var trustedSubtleSign = trustedSubtle.sign;
+var trustedTextEncoder = new TextEncoder;
+var trustedTextEncoderEncode = TextEncoder.prototype.encode;
 function canonicalize(value) {
   if (value === null)
     return "null";
   if (typeof value === "boolean")
     return value ? "true" : "false";
   if (typeof value === "string")
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value))
+    if (!trustedNumberIsFinite(value))
       throw new Error("Cannot canonicalize non-finite number");
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   }
-  if (Array.isArray(value))
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
-  const keys = Object.keys(value).sort();
-  const fields = keys.map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`);
-  return `{${fields.join(",")}}`;
+  if (trustedArrayIsArray(value)) {
+    let canonical2 = "[";
+    for (let index = 0;index < value.length; index += 1) {
+      const descriptor = trustedObjectGetOwnPropertyDescriptor(value, trustedString(index));
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw new Error("Cannot canonicalize sparse or accessor-backed array");
+      }
+      if (index > 0)
+        canonical2 += ",";
+      canonical2 += canonicalize(descriptor.value);
+    }
+    return `${canonical2}]`;
+  }
+  const keys = trustedObjectKeys(value);
+  trustedReflectApply(trustedArraySort, keys, [compareCodeUnits]);
+  let canonical = "{";
+  for (let index = 0;index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === undefined)
+      throw new Error("Cannot canonicalize an unstable object key set");
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot canonicalize accessor-backed or unstable object data");
+    }
+    if (index > 0)
+      canonical += ",";
+    canonical += `${stringifyCanonicalPrimitive(key)}:${canonicalize(descriptor.value)}`;
+  }
+  return `${canonical}}`;
 }
 async function digestCanonical(value) {
-  const bytes = new TextEncoder().encode(canonicalize(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `sha256:${toHex(digest)}`;
+  const bytes = encodeUtf8(canonicalize(value));
+  const digest = await trustedReflectApply(trustedSubtleDigest, trustedSubtle, ["SHA-256", bytes]);
+  return `sha256:${toHex(digest, 32)}`;
 }
-function toHex(buffer) {
-  return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function toHex(buffer, expectedByteLength) {
+  if (trustedArrayBufferByteLength === undefined) {
+    throw new Error("Cannot inspect cryptographic result bytes");
+  }
+  const byteLength = trustedReflectApply(trustedArrayBufferByteLength, buffer, []);
+  if (byteLength !== expectedByteLength) {
+    throw new Error("Unexpected cryptographic result length");
+  }
+  const bytes = new trustedDataView(buffer);
+  let hex3 = "";
+  for (let index = 0;index < byteLength; index += 1) {
+    const byte = trustedReflectApply(trustedDataViewGetUint8, bytes, [index]);
+    hex3 += HEX_DIGITS[byte >>> 4 & 15];
+    hex3 += HEX_DIGITS[byte & 15];
+  }
+  return hex3;
+}
+function compareCodeUnits(left, right) {
+  if (left < right)
+    return -1;
+  if (left > right)
+    return 1;
+  return 0;
+}
+function stringifyCanonicalPrimitive(value) {
+  const canonical = trustedJsonStringify(value);
+  if (canonical === undefined)
+    throw new Error("Cannot canonicalize an unsupported primitive");
+  return canonical;
+}
+function encodeUtf8(value) {
+  return trustedReflectApply(trustedTextEncoderEncode, trustedTextEncoder, [value]);
 }
 
 // src/protocol/foundation/ids.ts
@@ -18533,6 +18616,15 @@ var HostBypassHarnessReportSchema = exports_external.strictObject({
   nonClaims: exports_external.array(NonEmptyStringSchema)
 });
 // src/adapters/downstream-failure-evidence.ts
+var trustedDownstreamEffectCommitStates = new WeakMap;
+function downstreamFailureObservation(input) {
+  const effectCommitState = failureSignal(input.error).effectCommitState;
+  const confirmedNoEffect = !input.effectInvocationStarted || effectCommitState === "not_started" || effectCommitState === "confirmed_not_committed";
+  return {
+    observedDownstreamStatus: confirmedNoEffect ? "failed" : "unknown",
+    orphanIsolationRequested: !confirmedNoEffect
+  };
+}
 async function downstreamFailureEvidence(input) {
   const signal = failureSignal(input.error);
   const downstreamRetryability = signal.downstreamRetryability ?? "unknown";
@@ -18578,6 +18670,7 @@ function failureSignal(error51) {
       "none",
       "unknown"
     ]),
+    effectCommitState: error51 !== null && (typeof error51 === "object" || typeof error51 === "function") ? trustedDownstreamEffectCommitStates.get(error51) : undefined,
     evidenceRefs: stringArray(record2.evidenceRefs),
     errorName: (error51 instanceof Error ? error51.name : nullableString(record2.name)) ?? null,
     errorCode: nullableString(record2.code) ?? null
@@ -18627,6 +18720,3098 @@ var EvaluatePolicyInputSchema = exports_external.strictObject({
   signingSecret: exports_external.string().min(1).optional(),
   reviewDecisionId: exports_external.string().min(1).optional()
 });
+// src/protocol/areas/policy-greenlight/admission/source/source-grammar.ts
+var POLICY_TRANSACTION_ID = /^policy_tx_([a-f0-9]{64})$/;
+var POLICY_OUTCOME_ID = /^policy_outcome_codec3_([a-f0-9]{64})_v1$/;
+var POLICY_OUTCOME_STATE = /^policy_(greenlight|refuse|review_required|halt|quarantine|proof_gap)$/;
+function validatePolicyAdmissionCodec3Grammar(mutation) {
+  const transactionMatch = POLICY_TRANSACTION_ID.exec(mutation.identity.localId);
+  if (mutation.writerGrammar !== "policy-admission-codec-3" || mutation.identity.mutationKind !== "policy_admission" || transactionMatch === null) {
+    throw new Error("Policy-admission codec-3 identity is invalid.");
+  }
+  const outcomes = mutation.records.filter(isOutcomeRecord);
+  if (outcomes.length !== 1) {
+    throw new Error("Policy-admission codec-3 requires one exact outcome record.");
+  }
+  const outcome = outcomes[0];
+  if (outcome === undefined) {
+    throw new Error("Policy-admission codec-3 requires one exact outcome record.");
+  }
+  const outcomeMatch = POLICY_OUTCOME_ID.exec(outcome.record.localId);
+  if (outcomeMatch === null || outcomeMatch[1] !== transactionMatch[1]) {
+    throw new Error("Policy-admission codec-3 outcome identity is invalid.");
+  }
+  const payload = parseOutcomePayload(outcome.payload);
+  if (payload.transactionDigest !== `sha256:${transactionMatch[1]}` || payload.transactionBinding.outcome !== payload.outcome || payload.transactionBinding.aggregatePosture !== payload.aggregatePosture || payload.transactionBinding.logicalAttemptDigest !== payload.attemptDigest || payload.transactionBinding.actionContractId !== payload.actionContractId || payload.transactionBinding.actionContractDigest !== payload.actionContractDigest || payload.transactionBinding.policyInputDigest !== payload.policyInputDigest || payload.transactionBinding.aggregateSnapshotDigest !== payload.aggregateSnapshotDigest || payload.transactionBinding.isolationSnapshotDigest !== payload.isolationSnapshotDigest) {
+    throw new Error("Policy-admission codec-3 outcome binding is invalid.");
+  }
+  const greenlight = outcome.semanticState === "policy_greenlight";
+  const expectedRecordRoles = greenlight ? payload.aggregatePosture === "required" ? [
+    "outcome",
+    "greenlight_issuance",
+    "policy_idempotency",
+    "aggregate_reservation",
+    "aggregate_bucket",
+    "aggregate_checkpoint"
+  ] : ["outcome", "greenlight_issuance", "policy_idempotency"] : ["outcome"];
+  const recordsByRole = new Map;
+  for (const record2 of mutation.records) {
+    const role = policyRecordRole(record2);
+    if (role === null || recordsByRole.has(role)) {
+      throw new Error("Policy-admission codec-3 record set is not exact.");
+    }
+    recordsByRole.set(role, record2);
+  }
+  if (recordsByRole.size !== expectedRecordRoles.length || expectedRecordRoles.some((role) => !recordsByRole.has(role))) {
+    throw new Error("Policy-admission codec-3 record set is not exact.");
+  }
+  validatePolicyRecordPayloads(recordsByRole, payload);
+  validateRequiredAggregateRecords(recordsByRole, payload, transactionMatch[1]);
+  const expectedPointerCount = expectedRecordRoles.length - (recordsByRole.has("aggregate_reservation") ? 1 : 0);
+  validateExactPointerSet(mutation.pointerMutations, recordsByRole, expectedPointerCount);
+  if (canonicalGuardSet(mutation.pointerGuards) !== canonicalGuardSet(payload.transactionBinding.pointerGuards)) {
+    throw new Error("Policy-admission codec-3 guard set is invalid.");
+  }
+  if (mutation.pointerGuards.some((guard) => guard.pointer.pointerKind === "effect_lineage" || guard.pointer.pointerKind === "effect_observation")) {
+    throw new Error("Policy-admission codec-3 contains a foreign authority guard.");
+  }
+  const expectedTemporalFence = payload.transactionBinding.temporalFence;
+  const actualTemporalFence = mutation.temporalFence ?? null;
+  if (greenlight !== (actualTemporalFence?.kind === "store_time_in_half_open_interval") || canonicalize(actualTemporalFence) !== canonicalize(expectedTemporalFence)) {
+    throw new Error("Policy-admission codec-3 temporal shape is invalid.");
+  }
+  const disposition = payload.transactionBinding.projectionDisposition;
+  if (mutation.projectionIntents.length !== disposition.projectionIntentCount) {
+    throw new Error("Policy-admission codec-3 projection set is invalid.");
+  }
+  if (disposition.projectionIntentCount === 1) {
+    validateExactProjection(mutation, outcome, disposition);
+  }
+}
+function validateRequiredAggregateRecords(records2, outcome, transactionHex) {
+  const reservation = records2.get("aggregate_reservation");
+  const bucket = records2.get("aggregate_bucket");
+  const checkpoint = records2.get("aggregate_checkpoint");
+  if (reservation === undefined && bucket === undefined && checkpoint === undefined)
+    return;
+  if (outcome.aggregatePosture !== "required") {
+    if (reservation !== undefined || bucket !== undefined || checkpoint !== undefined) {
+      throw new Error("Policy-admission codec-3 aggregate record set is invalid.");
+    }
+    return;
+  }
+  if (reservation === undefined || bucket === undefined || checkpoint === undefined) {
+    throw new Error("Policy-admission codec-3 aggregate record set is incomplete.");
+  }
+  const reservationPayload = parseAggregateReservationPayload(reservation.payload);
+  const transactionRef = `policy_admission:${transactionHex}`;
+  const greenlightRef = `greenlight:${outcome.greenlightId ?? ""}`;
+  if (reservation.version !== 1 || reservation.predecessor !== null || reservation.record.localId !== `${reservationPayload.lineage.reservationRef}_v1` || reservationPayload.state !== "authority_reserved" || reservationPayload.lineage.origin.actionContractDigest !== outcome.actionContractDigest || reservationPayload.lineage.origin.originMutationRef !== transactionRef || reservationPayload.lineage.origin.owningGreenlightRef !== greenlightRef || reservationPayload.transitionMutationRef !== transactionRef) {
+    throw new Error("Policy-admission codec-3 aggregate reservation binding is invalid.");
+  }
+  const bucketPayload = parseAggregateBucketPayload(bucket.payload);
+  const bucketIdentity = /^agg1_bucket_([a-f0-9]{64})_v([1-9][0-9]*)$/.exec(bucket.record.localId);
+  const domainHex = bucketIdentity?.[1] ?? "";
+  const bucketVersion = Number(bucketIdentity?.[2] ?? "0");
+  if (bucketVersion < 2 || bucket.version !== bucketVersion || !isWitness(bucket.predecessor) || bucket.predecessor.version !== bucketVersion - 1 || bucket.predecessor.record.recordKind !== "authority_state" || bucket.predecessor.record.localId !== `agg1_bucket_${domainHex}_v${bucketVersion - 1}` || bucket.predecessor.semanticState !== "aggregate_exposure_bucket" || bucket.record.localId !== `agg1_bucket_${domainHex}_v${bucketVersion}` || bucketPayload.locatorDigest !== reservationPayload.lineage.origin.locatorDigest || bucketPayload.bindingDigest !== reservationPayload.lineage.origin.bindingDigest || bucketPayload.bucketState.locatorDigest !== bucketPayload.locatorDigest || bucketPayload.bucketState.bindingDigest !== bucketPayload.bindingDigest) {
+    throw new Error("Policy-admission codec-3 aggregate bucket binding is invalid.");
+  }
+  const newlyReservedMatches = bucketPayload.bucketState.reservations.filter((candidate) => candidate.lineage.reservationRef === reservationPayload.lineage.reservationRef && canonicalize(candidate.lineage) === canonicalize(reservationPayload.lineage));
+  const newlyReserved = newlyReservedMatches[0];
+  if (newlyReservedMatches.length !== 1 || newlyReserved === undefined || newlyReserved.state !== reservationPayload.state || !witnessEqualsRecord(newlyReserved.sourceWitness, reservation)) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  const checkpointPayload = parseAggregateCheckpointPayload(checkpoint.payload);
+  const checkpointIdentity = /^agg1_checkpoint_([a-f0-9]{64})_v([1-9][0-9]*)$/.exec(checkpoint.record.localId);
+  const checkpointVersion = Number(checkpointIdentity?.[2] ?? "0");
+  if (checkpointIdentity?.[1] !== domainHex || checkpointVersion < 2 || checkpoint.version !== checkpointVersion || !isWitness(checkpoint.predecessor) || checkpoint.predecessor.version !== checkpointVersion - 1 || checkpoint.predecessor.record.recordKind !== "authority_evidence" || checkpoint.predecessor.record.localId !== `agg1_checkpoint_${domainHex}_v${checkpointVersion - 1}` || checkpoint.predecessor.semanticState !== "aggregate_induction_checkpoint" || checkpoint.record.localId !== `agg1_checkpoint_${domainHex}_v${checkpointVersion}` || checkpointPayload.domainDigest !== `sha256:${domainHex}` || checkpointPayload.locatorDigest !== bucketPayload.locatorDigest || !witnessEqualsRecord(checkpointPayload.headBucketWitness, bucket)) {
+    throw new Error("Policy-admission codec-3 aggregate checkpoint binding is invalid.");
+  }
+}
+function parseAggregateReservationPayload(value) {
+  if (!hasExactKeys(value, ["aggregateReservationStateSourceVersion", "stateCandidate"])) {
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  }
+  const payload = value;
+  if (payload.aggregateReservationStateSourceVersion !== "aggregate-reservation-state-source-1" || !hasExactKeys(payload.stateCandidate, [
+    "authority",
+    "candidateDigest",
+    "lineage",
+    "predecessor",
+    "state",
+    "transitionMutationRef"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  const candidate = payload.stateCandidate;
+  const lineage = parseAggregateLineage(candidate.lineage);
+  if (candidate.authority !== "none" || !isDigest(candidate.candidateDigest) || candidate.predecessor !== null || candidate.state !== "authority_reserved" || !isNonemptyString(candidate.transitionMutationRef))
+    throw new Error("Policy-admission codec-3 aggregate reservation payload is invalid.");
+  return {
+    lineage,
+    state: candidate.state,
+    transitionMutationRef: candidate.transitionMutationRef
+  };
+}
+function parseAggregateLineage(value) {
+  if (!hasExactKeys(value, ["authority", "lineageDigest", "origin", "reservationRef"])) {
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  }
+  const lineage = value;
+  if (lineage.authority !== "none" || !isDigest(lineage.lineageDigest) || !isNonemptyString(lineage.reservationRef) || !hasExactKeys(lineage.origin, [
+    "actionContractDigest",
+    "bindingDigest",
+    "locatorDigest",
+    "originMutationRef",
+    "owningGreenlightRef",
+    "quantity"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  const origin = lineage.origin;
+  if (!isDigest(origin.actionContractDigest) || !isDigest(origin.bindingDigest) || !isDigest(origin.locatorDigest) || !isNonemptyString(origin.originMutationRef) || !isNonemptyString(origin.owningGreenlightRef) || origin.quantity !== "1")
+    throw new Error("Policy-admission codec-3 aggregate lineage is invalid.");
+  return { origin, lineageDigest: lineage.lineageDigest, reservationRef: lineage.reservationRef };
+}
+function parseAggregateBucketPayload(value) {
+  if (!hasExactKeys(value, [
+    "aggregateExposureBucketSourceVersion",
+    "bindingDigest",
+    "bindingRecordWitness",
+    "bucketState",
+    "locatorDigest"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate bucket payload is invalid.");
+  const payload = value;
+  if (payload.aggregateExposureBucketSourceVersion !== "aggregate-exposure-bucket-source-1" || !isDigest(payload.bindingDigest) || !isDigest(payload.locatorDigest) || !isWitness(payload.bindingRecordWitness) || !hasExactKeys(payload.bucketState, [
+    "authority",
+    "bindingDigest",
+    "conservation",
+    "limitQuantity",
+    "locatorDigest",
+    "predecessorEncumbrances",
+    "reservations",
+    "stateDigest",
+    "window"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate bucket payload is invalid.");
+  const state = payload.bucketState;
+  if (state.authority !== "none" || !isDigest(state.bindingDigest) || !isDigest(state.locatorDigest) || !isQuantity(state.limitQuantity) || !isDigest(state.stateDigest) || !Array.isArray(state.reservations) || !Array.isArray(state.predecessorEncumbrances) || !hasExactKeys(state.window, ["endsAt", "startsAt"]))
+    throw new Error("Policy-admission codec-3 aggregate bucket state is invalid.");
+  const window = state.window;
+  if (!isNonemptyString(window.startsAt) || !isNonemptyString(window.endsAt)) {
+    throw new Error("Policy-admission codec-3 aggregate bucket state is invalid.");
+  }
+  const reservations = state.reservations.map(parseReservationSnapshot);
+  if (!parseConservation(state.conservation)) {
+    throw new Error("Policy-admission codec-3 aggregate conservation is invalid.");
+  }
+  if (state.predecessorEncumbrances.length !== 0) {
+    throw new Error("Policy-admission codec-3 aggregate predecessor encumbrances are invalid.");
+  }
+  return {
+    locatorDigest: payload.locatorDigest,
+    bindingDigest: payload.bindingDigest,
+    bucketState: {
+      locatorDigest: state.locatorDigest,
+      bindingDigest: state.bindingDigest,
+      reservations
+    }
+  };
+}
+function parseReservationSnapshot(value) {
+  if (!hasExactKeys(value, ["lineage", "sourceWitness", "state"])) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  const snapshot = value;
+  if (!isReservationState(snapshot.state) || !isWitness(snapshot.sourceWitness)) {
+    throw new Error("Policy-admission codec-3 aggregate reservation snapshot is invalid.");
+  }
+  return {
+    lineage: parseAggregateLineage(snapshot.lineage),
+    sourceWitness: snapshot.sourceWitness,
+    state: snapshot.state
+  };
+}
+function parseConservation(value) {
+  if (!hasExactKeys(value, [
+    "authority",
+    "availability",
+    "availableQuantity",
+    "bindingDigest",
+    "encumberedQuantity",
+    "limitQuantity",
+    "lineageSetDigest",
+    "locatorDigest",
+    "overLimitQuantity",
+    "predecessorEncumbranceLineageDigests",
+    "releasedQuantity",
+    "reservationLineageDigests",
+    "snapshotDigest",
+    "stateQuantities"
+  ]))
+    return false;
+  const conservation = value;
+  if (conservation.authority !== "none" || conservation.availability !== "available" && conservation.availability !== "none" && conservation.availability !== "blocked_over_limit" || !isDigest(conservation.bindingDigest) || !isDigest(conservation.locatorDigest) || !isDigest(conservation.lineageSetDigest) || !isDigest(conservation.snapshotDigest) || !isQuantity(conservation.availableQuantity) || !isQuantity(conservation.encumberedQuantity) || !isQuantity(conservation.limitQuantity) || !isQuantity(conservation.overLimitQuantity) || !isQuantity(conservation.releasedQuantity) || !Array.isArray(conservation.reservationLineageDigests) || !conservation.reservationLineageDigests.every(isDigest) || !Array.isArray(conservation.predecessorEncumbranceLineageDigests) || !conservation.predecessorEncumbranceLineageDigests.every(isDigest) || !hasExactKeys(conservation.stateQuantities, [
+    "authority_reserved",
+    "blocked_unknown",
+    "effect_in_flight",
+    "released_confirmed_not_committed",
+    "terminal_committed"
+  ]))
+    return false;
+  return Object.values(conservation.stateQuantities).every(isQuantity);
+}
+function parseAggregateCheckpointPayload(value) {
+  if (!hasExactKeys(value, [
+    "aggregateInductionCheckpointSourceVersion",
+    "domainDigest",
+    "familyDigest",
+    "headBucketWitness",
+    "locatorDigest",
+    "rootKind",
+    "writerProfile"
+  ]))
+    throw new Error("Policy-admission codec-3 aggregate checkpoint payload is invalid.");
+  const payload = value;
+  if (payload.aggregateInductionCheckpointSourceVersion !== "aggregate-induction-checkpoint-source-1" || payload.writerProfile !== "aggregate-bucket-writer-profile-1" || payload.rootKind !== "closed_writer_successor" || !isDigest(payload.locatorDigest) || !isDigest(payload.familyDigest) || !isDigest(payload.domainDigest) || !isWitness(payload.headBucketWitness))
+    throw new Error("Policy-admission codec-3 aggregate checkpoint payload is invalid.");
+  return payload;
+}
+function isWitness(value) {
+  if (!hasExactKeys(value, ["digest", "record", "semanticState", "version"]))
+    return false;
+  const witness = value;
+  return isDigest(witness.digest) && isNonemptyString(witness.semanticState) && typeof witness.version === "number" && Number.isSafeInteger(witness.version) && witness.version > 0 && hasExactKeys(witness.record, ["localId", "recordKind"]) && isNonemptyString(witness.record.localId) && isNonemptyString(witness.record.recordKind);
+}
+function witnessEqualsRecord(witness, record2) {
+  return witness.record.recordKind === record2.record.recordKind && witness.record.localId === record2.record.localId && witness.semanticState === record2.semanticState && witness.version === record2.version && witness.digest === record2.digest;
+}
+function isReservationState(value) {
+  return value === "authority_reserved" || value === "effect_in_flight" || value === "blocked_unknown" || value === "released_confirmed_not_committed" || value === "terminal_committed";
+}
+function isQuantity(value) {
+  return typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value);
+}
+function isOutcomeRecord(record2) {
+  return record2.record.recordKind === "authority_evidence" && POLICY_OUTCOME_ID.test(record2.record.localId) && POLICY_OUTCOME_STATE.test(record2.semanticState) && record2.version === 1 && record2.predecessor === null;
+}
+function policyRecordRole(record2) {
+  if (isOutcomeRecord(record2))
+    return "outcome";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("greenlight_issuance_") && record2.semanticState === "greenlight_issued")
+    return "greenlight_issuance";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("policy_idempotency_") && record2.semanticState === "policy_idempotency_reserved")
+    return "policy_idempotency";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("agg1_reservation_") && record2.semanticState === "authority_reserved")
+    return "aggregate_reservation";
+  if (record2.record.recordKind === "authority_state" && record2.record.localId.startsWith("agg1_bucket_") && record2.semanticState === "aggregate_exposure_bucket")
+    return "aggregate_bucket";
+  if (record2.record.recordKind === "authority_evidence" && record2.record.localId.startsWith("agg1_checkpoint_") && record2.semanticState === "aggregate_induction_checkpoint")
+    return "aggregate_checkpoint";
+  return null;
+}
+function validatePolicyRecordPayloads(records2, outcome) {
+  const issuance = records2.get("greenlight_issuance");
+  const idempotency = records2.get("policy_idempotency");
+  if (issuance === undefined && idempotency === undefined)
+    return;
+  if (issuance === undefined || idempotency === undefined) {
+    throw new Error("Policy-admission codec-3 positive record set is incomplete.");
+  }
+  const issuancePayload = parseGreenlightIssuancePayload(issuance.payload);
+  const idempotencyPayload = parsePolicyIdempotencyPayload(idempotency.payload);
+  if (issuancePayload.attemptDigest !== outcome.attemptDigest || issuancePayload.transactionDigest !== outcome.transactionDigest || issuancePayload.actionContractId !== outcome.actionContractId || issuancePayload.actionContractDigest !== outcome.actionContractDigest || issuancePayload.policyDecisionId !== outcome.policyDecisionId || issuancePayload.policyInputDigest !== outcome.policyInputDigest || issuancePayload.greenlightId !== outcome.greenlightId || idempotencyPayload.attemptDigest !== outcome.attemptDigest || idempotencyPayload.transactionDigest !== outcome.transactionDigest || idempotencyPayload.actionContractId !== outcome.actionContractId || idempotencyPayload.actionContractDigest !== outcome.actionContractDigest || idempotencyPayload.policyDecisionId !== outcome.policyDecisionId || idempotencyPayload.greenlightId !== outcome.greenlightId) {
+    throw new Error("Policy-admission codec-3 positive record binding is invalid.");
+  }
+}
+function validateExactPointerSet(pointers, records2, expectedCount) {
+  if (pointers.length !== expectedCount) {
+    throw new Error("Policy-admission codec-3 pointer set is not exact.");
+  }
+  const targetedRoles = new Set;
+  const pointerIdentities = new Set;
+  for (const pointer of pointers) {
+    const identity = `${pointer.pointer.pointerKind}:${pointer.pointer.localId}`;
+    if (pointerIdentities.has(identity) || pointer.successor === null) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+    pointerIdentities.add(identity);
+    let matchedRole = null;
+    for (const [role, record2] of records2) {
+      if (record2.record.recordKind === pointer.successor.record.recordKind && record2.record.localId === pointer.successor.record.localId && record2.semanticState === pointer.successor.semanticState && record2.version === pointer.successor.version && record2.digest === pointer.successor.digest) {
+        matchedRole = role;
+        break;
+      }
+    }
+    if (matchedRole === null || matchedRole === "aggregate_reservation" || targetedRoles.has(matchedRole)) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+    if ((matchedRole === "outcome" || matchedRole === "greenlight_issuance" || matchedRole === "policy_idempotency") && (pointer.pointer.pointerKind !== "idempotency_claim" || pointer.expected.kind !== "absent")) {
+      throw new Error("Policy-admission codec-3 policy pointer is invalid.");
+    }
+    targetedRoles.add(matchedRole);
+  }
+  for (const role of records2.keys()) {
+    if (role !== "aggregate_reservation" && !targetedRoles.has(role)) {
+      throw new Error("Policy-admission codec-3 pointer set is not exact.");
+    }
+  }
+}
+function validateExactProjection(mutation, outcome, disposition) {
+  const intent = mutation.projectionIntents[0];
+  if (intent === null || typeof intent !== "object") {
+    throw new Error("Policy-admission codec-3 projection set is invalid.");
+  }
+  const projection = intent;
+  if (projection.projection?.projectionKind !== "protocol_record" || projection.source?.record?.recordKind !== outcome.record.recordKind || projection.source.record.localId !== outcome.record.localId || projection.source.digest !== outcome.digest) {
+    throw new Error("Policy-admission codec-3 projection source is invalid.");
+  }
+  if (disposition.kind !== "exact_refusal_protocol_record_v2") {
+    throw new Error("Policy-admission codec-3 projection disposition is invalid.");
+  }
+  const descriptor = projection.descriptor;
+  if (descriptor === null || typeof descriptor !== "object" || descriptor.descriptorVersion !== disposition.intentDescriptorBinding.descriptorVersion || canonicalize(descriptor.sourceCommit?.identity) !== canonicalize(mutation.identity) || descriptor.sourceCommit?.requestDigest !== mutation.requestDigest || canonicalize(descriptor.source) !== canonicalize(projection.source) || canonicalize(descriptor.route) !== canonicalize(disposition.intentDescriptorBinding.route) || canonicalize(descriptor.destination) !== canonicalize(disposition.intentDescriptorBinding.destination) || descriptor.recordEnvelopeDigest !== disposition.intentDescriptorBinding.recordEnvelopeDigest) {
+    throw new Error("Policy-admission codec-3 projection binding is invalid.");
+  }
+}
+function parseOutcomePayload(value) {
+  const keys = [
+    "policyAdmissionOutcomeSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "transactionBinding",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "policyInputDigest",
+    "aggregateSnapshotDigest",
+    "isolationSnapshotDigest",
+    "aggregatePosture",
+    "outcome",
+    "greenlightId",
+    "refusalId",
+    "proofGapId",
+    "embeddedProtocolRecords"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 outcome payload is invalid.");
+  }
+  const payload = value;
+  if (payload.policyAdmissionOutcomeSourceVersion !== "policy-admission-outcome-source-3" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isDigest(payload.policyInputDigest) || !isDigest(payload.aggregateSnapshotDigest) || !isDigest(payload.isolationSnapshotDigest) || !isAggregatePosture(payload.aggregatePosture) || !isPolicyOutcome(payload.outcome) || !(payload.greenlightId === null || isNonemptyString(payload.greenlightId)) || !(payload.refusalId === null || isNonemptyString(payload.refusalId)) || !(payload.proofGapId === null || isNonemptyString(payload.proofGapId)) || !Array.isArray(payload.embeddedProtocolRecords)) {
+    throw new Error("Policy-admission codec-3 outcome payload is invalid.");
+  }
+  const bindingKeys = [
+    "policyAdmissionTransactionBindingVersion",
+    "logicalAttempt",
+    "logicalAttemptDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyInput",
+    "policyInputDigest",
+    "aggregateSnapshot",
+    "aggregateSnapshotDigest",
+    "isolationSnapshotDigest",
+    "aggregatePosture",
+    "pointerGuardSetDigest",
+    "pointerGuards",
+    "temporalFence",
+    "outcome",
+    "decision",
+    "greenlight",
+    "refusal",
+    "proofGap",
+    "embeddedRecordWitnesses",
+    "projectionDisposition"
+  ];
+  if (!hasExactKeys(payload.transactionBinding, bindingKeys)) {
+    throw new Error("Policy-admission codec-3 transaction binding is invalid.");
+  }
+  const binding = payload.transactionBinding;
+  if (binding.policyAdmissionTransactionBindingVersion !== "policy-admission-transaction-binding-3" || !isDigest(binding.logicalAttemptDigest) || !isNonemptyString(binding.actionContractId) || !isDigest(binding.actionContractDigest) || !isDigest(binding.policyInputDigest) || !isDigest(binding.aggregateSnapshotDigest) || !isDigest(binding.isolationSnapshotDigest) || !isAggregatePosture(binding.aggregatePosture) || !isPolicyOutcome(binding.outcome) || !isDigest(binding.pointerGuardSetDigest) || !Array.isArray(binding.pointerGuards) || !Array.isArray(binding.embeddedRecordWitnesses)) {
+    throw new Error("Policy-admission codec-3 transaction binding is invalid.");
+  }
+  const projectionDisposition = parseProjectionDisposition(binding.projectionDisposition);
+  return {
+    attemptDigest: payload.attemptDigest,
+    transactionDigest: payload.transactionDigest,
+    actionContractId: payload.actionContractId,
+    actionContractDigest: payload.actionContractDigest,
+    policyDecisionId: payload.policyDecisionId,
+    policyInputDigest: payload.policyInputDigest,
+    aggregateSnapshotDigest: payload.aggregateSnapshotDigest,
+    isolationSnapshotDigest: payload.isolationSnapshotDigest,
+    aggregatePosture: payload.aggregatePosture,
+    outcome: payload.outcome,
+    greenlightId: payload.greenlightId,
+    transactionBinding: {
+      logicalAttemptDigest: binding.logicalAttemptDigest,
+      actionContractId: binding.actionContractId,
+      actionContractDigest: binding.actionContractDigest,
+      policyInputDigest: binding.policyInputDigest,
+      aggregateSnapshotDigest: binding.aggregateSnapshotDigest,
+      isolationSnapshotDigest: binding.isolationSnapshotDigest,
+      aggregatePosture: binding.aggregatePosture,
+      outcome: binding.outcome,
+      pointerGuards: binding.pointerGuards,
+      temporalFence: binding.temporalFence,
+      projectionDisposition
+    }
+  };
+}
+function parseGreenlightIssuancePayload(value) {
+  const keys = [
+    "greenlightIssuanceSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "policyInputDigest",
+    "greenlightId",
+    "maxUses",
+    "expiresAt"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 greenlight issuance payload is invalid.");
+  }
+  const payload = value;
+  if (payload.greenlightIssuanceSourceVersion !== "greenlight-issuance-source-1" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isDigest(payload.policyInputDigest) || !isNonemptyString(payload.greenlightId) || payload.maxUses !== 1 || !isNonemptyString(payload.expiresAt)) {
+    throw new Error("Policy-admission codec-3 greenlight issuance payload is invalid.");
+  }
+  return payload;
+}
+function parsePolicyIdempotencyPayload(value) {
+  const keys = [
+    "policyIdempotencyClaimSourceVersion",
+    "attemptDigest",
+    "transactionDigest",
+    "ledgerKeyDigest",
+    "idempotencyKey",
+    "paramsDigest",
+    "actionContractId",
+    "actionContractDigest",
+    "policyDecisionId",
+    "greenlightId",
+    "state"
+  ];
+  if (!hasExactKeys(value, keys)) {
+    throw new Error("Policy-admission codec-3 idempotency payload is invalid.");
+  }
+  const payload = value;
+  if (payload.policyIdempotencyClaimSourceVersion !== "policy-idempotency-claim-source-1" || !isDigest(payload.attemptDigest) || !isDigest(payload.transactionDigest) || !isDigest(payload.ledgerKeyDigest) || !isNonemptyString(payload.idempotencyKey) || !isDigest(payload.paramsDigest) || !isNonemptyString(payload.actionContractId) || !isDigest(payload.actionContractDigest) || !isNonemptyString(payload.policyDecisionId) || !isNonemptyString(payload.greenlightId) || payload.state !== "authority_reserved") {
+    throw new Error("Policy-admission codec-3 idempotency payload is invalid.");
+  }
+  return payload;
+}
+function parseProjectionDisposition(value) {
+  if (hasExactKeys(value, [
+    "policyAdmissionProjectionDispositionVersion",
+    "kind",
+    "reason",
+    "projectionIntentCount",
+    "materializationPosture"
+  ])) {
+    const disposition = value;
+    if (disposition.policyAdmissionProjectionDispositionVersion === "policy-admission-projection-disposition-1" && disposition.kind === "none" && disposition.projectionIntentCount === 0 && disposition.materializationPosture === "not_requested" && (disposition.reason === "greenlight" || disposition.reason === "proof_gap" || disposition.reason === "review_required")) {
+      return { kind: "none", projectionIntentCount: 0 };
+    }
+  }
+  if (hasExactKeys(value, [
+    "policyAdmissionProjectionDispositionVersion",
+    "kind",
+    "projectionIntentCount",
+    "materializationPosture",
+    "intentDescriptorBinding"
+  ])) {
+    const disposition = value;
+    const binding = disposition.intentDescriptorBinding;
+    if (disposition.policyAdmissionProjectionDispositionVersion === "policy-admission-projection-disposition-1" && disposition.kind === "exact_refusal_protocol_record_v2" && disposition.projectionIntentCount === 1 && disposition.materializationPosture === "intent_only_uncomposed" && hasExactKeys(binding, ["descriptorVersion", "route", "destination", "recordEnvelopeDigest"])) {
+      const exact = binding;
+      if (exact.descriptorVersion === "authority-projection-outbox-protocol-record-descriptor-2" && isDigest(exact.recordEnvelopeDigest)) {
+        return {
+          kind: "exact_refusal_protocol_record_v2",
+          projectionIntentCount: 1,
+          intentDescriptorBinding: {
+            descriptorVersion: exact.descriptorVersion,
+            route: exact.route,
+            destination: exact.destination,
+            recordEnvelopeDigest: exact.recordEnvelopeDigest
+          }
+        };
+      }
+    }
+  }
+  throw new Error("Policy-admission codec-3 projection disposition is invalid.");
+}
+function hasExactKeys(value, expected) {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+    return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== expected.length)
+    return false;
+  for (const key of keys) {
+    if (typeof key !== "string" || !expected.includes(key))
+      return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor))
+      return false;
+  }
+  return true;
+}
+function isDigest(value) {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
+}
+function isNonemptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function isAggregatePosture(value) {
+  return value === "required" || value === "not_applicable" || value === "missing";
+}
+function isPolicyOutcome(value) {
+  return value === "greenlight" || value === "refuse" || value === "review_required" || value === "halt" || value === "quarantine" || value === "proof_gap";
+}
+function canonicalGuardSet(guards2) {
+  const snapshot = [...structuredClone(guards2)];
+  snapshot.sort((left, right) => {
+    const leftKey = guardIdentityKey(left);
+    const rightKey = guardIdentityKey(right);
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  return canonicalize(snapshot);
+}
+function guardIdentityKey(value) {
+  if (value === null || typeof value !== "object")
+    return "";
+  const pointer = value.pointer;
+  if (pointer === null || typeof pointer !== "object")
+    return "";
+  const identity = pointer;
+  return typeof identity.pointerKind === "string" && typeof identity.localId === "string" ? `${identity.pointerKind}:${identity.localId}` : "";
+}
+
+// src/protocol/store/consequence-cutoff-codecs/consequence-cutoff-codec1.ts
+async function validateConsequenceCutoffCodec1Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_cutoff_") ? mutation.identity.localId.slice("consequence_cutoff_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 1 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 3 || mutation.projectionIntents.length !== 0) {
+    invalid("semantic envelope");
+  }
+  const cutoff = mutation.records[0];
+  if (cutoff === undefined || cutoff.record.recordKind !== "authority_evidence" || cutoff.record.localId !== `consequence_cutoff_${transactionHex}_v2` || cutoff.semanticState !== "consequence_cutoff_crossed" || cutoff.version !== 2 || cutoff.predecessor === null || cutoff.predecessor.record.recordKind !== "authority_evidence" || cutoff.predecessor.record.localId !== `gateway_admission_${transactionHex}` || cutoff.predecessor.semanticState !== "gateway_admitted_pending_effect" || cutoff.predecessor.version !== 1) {
+    invalid("record lineage");
+  }
+  const payload = objectPayload(cutoff);
+  const gatewayCommit = objectField(payload, "gatewayAdmissionCommit");
+  const aggregateTerminalLineage = objectField(payload, "aggregateTerminalLineage");
+  const reservationLineage = objectField(aggregateTerminalLineage, "reservationLineage");
+  const payloadTemporalFence = objectField(payload, "temporalFence");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.consequenceCutoffSourceVersion !== "consequence-cutoff-source-1" || payload.gatewayTransactionDigest !== transactionDigest || payload.cutoffState !== "crossed" || payload.effectInvocationStarted !== false || gatewayCommit.manifestVersion !== "authority-source-manifest-6" || objectField(gatewayCommit, "identity").mutationKind !== "gateway_admission" || objectField(gatewayCommit, "identity").localId !== `gateway_tx_${transactionHex}` || reservationLineage.lineageDigest !== payload.reservationLineageDigest || reservationLineage.reservationRef !== payload.reservationRef || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "adapterDigest",
+    "payloadDigest"
+  ]) {
+    requireDigest(payload[field]);
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness(pointer.expected.witness, cutoff.predecessor) || !sameWitness(pointer.successor, cutoff)) {
+      invalid("pointer lineage");
+    }
+  }
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      consequenceCutoffRequestVersion: "consequence-cutoff-request-1",
+      gatewayTransactionDigest: transactionDigest,
+      gatewayAdmissionDigest: cutoff.predecessor.digest,
+      cutoffDigest: cutoff.digest
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid("request digest");
+}
+function requiredPointer(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid("pointer set");
+  return matches[0];
+}
+function objectPayload(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid("record payload");
+  }
+  return record2.payload;
+}
+function objectField(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid(field);
+  return candidate;
+}
+function requireDigest(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid("digest binding");
+}
+function sameWitness(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid(part) {
+  throw new Error(`Consequence-cutoff codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/consequence-cutoff-codecs/consequence-cutoff-codec2.ts
+async function validateConsequenceCutoffCodec2Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_cutoff_") ? mutation.identity.localId.slice("consequence_cutoff_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 1 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 3 || mutation.projectionIntents.length !== 0) {
+    invalid2("semantic envelope");
+  }
+  const cutoff = mutation.records[0];
+  if (cutoff === undefined || cutoff.record.recordKind !== "authority_evidence" || cutoff.record.localId !== `consequence_cutoff_${transactionHex}_v2` || cutoff.semanticState !== "consequence_cutoff_crossed" || cutoff.version !== 2 || cutoff.predecessor === null || cutoff.predecessor.record.recordKind !== "authority_evidence" || cutoff.predecessor.record.localId !== `gateway_admission_${transactionHex}` || cutoff.predecessor.semanticState !== "gateway_admitted_pending_effect" || cutoff.predecessor.version !== 1) {
+    invalid2("record lineage");
+  }
+  const payload = objectPayload2(cutoff);
+  const gatewayCommit = objectField2(payload, "gatewayAdmissionCommit");
+  const aggregateTerminalLineage = objectField2(payload, "aggregateTerminalLineage");
+  const reservationLineage = objectField2(aggregateTerminalLineage, "reservationLineage");
+  const payloadTemporalFence = objectField2(payload, "temporalFence");
+  const exactConsequenceDescriptor = objectField2(payload, "exactConsequenceDescriptor");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.consequenceCutoffSourceVersion !== "consequence-cutoff-source-2" || payload.gatewayTransactionDigest !== transactionDigest || payload.cutoffState !== "crossed" || payload.effectInvocationStarted !== false || gatewayCommit.manifestVersion !== "authority-source-manifest-10" || objectField2(gatewayCommit, "identity").mutationKind !== "gateway_admission" || objectField2(gatewayCommit, "identity").localId !== `gateway_tx_${transactionHex}` || reservationLineage.lineageDigest !== payload.reservationLineageDigest || reservationLineage.reservationRef !== payload.reservationRef || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter || exactConsequenceDescriptor.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || typeof exactConsequenceDescriptor.actionContractId !== "string" || exactConsequenceDescriptor.actionContractId.length === 0 || exactConsequenceDescriptor.actionContractId !== payload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== payload.actionContractDigest || typeof exactConsequenceDescriptor.adapterRef !== "string" || exactConsequenceDescriptor.adapterRef.length === 0 || typeof exactConsequenceDescriptor.effectOperationRef !== "string" || exactConsequenceDescriptor.effectOperationRef.length === 0 || await digestCanonical(exactConsequenceDescriptor) !== payload.exactConsequenceDescriptorDigest) {
+    invalid2("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "exactConsequenceDescriptorDigest"
+  ]) {
+    requireDigest2(payload[field]);
+  }
+  for (const descriptorField of ["actionContractDigest", "adapterDigest", "payloadDigest"]) {
+    requireDigest2(exactConsequenceDescriptor[descriptorField]);
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer2(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness2(pointer.expected.witness, cutoff.predecessor) || !sameWitness2(pointer.successor, cutoff)) {
+      invalid2("pointer lineage");
+    }
+  }
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      consequenceCutoffRequestVersion: "consequence-cutoff-request-2",
+      gatewayTransactionDigest: transactionDigest,
+      gatewayAdmissionDigest: cutoff.predecessor.digest,
+      cutoffDigest: cutoff.digest,
+      exactConsequenceDescriptorDigest: payload.exactConsequenceDescriptorDigest
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid2("request digest");
+}
+function requiredPointer2(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid2("pointer set");
+  return matches[0];
+}
+function objectPayload2(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid2("record payload");
+  }
+  return record2.payload;
+}
+function objectField2(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid2(field);
+  return candidate;
+}
+function requireDigest2(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid2("digest binding");
+}
+function sameWitness2(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid2(part) {
+  throw new Error(`Consequence-cutoff codec-2 ${part} is invalid.`);
+}
+// src/protocol/store/gateway-admission-codecs/gateway-admission-envelope.ts
+async function validateGatewayAdmissionEnvelope(mutation, codecVersion) {
+  const transactionHex = mutation.identity.localId.startsWith("gateway_tx_") ? mutation.identity.localId.slice("gateway_tx_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.records.length !== 6 || mutation.pointerMutations.length !== 7 || mutation.projectionIntents.length !== 0) {
+    invalid3("semantic envelope");
+  }
+  const byState = new Map;
+  for (const record2 of mutation.records) {
+    if (byState.has(record2.semanticState))
+      invalid3("duplicate record role");
+    byState.set(record2.semanticState, record2);
+  }
+  const issuance = requiredRecord(byState, "greenlight_consumed", 2, true);
+  const idempotency = requiredRecord(byState, "policy_idempotency_consumed", 2, true);
+  const reservation = requiredRecord(byState, "effect_in_flight", null, true);
+  const bucket = requiredRecord(byState, "aggregate_exposure_bucket", null, true);
+  const checkpoint = requiredRecord(byState, "aggregate_induction_checkpoint", null, true);
+  const outcome = requiredRecord(byState, "gateway_admitted_pending_effect", 1, false);
+  if (byState.size !== 6)
+    invalid3("record role set");
+  const issuancePayload = objectPayload3(issuance);
+  const idempotencyPayload = objectPayload3(idempotency);
+  const outcomePayload = objectPayload3(outcome);
+  const embeddedIssuance = objectField3(issuancePayload, "issuance");
+  const embeddedReservation = objectField3(idempotencyPayload, "reservation");
+  const transactionDigest = `sha256:${transactionHex}`;
+  for (const payload of [issuancePayload, idempotencyPayload, outcomePayload]) {
+    if (payload.gatewayTransactionDigest !== undefined && payload.gatewayTransactionDigest !== transactionDigest) {
+      invalid3("transaction binding");
+    }
+  }
+  if (issuancePayload.greenlightConsumptionSourceVersion !== "greenlight-consumption-source-1" || idempotencyPayload.policyIdempotencyConsumptionSourceVersion !== "policy-idempotency-consumption-source-1" || issuancePayload.state !== "effect_in_flight" || idempotencyPayload.state !== "effect_in_flight" || outcomePayload.gatewayAdmissionSourceVersion !== `gateway-admission-source-${codecVersion}` || outcomePayload.transactionDigest !== transactionDigest || outcomePayload.greenlightId !== embeddedIssuance.greenlightId || embeddedReservation.greenlightId !== embeddedIssuance.greenlightId || embeddedReservation.actionContractDigest !== embeddedIssuance.actionContractDigest || outcomePayload.actionContractDigest !== embeddedIssuance.actionContractDigest || outcomePayload.effectState !== "effect_in_flight" || outcomePayload.authorizationReleased !== false || outcomePayload.effectInvocationStarted !== false || outcomePayload.streamOffsetsIncluded !== false || codecVersion === 1 && outcomePayload.aggregateTerminalLineage !== undefined) {
+    invalid3("payload binding");
+  }
+  if (codecVersion === 2) {
+    const aggregateTerminalLineage = objectField3(outcomePayload, "aggregateTerminalLineage");
+    const reservationLineage = objectField3(aggregateTerminalLineage, "reservationLineage");
+    const bindingArtifact = objectField3(aggregateTerminalLineage, "bindingArtifact");
+    const domainArtifact = objectField3(aggregateTerminalLineage, "domainArtifact");
+    if (reservationLineage.lineageDigest !== outcomePayload.reservationLineageDigest || reservationLineage.reservationRef !== outcomePayload.reservationRef || bindingArtifact.bindingDigest !== objectField3(reservationLineage, "origin").bindingDigest || bindingArtifact.locatorDigest !== domainArtifact.locatorDigest || !sameRecordWitness(objectField3(aggregateTerminalLineage, "reservationWitness"), reservation) || !sameRecordWitness(objectField3(aggregateTerminalLineage, "bucketWitness"), bucket) || !sameRecordWitness(objectField3(aggregateTerminalLineage, "checkpointWitness"), checkpoint)) {
+      invalid3("aggregate terminal lineage");
+    }
+  }
+  const consumptionPointers = [
+    {
+      localId: `greenlight_issuance_${digestHex(embeddedIssuance.actionContractDigest)}`,
+      record: issuance
+    },
+    {
+      localId: `policy_idempotency_${digestHex(embeddedReservation.ledgerKeyDigest)}`,
+      record: idempotency
+    }
+  ];
+  for (const expected of consumptionPointers) {
+    const pointer = requiredPointer3(mutation.pointerMutations, "idempotency_claim", expected.localId);
+    requireExactAdvance(pointer, expected.record);
+  }
+  requireAggregateAdvance(mutation.pointerMutations, bucket);
+  requireAggregateAdvance(mutation.pointerMutations, checkpoint);
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer3(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "absent" || !sameSuccessor(pointer, outcome)) {
+      invalid3("gateway lineage pointer");
+    }
+  }
+  const contextGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "authority_context");
+  const configurationGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "configuration_state");
+  const isolationGuards = mutation.pointerGuards.filter((guard) => guard.pointer.pointerKind === "isolation_state");
+  if (contextGuards.length !== 1 || configurationGuards.length !== 1 || isolationGuards.length < 1 || contextGuards.length + configurationGuards.length + isolationGuards.length !== mutation.pointerGuards.length) {
+    invalid3("guard partition");
+  }
+  const isolationSnapshotDigest = await digestCanonical({
+    isolationAuthoritySnapshotVersion: "isolation-authority-snapshot-1",
+    pointerGuards: sortedGuards(isolationGuards)
+  });
+  if (outcomePayload.isolationSnapshotDigest !== isolationSnapshotDigest) {
+    invalid3("isolation guard digest");
+  }
+  const temporalFence = objectField3(outcomePayload, "temporalFence");
+  if (temporalFence.kind !== mutation.temporalFence.kind || temporalFence.notBefore !== mutation.temporalFence.notBefore || temporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid3("temporal fence binding");
+  }
+  const credentialSelectionBinding = objectField3(outcomePayload, "credentialSelectionBinding");
+  const exactConsequenceDescriptor = codecVersion === 2 ? objectField3(outcomePayload, "exactConsequenceDescriptor") : null;
+  if (codecVersion === 2 && (exactConsequenceDescriptor?.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || exactConsequenceDescriptor.actionContractId !== outcomePayload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== outcomePayload.actionContractDigest || await digestCanonical(exactConsequenceDescriptor) !== outcomePayload.exactConsequenceDescriptorDigest)) {
+    invalid3("exact consequence descriptor");
+  }
+  const expectedTransactionDigest = await digestCanonical({
+    gatewayAdmissionTransactionVersion: `gateway-admission-transaction-${codecVersion}`,
+    sourceScope: mutation.scope,
+    actionContractId: outcomePayload.actionContractId,
+    actionContractDigest: outcomePayload.actionContractDigest,
+    greenlightId: outcomePayload.greenlightId,
+    reservationLineageDigest: outcomePayload.reservationLineageDigest,
+    reservationRef: outcomePayload.reservationRef,
+    gatewayId: outcomePayload.gatewayId,
+    credentialSelectionBinding,
+    credentialSelectionBindingDigest: outcomePayload.credentialSelectionBindingDigest,
+    ...codecVersion === 2 ? {
+      exactConsequenceDescriptor,
+      exactConsequenceDescriptorDigest: outcomePayload.exactConsequenceDescriptorDigest
+    } : {},
+    isolationSnapshotDigest,
+    temporalFence
+  });
+  if (expectedTransactionDigest !== transactionDigest)
+    invalid3("transaction digest");
+  const requestMaterial = {
+    gatewayAdmissionRequestVersion: `gateway-admission-request-${codecVersion}`,
+    transactionDigest,
+    reservationSuccessorDigest: reservation.digest,
+    bucketSuccessorDigest: bucket.digest,
+    checkpointSuccessorDigest: checkpoint.digest,
+    outcomeDigest: outcome.digest,
+    greenlightConsumptionDigests: [issuance.digest, idempotency.digest]
+  };
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: requestMaterial
+  });
+  if (expectedRequestDigest !== mutation.requestDigest)
+    invalid3("request digest");
+}
+function requiredRecord(records2, state, version2, hasPredecessor) {
+  const record2 = records2.get(state);
+  if (record2 === undefined || version2 !== null && record2.version !== version2 || record2.predecessor !== null !== hasPredecessor) {
+    invalid3(`${state} record`);
+  }
+  return record2;
+}
+function requiredPointer3(pointers, pointerKind, localId) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === pointerKind && pointer.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid3("pointer role");
+  return matches[0];
+}
+function requireExactAdvance(pointer, record2) {
+  if (record2.predecessor === null || pointer.expected.kind !== "exact" || JSON.stringify(pointer.expected.witness) !== JSON.stringify(record2.predecessor) || !sameSuccessor(pointer, record2)) {
+    invalid3("exact pointer advance");
+  }
+}
+function requireAggregateAdvance(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameSuccessor(pointer, record2));
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid3("aggregate pointer role");
+  requireExactAdvance(matches[0], record2);
+}
+function sameSuccessor(pointer, record2) {
+  return pointer.successor.record.recordKind === record2.record.recordKind && pointer.successor.record.localId === record2.record.localId && pointer.successor.semanticState === record2.semanticState && pointer.successor.version === record2.version && pointer.successor.digest === record2.digest;
+}
+function sameRecordWitness(candidate, record2) {
+  const identity = objectField3(candidate, "record");
+  return identity.recordKind === record2.record.recordKind && identity.localId === record2.record.localId && candidate.semanticState === record2.semanticState && candidate.version === record2.version && candidate.digest === record2.digest;
+}
+function objectPayload3(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid3("record payload");
+  }
+  return record2.payload;
+}
+function objectField3(value, key) {
+  const field = value[key];
+  if (field === null || typeof field !== "object" || Array.isArray(field))
+    invalid3(`${key} field`);
+  return field;
+}
+function digestHex(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid3("digest");
+  return value.slice("sha256:".length);
+}
+function sortedGuards(guards2) {
+  return structuredClone([...guards2]).sort((left, right) => {
+    const a = `${left.pointer.pointerKind}\x00${left.pointer.localId}`;
+    const b = `${right.pointer.pointerKind}\x00${right.pointer.localId}`;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+function invalid3(part) {
+  throw new Error(`Gateway-admission codec-1 ${part} is invalid.`);
+}
+
+// src/protocol/store/gateway-admission-codecs/gateway-admission-codec1.ts
+async function validateGatewayAdmissionCodec1Envelope(mutation) {
+  return validateGatewayAdmissionEnvelope(mutation, 1);
+}
+// src/protocol/store/gateway-admission-codecs/gateway-admission-codec2.ts
+async function validateGatewayAdmissionCodec2Envelope(mutation) {
+  return validateGatewayAdmissionEnvelope(mutation, 2);
+}
+// src/protocol/store/isolation-transition-codecs/isolation-transition-codec1.ts
+async function validateIsolationTransitionCodec1Envelope(mutation) {
+  return validateIsolationTransitionEnvelope(mutation, {
+    additionRequestVersion: "isolation-transition-request-2",
+    clearanceRequestVersion: "isolation-clearance-request-1",
+    includeTemporalFence: false,
+    codecName: "codec-1"
+  });
+}
+async function validateIsolationTransitionEnvelope(mutation, profile) {
+  if (mutation.identity.mutationKind !== "isolation_transition" || mutation.records.length !== 2 && mutation.records.length !== 3 || mutation.pointerGuards.length !== 0 || mutation.pointerMutations.length !== 1 || mutation.projectionIntents.length !== 2) {
+    invalid4("semantic envelope");
+  }
+  const pointer = mutation.pointerMutations[0];
+  if (pointer === undefined)
+    invalid4("pointer lineage");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && (record2.semanticState === "isolation_active" || record2.semanticState === "isolation_cleared") && sameWitness3(pointer.successor, record2));
+  if (head === undefined)
+    invalid4("head record");
+  const payload = objectPayload4(head);
+  const scopeDigest = requireDigest3(payload.scopeDigest);
+  const activeCauses = arrayField(payload, "activeCauses");
+  const activeCauseSetDigest = requireDigest3(payload.activeCauseSetDigest);
+  const state = objectField4(payload, "isolationState");
+  if (state.tenantId !== mutation.scope.tenantId || state.organizationId !== mutation.scope.organizationId || state.version !== head.version || head.semanticState === "isolation_active" && (state.state === "active" || state.clearedAt !== null) || head.semanticState === "isolation_cleared" && (state.state !== "active" || typeof state.clearedAt !== "string" || activeCauses.length !== 0)) {
+    invalid4("head state binding");
+  }
+  if (payload.isolationAuthoritySourceVersion === "isolation-authority-source-2") {
+    if (head.semanticState !== "isolation_active" || activeCauses.length === 0 || activeCauses.length !== head.version || "chronologyVersion" in payload) {
+      invalid4("v2 chronology");
+    }
+  } else if (payload.isolationAuthoritySourceVersion === "isolation-authority-source-3") {
+    if (payload.chronologyVersion !== head.version) {
+      invalid4("v3 chronology");
+    }
+  } else {
+    invalid4("payload version");
+  }
+  const expectedSetDigest = await digestCanonical({
+    isolationActiveCauseSetVersion: "isolation-active-cause-set-1",
+    causes: activeCauses
+  });
+  if (expectedSetDigest !== activeCauseSetDigest || head.record.localId !== `isolation_head_${digestHex2(scopeDigest)}_v${head.version}_${digestHex2(activeCauseSetDigest)}`) {
+    invalid4("cause-set binding");
+  }
+  if (pointer.pointer.pointerKind !== "isolation_state" || pointer.pointer.localId !== `isolation_current_${digestHex2(scopeDigest)}` || !sameWitness3(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness3(pointer.expected.witness, head.predecessor))) {
+    invalid4("pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid4("projection binding");
+    }
+  }
+  const evidence = mutation.records.find((record2) => record2.semanticState === "isolation_cause" || record2.semanticState === "isolation_clearance");
+  if (evidence === undefined)
+    invalid4("evidence record");
+  if (evidence.semanticState === "isolation_cause") {
+    if (mutation.records.length !== 2)
+      invalid4("cause addition record set");
+    await validateCauseAddition(mutation, evidence, head, payload, profile);
+    return;
+  }
+  if (evidence.semanticState === "isolation_clearance") {
+    if (mutation.records.length !== 3)
+      invalid4("clearance record set");
+    await validateCauseClearance(mutation, evidence, head, payload, profile);
+    return;
+  }
+  invalid4("transition kind");
+}
+async function validateCauseAddition(mutation, causeRecord, head, headPayload, profile) {
+  const causePayload = objectPayload4(causeRecord);
+  const causeId = requireText(causePayload.causeId);
+  const causeDigest = requireDigest3(causePayload.causeDigest);
+  if (profile.includeTemporalFence) {
+    validateOpenEndedFence(mutation, requireText(objectField4(causePayload, "cause").effectiveAt));
+  }
+  if (causeRecord.record.recordKind !== "authority_evidence" || causeRecord.record.localId !== `isolation_cause_${causeId}_v1` || causeRecord.version !== 1 || causeRecord.predecessor !== null || causePayload.isolationCauseRecordVersion !== "isolation-cause-record-1" || mutation.identity.localId !== `isolation_add_${causeId}` || !arrayField(headPayload, "activeCauses").some((candidate) => {
+    const binding = objectValue(candidate);
+    const witness = objectField4(binding, "causeRecord");
+    return binding.causeId === causeId && binding.causeDigest === causeDigest && sameWitness3(witness, causeRecord);
+  })) {
+    invalid4("cause addition binding");
+  }
+  const expected = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      isolationTransitionRequestVersion: profile.additionRequestVersion,
+      scope: mutation.scope,
+      causeId,
+      causeDigest,
+      ...profile.includeTemporalFence ? { temporalFence: requireHalfOpenFence(mutation) } : {}
+    }
+  });
+  if (mutation.requestDigest !== expected)
+    invalid4("cause addition request");
+}
+async function validateCauseClearance(mutation, clearanceRecord, head, headPayload, profile) {
+  const payload = objectPayload4(clearanceRecord);
+  const causeId = requireText(payload.causeId);
+  const causeDigest = requireDigest3(payload.causeDigest);
+  if (profile.includeTemporalFence) {
+    validateOpenEndedFence(mutation, requireText(payload.resolvedAt));
+  }
+  const sourceHead = objectField4(payload, "sourceHead");
+  const causeRecord = objectField4(payload, "causeRecord");
+  const successor = objectField4(payload, "successor");
+  const headVersionText = mutation.identity.localId.slice(`isolation_clear_${causeId}_`.length);
+  const predecessorRecord = mutation.records.find((record2) => head.predecessor !== null && sameWitness3(head.predecessor, record2));
+  const predecessorPayload = predecessorRecord === undefined ? null : objectPayload4(predecessorRecord);
+  const predecessorCauseBindings = predecessorPayload === null ? [] : arrayField(predecessorPayload, "activeCauses");
+  if (clearanceRecord.record.recordKind !== "authority_evidence" || clearanceRecord.version !== 1 || clearanceRecord.predecessor !== null || payload.isolationClearanceEvidenceVersion !== "isolation-clearance-evidence-1" || mutation.identity.localId !== `isolation_clear_${causeId}_${headVersionText}` || !/^[1-9][0-9]*$/u.test(headVersionText) || Number(headVersionText) !== head.version - 1 || head.predecessor === null || predecessorRecord === undefined || !sameWitness3(sourceHead, head.predecessor) || !sameWitness3(successor, head) || causeRecord.semanticState !== "isolation_cause" || causeRecord.digest === undefined || !predecessorCauseBindings.some((candidate) => {
+    const binding = objectValue(candidate);
+    return binding.causeId === causeId && binding.causeDigest === causeDigest && sameWitness3(objectField4(binding, "causeRecord"), causeRecord);
+  }) || arrayField(headPayload, "activeCauses").some((candidate) => objectValue(candidate).causeId === causeId)) {
+    invalid4("clearance binding");
+  }
+  const resolverAuthorityDigest = requireDigest3(payload.resolverAuthorityDigest);
+  const evidenceDigest = requireDigest3(payload.evidenceDigest);
+  const expected = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      isolationClearanceRequestVersion: profile.clearanceRequestVersion,
+      sourceHead,
+      causeId,
+      causeDigest,
+      resolverAuthorityRef: requireText(payload.resolverAuthorityRef),
+      resolverAuthorityDigest,
+      resolverVersion: requireText(payload.resolverVersion),
+      evidenceRef: requireText(payload.evidenceRef),
+      evidenceDigest,
+      resolvedAt: requireText(payload.resolvedAt),
+      clearanceRecordDigest: clearanceRecord.digest,
+      successorDigest: head.digest,
+      ...profile.includeTemporalFence ? { temporalFence: requireHalfOpenFence(mutation) } : {}
+    }
+  });
+  if (mutation.requestDigest !== expected)
+    invalid4("clearance request");
+}
+function requireHalfOpenFence(mutation) {
+  if (!("temporalFence" in mutation) || mutation.temporalFence.kind !== "store_time_in_half_open_interval") {
+    invalid4("temporal fence");
+  }
+  return mutation.temporalFence;
+}
+function validateOpenEndedFence(mutation, expectedNotBefore) {
+  const fence = requireHalfOpenFence(mutation);
+  if (fence.notBefore !== expectedNotBefore || fence.notAfter !== "9999-12-31T23:59:59.999Z") {
+    invalid4("temporal chronology binding");
+  }
+}
+function arrayField(value, field) {
+  const candidate = value[field];
+  if (!Array.isArray(candidate))
+    invalid4(field);
+  return candidate;
+}
+function objectPayload4(record2) {
+  return objectValue(record2.payload);
+}
+function objectField4(value, field) {
+  return objectValue(value[field]);
+}
+function objectValue(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    invalid4("object binding");
+  }
+  return value;
+}
+function requireText(value) {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    invalid4("text binding");
+  }
+  return value;
+}
+function requireDigest3(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value)) {
+    invalid4("digest binding");
+  }
+  return value;
+}
+function digestHex2(value) {
+  return requireDigest3(value).slice("sha256:".length);
+}
+function sameWitness3(left, right) {
+  const record2 = objectValue(left.record);
+  const rightRecord = objectValue(right.record);
+  return record2.recordKind === rightRecord.recordKind && record2.localId === rightRecord.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid4(part) {
+  throw new Error(`Isolation-transition codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/isolation-transition-codecs/isolation-transition-codec2.ts
+async function validateIsolationTransitionCodec2Envelope(mutation) {
+  await validateIsolationTransitionEnvelope(mutation, {
+    additionRequestVersion: "isolation-transition-request-3",
+    clearanceRequestVersion: "isolation-clearance-request-2",
+    includeTemporalFence: true,
+    codecName: "codec-2"
+  });
+}
+// src/protocol/store/terminal-observation-codecs/terminal-observation-codec1.ts
+async function validateTerminalObservationCodec1Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_terminal_") ? mutation.identity.localId.slice("consequence_terminal_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.pointerGuards.length !== 0) {
+    invalid5("semantic envelope");
+  }
+  const terminal = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.record.localId === `consequence_terminal_${transactionHex}_v3`);
+  if (terminal === undefined || terminal.record.recordKind !== "authority_evidence" || terminal.record.localId !== `consequence_terminal_${transactionHex}_v3` || terminal.semanticState !== "terminal_committed" && terminal.semanticState !== "blocked_unknown" || terminal.version !== 3 || terminal.predecessor === null || terminal.predecessor.record.recordKind !== "authority_evidence" || terminal.predecessor.record.localId !== `consequence_cutoff_${transactionHex}_v2` || terminal.predecessor.semanticState !== "consequence_cutoff_crossed" || terminal.predecessor.version !== 2) {
+    invalid5("record lineage");
+  }
+  const payload = objectPayload5(terminal);
+  const unknown2 = terminal.semanticState === "blocked_unknown";
+  if (mutation.records.length !== (unknown2 ? 6 : 4) || mutation.pointerMutations.length !== (unknown2 ? 6 : 5) || mutation.projectionIntents.length !== (unknown2 ? 2 : 0)) {
+    invalid5("semantic envelope");
+  }
+  const reservation = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.record.localId.startsWith(`${String(payload.reservationRef)}_v`) && record2.semanticState === terminal.semanticState);
+  const bucket = mutation.records.find((record2) => record2.semanticState === "aggregate_exposure_bucket");
+  const checkpoint = mutation.records.find((record2) => record2.semanticState === "aggregate_induction_checkpoint");
+  if (reservation === undefined || reservation.predecessor === null || reservation.predecessor.semanticState !== "effect_in_flight" || bucket === undefined || bucket.predecessor === null || checkpoint === undefined || checkpoint.predecessor === null) {
+    invalid5("aggregate record lineage");
+  }
+  const cutoffCommit = objectField5(payload, "cutoffCommit");
+  const payloadTemporalFence = objectField5(payload, "temporalFence");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.terminalObservationSourceVersion !== "terminal-observation-source-1" || payload.gatewayTransactionDigest !== transactionDigest || payload.resultingState !== terminal.semanticState || cutoffCommit.manifestVersion !== "authority-source-manifest-7" || objectField5(cutoffCommit, "identity").mutationKind !== "effect_observation" || objectField5(cutoffCommit, "identity").localId !== `consequence_cutoff_${transactionHex}` || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter) {
+    invalid5("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "adapterDigest",
+    "payloadDigest",
+    "observerAuthorityDigest",
+    "observationDigest"
+  ]) {
+    requireDigest4(payload[field]);
+  }
+  if (typeof payload.observerAuthorityRef !== "string" || typeof payload.observerVersion !== "string" || typeof payload.observationRef !== "string" || payload.observationKind !== "provider_committed" && payload.observationKind !== "observation_unavailable" || payload.observationKind === "provider_committed" && terminal.semanticState !== "terminal_committed" || payload.observationKind === "observation_unavailable" && terminal.semanticState !== "blocked_unknown") {
+    invalid5("observation binding");
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer4(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness4(pointer.expected.witness, terminal.predecessor) || !sameWitness4(pointer.successor, terminal)) {
+      invalid5("pointer lineage");
+    }
+  }
+  requireAggregateAdvance2(mutation.pointerMutations, bucket);
+  requireAggregateAdvance2(mutation.pointerMutations, checkpoint);
+  const isolation = unknown2 ? requireUnknownIsolation(mutation, payload, transactionHex) : null;
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      terminalObservationRequestVersion: "terminal-observation-request-1",
+      gatewayTransactionDigest: transactionDigest,
+      cutoffDigest: terminal.predecessor.digest,
+      terminalDigest: terminal.digest,
+      reservationSuccessorDigest: reservation.digest,
+      bucketSuccessorDigest: bucket.digest,
+      checkpointSuccessorDigest: checkpoint.digest,
+      observationDigest: payload.observationDigest,
+      isolationCauseDigest: isolation?.causeDigest ?? null,
+      isolationHeadDigest: isolation?.head.digest ?? null
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid5("request digest");
+}
+function requireUnknownIsolation(mutation, terminalPayload, transactionHex) {
+  const cause = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.semanticState === "isolation_cause");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.semanticState === "isolation_active");
+  if (cause === undefined || head === undefined)
+    invalid5("isolation records");
+  const causePayload = objectPayload5(cause);
+  const headPayload = objectPayload5(head);
+  const isolationState = objectField5(headPayload, "isolationState");
+  const credential = objectField5(terminalPayload, "credentialSelectionBinding");
+  if (terminalPayload.isolationCauseDigest !== causePayload.causeDigest || terminalPayload.isolationHeadDigest !== head.digest || causePayload.causeDigest === undefined || objectField5(causePayload, "cause").sourceDecisionRef !== `terminal-observation:${transactionHex}:effect-commit-unknown` || isolationState.state !== "state_suspect" || isolationState.reasonCode !== "effect_commit_unknown" || isolationState.scopeType !== "resource" || isolationState.scopeId !== credential.resourceRef || isolationState.tenantId !== mutation.scope.tenantId || isolationState.organizationId !== mutation.scope.organizationId || headPayload.scopeDigest === undefined) {
+    invalid5("isolation binding");
+  }
+  const pointer = requiredPointer4(mutation.pointerMutations, "isolation_state", `isolation_current_${String(headPayload.scopeDigest).slice("sha256:".length)}`);
+  if (!sameWitness4(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness4(pointer.expected.witness, head.predecessor))) {
+    invalid5("isolation pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid5("isolation projection binding");
+    }
+  }
+  return { cause, causeDigest: causePayload.causeDigest ?? null, head };
+}
+function requireAggregateAdvance2(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameWitness4(pointer.successor, record2));
+  if (matches.length !== 1 || matches[0] === undefined || matches[0].expected.kind !== "exact" || record2.predecessor === null || !sameWitness4(matches[0].expected.witness, record2.predecessor)) {
+    invalid5("aggregate pointer lineage");
+  }
+}
+function requiredPointer4(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid5("pointer set");
+  return matches[0];
+}
+function objectPayload5(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid5("record payload");
+  }
+  return record2.payload;
+}
+function objectField5(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
+    invalid5(field);
+  }
+  return candidate;
+}
+function requireDigest4(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value)) {
+    invalid5("digest binding");
+  }
+}
+function sameWitness4(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid5(part) {
+  throw new Error(`Terminal-observation codec-1 ${part} is invalid.`);
+}
+// src/protocol/store/terminal-observation-codecs/terminal-observation-codec2.ts
+async function validateTerminalObservationCodec2Envelope(mutation) {
+  const transactionHex = mutation.identity.localId.startsWith("consequence_terminal_") ? mutation.identity.localId.slice("consequence_terminal_".length) : "";
+  if (!/^[a-f0-9]{64}$/u.test(transactionHex) || mutation.pointerGuards.length !== 0) {
+    invalid6("semantic envelope");
+  }
+  const terminal = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.record.localId === `consequence_terminal_${transactionHex}_v3`);
+  if (terminal === undefined || terminal.record.recordKind !== "authority_evidence" || terminal.record.localId !== `consequence_terminal_${transactionHex}_v3` || terminal.semanticState !== "terminal_committed" && terminal.semanticState !== "blocked_unknown" || terminal.version !== 3 || terminal.predecessor === null || terminal.predecessor.record.recordKind !== "authority_evidence" || terminal.predecessor.record.localId !== `consequence_cutoff_${transactionHex}_v2` || terminal.predecessor.semanticState !== "consequence_cutoff_crossed" || terminal.predecessor.version !== 2) {
+    invalid6("record lineage");
+  }
+  const payload = objectPayload6(terminal);
+  const unknown2 = terminal.semanticState === "blocked_unknown";
+  if (mutation.records.length !== (unknown2 ? 6 : 4) || mutation.pointerMutations.length !== (unknown2 ? 6 : 5) || mutation.projectionIntents.length !== (unknown2 ? 2 : 0)) {
+    invalid6("semantic envelope");
+  }
+  const reservation = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.record.localId.startsWith(`${String(payload.reservationRef)}_v`) && record2.semanticState === terminal.semanticState);
+  const bucket = mutation.records.find((record2) => record2.semanticState === "aggregate_exposure_bucket");
+  const checkpoint = mutation.records.find((record2) => record2.semanticState === "aggregate_induction_checkpoint");
+  if (reservation === undefined || reservation.predecessor === null || reservation.predecessor.semanticState !== "effect_in_flight" || bucket === undefined || bucket.predecessor === null || checkpoint === undefined || checkpoint.predecessor === null) {
+    invalid6("aggregate record lineage");
+  }
+  const cutoffCommit = objectField6(payload, "cutoffCommit");
+  const payloadTemporalFence = objectField6(payload, "temporalFence");
+  const exactConsequenceDescriptor = objectField6(payload, "exactConsequenceDescriptor");
+  const transactionDigest = `sha256:${transactionHex}`;
+  if (payload.terminalObservationSourceVersion !== "terminal-observation-source-2" || payload.gatewayTransactionDigest !== transactionDigest || payload.resultingState !== terminal.semanticState || cutoffCommit.manifestVersion !== "authority-source-manifest-11" || objectField6(cutoffCommit, "identity").mutationKind !== "effect_observation" || objectField6(cutoffCommit, "identity").localId !== `consequence_cutoff_${transactionHex}` || payloadTemporalFence.kind !== mutation.temporalFence.kind || payloadTemporalFence.notBefore !== mutation.temporalFence.notBefore || payloadTemporalFence.notAfter !== mutation.temporalFence.notAfter || exactConsequenceDescriptor.exactConsequenceDescriptorVersion !== "exact-consequence-descriptor-1" || typeof exactConsequenceDescriptor.actionContractId !== "string" || exactConsequenceDescriptor.actionContractId.length === 0 || exactConsequenceDescriptor.actionContractId !== payload.actionContractId || exactConsequenceDescriptor.actionContractDigest !== payload.actionContractDigest || typeof exactConsequenceDescriptor.adapterRef !== "string" || exactConsequenceDescriptor.adapterRef.length === 0 || typeof exactConsequenceDescriptor.effectOperationRef !== "string" || exactConsequenceDescriptor.effectOperationRef.length === 0 || await digestCanonical(exactConsequenceDescriptor) !== payload.exactConsequenceDescriptorDigest) {
+    invalid6("payload binding");
+  }
+  for (const field of [
+    "actionContractDigest",
+    "reservationLineageDigest",
+    "credentialSelectionBindingDigest",
+    "isolationSnapshotDigest",
+    "observerAuthorityDigest",
+    "observationDigest",
+    "exactConsequenceDescriptorDigest"
+  ]) {
+    requireDigest5(payload[field]);
+  }
+  for (const descriptorField of ["actionContractDigest", "adapterDigest", "payloadDigest"]) {
+    requireDigest5(exactConsequenceDescriptor[descriptorField]);
+  }
+  if (typeof payload.observerAuthorityRef !== "string" || typeof payload.observerVersion !== "string" || typeof payload.observationRef !== "string" || payload.observationKind !== "provider_committed" && payload.observationKind !== "observation_unavailable" || payload.observationKind === "provider_committed" && terminal.semanticState !== "terminal_committed" || payload.observationKind === "observation_unavailable" && terminal.semanticState !== "blocked_unknown") {
+    invalid6("observation binding");
+  }
+  for (const [kind, localId] of [
+    ["effect_lineage", `gateway_effect_${transactionHex}`],
+    ["operation_claim", `gateway_operation_${transactionHex}`],
+    ["idempotency_claim", `gateway_attempt_${transactionHex}`]
+  ]) {
+    const pointer = requiredPointer5(mutation.pointerMutations, kind, localId);
+    if (pointer.expected.kind !== "exact" || !sameWitness5(pointer.expected.witness, terminal.predecessor) || !sameWitness5(pointer.successor, terminal)) {
+      invalid6("pointer lineage");
+    }
+  }
+  requireAggregateAdvance3(mutation.pointerMutations, bucket);
+  requireAggregateAdvance3(mutation.pointerMutations, checkpoint);
+  const isolation = unknown2 ? requireUnknownIsolation2(mutation, payload, transactionHex) : null;
+  const expectedRequestDigest = await digestCanonical({
+    authorityRequestVersion: "authority-source-request-1",
+    scope: mutation.scope,
+    identity: mutation.identity,
+    request: {
+      terminalObservationRequestVersion: "terminal-observation-request-2",
+      gatewayTransactionDigest: transactionDigest,
+      cutoffDigest: terminal.predecessor.digest,
+      terminalDigest: terminal.digest,
+      reservationSuccessorDigest: reservation.digest,
+      bucketSuccessorDigest: bucket.digest,
+      checkpointSuccessorDigest: checkpoint.digest,
+      observationDigest: payload.observationDigest,
+      exactConsequenceDescriptorDigest: payload.exactConsequenceDescriptorDigest,
+      isolationCauseDigest: isolation?.causeDigest ?? null,
+      isolationHeadDigest: isolation?.head.digest ?? null
+    }
+  });
+  if (mutation.requestDigest !== expectedRequestDigest)
+    invalid6("request digest");
+}
+function requireUnknownIsolation2(mutation, terminalPayload, transactionHex) {
+  const cause = mutation.records.find((record2) => record2.record.recordKind === "authority_evidence" && record2.semanticState === "isolation_cause");
+  const head = mutation.records.find((record2) => record2.record.recordKind === "authority_state" && record2.semanticState === "isolation_active");
+  if (cause === undefined || head === undefined)
+    invalid6("isolation records");
+  const causePayload = objectPayload6(cause);
+  const headPayload = objectPayload6(head);
+  const isolationState = objectField6(headPayload, "isolationState");
+  const credential = objectField6(terminalPayload, "credentialSelectionBinding");
+  if (terminalPayload.isolationCauseDigest !== causePayload.causeDigest || terminalPayload.isolationHeadDigest !== head.digest || causePayload.causeDigest === undefined || objectField6(causePayload, "cause").sourceDecisionRef !== `terminal-observation:${transactionHex}:effect-commit-unknown` || isolationState.state !== "state_suspect" || isolationState.reasonCode !== "effect_commit_unknown" || isolationState.scopeType !== "resource" || isolationState.scopeId !== credential.resourceRef || isolationState.tenantId !== mutation.scope.tenantId || isolationState.organizationId !== mutation.scope.organizationId || headPayload.scopeDigest === undefined) {
+    invalid6("isolation binding");
+  }
+  const pointer = requiredPointer5(mutation.pointerMutations, "isolation_state", `isolation_current_${String(headPayload.scopeDigest).slice("sha256:".length)}`);
+  if (!sameWitness5(pointer.successor, head) || (head.predecessor === null ? pointer.expected.kind !== "absent" : pointer.expected.kind !== "exact" || !sameWitness5(pointer.expected.witness, head.predecessor))) {
+    invalid6("isolation pointer lineage");
+  }
+  for (const intent of mutation.projectionIntents) {
+    if (intent.source.record.recordKind !== head.record.recordKind || intent.source.record.localId !== head.record.localId || intent.source.digest !== head.digest) {
+      invalid6("isolation projection binding");
+    }
+  }
+  return { causeDigest: causePayload.causeDigest ?? null, head };
+}
+function requireAggregateAdvance3(pointers, record2) {
+  const matches = pointers.filter((pointer) => pointer.pointer.pointerKind === "aggregate_authority" && sameWitness5(pointer.successor, record2));
+  if (matches.length !== 1 || matches[0] === undefined || matches[0].expected.kind !== "exact" || record2.predecessor === null || !sameWitness5(matches[0].expected.witness, record2.predecessor)) {
+    invalid6("aggregate pointer lineage");
+  }
+}
+function requiredPointer5(pointers, pointerKind, localId) {
+  const matches = pointers.filter((candidate) => candidate.pointer.pointerKind === pointerKind && candidate.pointer.localId === localId);
+  if (matches.length !== 1 || matches[0] === undefined)
+    invalid6("pointer set");
+  return matches[0];
+}
+function objectPayload6(record2) {
+  if (record2.payload === null || typeof record2.payload !== "object" || Array.isArray(record2.payload)) {
+    invalid6("record payload");
+  }
+  return record2.payload;
+}
+function objectField6(value, field) {
+  const candidate = value[field];
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate))
+    invalid6(field);
+  return candidate;
+}
+function requireDigest5(value) {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid6("digest binding");
+}
+function sameWitness5(left, right) {
+  return left.record.recordKind === right.record.recordKind && left.record.localId === right.record.localId && left.semanticState === right.semanticState && left.version === right.version && left.digest === right.digest;
+}
+function invalid6(part) {
+  throw new Error(`Terminal-observation codec-2 ${part} is invalid.`);
+}
+// src/protocol/store/authority-grammar.ts
+var AUTHORITY_SOURCE_WRITE_GRAMMARS = Object.freeze([
+  "policy-admission-codec-3",
+  "gateway-admission-codec-1",
+  "gateway-admission-codec-2",
+  "consequence-cutoff-codec-1",
+  "consequence-cutoff-codec-2",
+  "terminal-observation-codec-1",
+  "terminal-observation-codec-2",
+  "isolation-transition-codec-1",
+  "isolation-transition-codec-2"
+]);
+var PACKET_01_AUTHORITY_GRAMMAR_REGISTRY = Object.freeze([
+  Object.freeze({
+    writerGrammar: "policy-admission-codec-3",
+    validate: validatePolicyAdmissionCodec3Grammar
+  }),
+  Object.freeze({
+    writerGrammar: "gateway-admission-codec-1",
+    validate: (mutation) => validateGatewayAdmissionCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "gateway-admission-codec-2",
+    validate: (mutation) => validateGatewayAdmissionCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "consequence-cutoff-codec-1",
+    validate: (mutation) => validateConsequenceCutoffCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "consequence-cutoff-codec-2",
+    validate: (mutation) => validateConsequenceCutoffCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "terminal-observation-codec-1",
+    validate: (mutation) => validateTerminalObservationCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "terminal-observation-codec-2",
+    validate: (mutation) => validateTerminalObservationCodec2Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "isolation-transition-codec-1",
+    validate: (mutation) => validateIsolationTransitionCodec1Envelope(mutation)
+  }),
+  Object.freeze({
+    writerGrammar: "isolation-transition-codec-2",
+    validate: (mutation) => validateIsolationTransitionCodec2Envelope(mutation)
+  })
+]);
+// src/protocol/store/authority-record-read.ts
+var trustedArrayIncludes = Array.prototype.includes;
+var trustedNumberMaxSafeInteger2 = Number.MAX_SAFE_INTEGER;
+var trustedObjectPrototype2 = Object.prototype;
+var trustedReflectApply2 = Reflect.apply;
+var trustedRegExpTest = RegExp.prototype.test;
+var trustedSetAdd2 = Set.prototype.add;
+var trustedSetHas2 = Set.prototype.has;
+var trustedStringCharCodeAt2 = String.prototype.charCodeAt;
+var trustedStringTrim = String.prototype.trim;
+var trustedStructuredClone = structuredClone;
+var trustedWeakSetAdd = WeakSet.prototype.add;
+var trustedWeakSetDelete = WeakSet.prototype.delete;
+var trustedWeakSetHas = WeakSet.prototype.has;
+var AUTHORITY_RECORD_KINDS = Object.freeze([
+  "authority_binding",
+  "authority_state",
+  "authority_evidence",
+  "projection_state"
+]);
+var AUTHORITY_POINTER_KINDS = Object.freeze([
+  "authority_context",
+  "configuration_state",
+  "aggregate_authority",
+  "idempotency_claim",
+  "operation_claim",
+  "effect_lineage",
+  "effect_observation",
+  "isolation_state",
+  "access_lease",
+  "access_usage",
+  "projection_delivery"
+]);
+var AUTHORITY_MUTATION_KINDS = Object.freeze([
+  "configuration_write",
+  "policy_admission",
+  "gateway_admission",
+  "lifecycle_transition",
+  "isolation_transition",
+  "projection_delivery",
+  "effect_observation"
+]);
+var AUTHORITY_MANIFEST_VERSIONS = Object.freeze([
+  "authority-source-manifest-1",
+  "authority-source-manifest-2",
+  "authority-source-manifest-3",
+  "authority-source-manifest-4",
+  "authority-source-manifest-5",
+  "authority-source-manifest-6",
+  "authority-source-manifest-7",
+  "authority-source-manifest-8",
+  "authority-source-manifest-9",
+  "authority-source-manifest-10",
+  "authority-source-manifest-11",
+  "authority-source-manifest-12",
+  "authority-source-manifest-13"
+]);
+function authorityPointerIdentity(pointerKind, localId) {
+  requireClosedKind("authority pointer", pointerKind, AUTHORITY_POINTER_KINDS);
+  requireLocalId("authority pointer", localId);
+  return { pointerKind, localId };
+}
+function requireClosedKind(label, value, allowed) {
+  if (typeof value !== "string" || !trustedReflectApply2(trustedArrayIncludes, allowed, [value])) {
+    throw new Error(`${label} kind is not registered.`);
+  }
+}
+function requireLocalId(label, value) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 160 || trustedReflectApply2(trustedStringTrim, value, []) !== value) {
+    throw new Error(`${label} local identity must be a non-empty, trimmed string of at most 160 characters.`);
+  }
+  if (trustedReflectApply2(trustedRegExpTest, /[\u0000-\u001f\u007f]/, [value])) {
+    throw new Error(`${label} local identity contains control characters.`);
+  }
+  if (!isWellFormedUnicode(value)) {
+    throw new Error(`${label} local identity contains an unpaired UTF-16 surrogate.`);
+  }
+}
+function isWellFormedUnicode(value) {
+  for (let index = 0;index < value.length; index += 1) {
+    const codeUnit = trustedReflectApply2(trustedStringCharCodeAt2, value, [index]);
+    if (codeUnit >= 55296 && codeUnit <= 56319) {
+      if (index + 1 >= value.length)
+        return false;
+      const next = trustedReflectApply2(trustedStringCharCodeAt2, value, [index + 1]);
+      if (next < 56320 || next > 57343)
+        return false;
+      index += 1;
+    } else if (codeUnit >= 56320 && codeUnit <= 57343) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// src/protocol/store/authority-projection-intent.ts
+var trustedStructuredClone2 = structuredClone;
+var AUTHORITY_PROJECTION_KINDS = Object.freeze(["protocol_record", "contract_stream_event"]);
+// src/protocol/store/authority-source.ts
+var trustedArraySort2 = Array.prototype.sort;
+var trustedDateParse = Date.parse;
+var trustedDateToISOString = Date.prototype.toISOString;
+var trustedNumberMaxSafeInteger3 = Number.MAX_SAFE_INTEGER;
+var trustedRegExpTest2 = RegExp.prototype.test;
+var trustedReflectApply3 = Reflect.apply;
+var trustedSetAdd3 = Set.prototype.add;
+var trustedSetHas3 = Set.prototype.has;
+var trustedStringTrim2 = String.prototype.trim;
+var trustedStructuredClone3 = structuredClone;
+var trustedTextEncoder2 = new TextEncoder;
+var trustedTextEncoderEncode2 = TextEncoder.prototype.encode;
+var trustedWeakSetAdd2 = WeakSet.prototype.add;
+var trustedWeakSetConstructor = WeakSet;
+var trustedWeakSetHas2 = WeakSet.prototype.has;
+var AUTHORITY_RECORD_REFERENCE_ROLES = Object.freeze([
+  "record_member",
+  "record_predecessor",
+  "pointer_expected",
+  "pointer_successor",
+  "projection_source"
+]);
+var AUTHORITY_MUTATION_READBACK_AMBIGUITY_REASONS = Object.freeze([
+  "conflicting_duplicate_rows",
+  "artifacts_without_marker",
+  "marker_artifact_mismatch",
+  "malformed_snapshot",
+  "post_attempt_absence_unproven",
+  "post_attempt_readback_unavailable"
+]);
+var currentGatewayAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentConsequenceCutoffAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentTerminalObservationAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+var currentIsolationTransitionAuthorityCommitCapabilities = new trustedWeakSetConstructor;
+function createCurrentIsolationTransitionAuthorityCommitCapability() {
+  const capability = {
+    kind: "current-isolation-transition-authority-commit"
+  };
+  trustedReflectApply3(trustedWeakSetAdd2, currentIsolationTransitionAuthorityCommitCapabilities, [capability]);
+  return capability;
+}
+
+// src/protocol/authority-context/binding.ts
+var AUTHORITY_CONTEXT_SOURCE_VERSION = "authority-context-source-1";
+var AuthorityReferenceSchema = exports_external.string().min(1).max(500).refine((value) => value.trim() === value, "authority context references must already be trimmed");
+var NullableBoundReferenceSchema = exports_external.strictObject({
+  ref: AuthorityReferenceSchema.nullable(),
+  digest: DigestSchema.nullable()
+});
+var AuthorityContextBindingInputSchema = exports_external.strictObject({
+  verifierAuthorityRef: AuthorityReferenceSchema,
+  authProviderRef: AuthorityReferenceSchema,
+  callerSubjectDigest: DigestSchema,
+  claimsDigest: DigestSchema,
+  revocationEpochRef: AuthorityReferenceSchema,
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  tenantAuthorityRef: AuthorityReferenceSchema,
+  organizationAuthorityRef: AuthorityReferenceSchema,
+  principalId: IdSchema,
+  principalAuthorityRef: AuthorityReferenceSchema,
+  operatingEnvelopeRef: IdSchema,
+  operatingEnvelopeDigest: DigestSchema,
+  aggregateProfileAuthorityRef: AuthorityReferenceSchema,
+  aggregateScopeAuthorityRef: AuthorityReferenceSchema,
+  aggregateScopeDigest: DigestSchema,
+  policyEvaluatorRef: AuthorityReferenceSchema,
+  policyEvaluatorDigest: DigestSchema,
+  policyVersion: NullableBoundReferenceSchema,
+  readiness: NullableBoundReferenceSchema,
+  effectiveAt: IsoDateSchema,
+  expiresAt: IsoDateSchema
+}).superRefine((binding, context) => {
+  requireBoundPair(binding.policyVersion, context, "policyVersion");
+  requireBoundPair(binding.readiness, context, "readiness");
+  if (binding.effectiveAt >= binding.expiresAt) {
+    context.addIssue({
+      code: "custom",
+      path: ["expiresAt"],
+      message: "authority context expiry must be after its effective instant"
+    });
+  }
+});
+var AuthorityContextSourcePayloadSchema = AuthorityContextBindingInputSchema.extend({
+  authorityContextSourceVersion: exports_external.literal(AUTHORITY_CONTEXT_SOURCE_VERSION),
+  bindingDigest: DigestSchema
+});
+function requireBoundPair(value, context, path) {
+  if (value.ref === null !== (value.digest === null)) {
+    context.addIssue({
+      code: "custom",
+      path: [path],
+      message: `${path} ref and digest must either both exist or both be null`
+    });
+  }
+}
+
+// src/protocol/source-authority-posture.ts
+var trustedWeakSetAdd3 = WeakSet.prototype.add;
+var trustedWeakSetConstructor2 = WeakSet;
+var trustedWeakSetHas3 = WeakSet.prototype.has;
+var gatewayBlockedSourceAuthorityCarriers = new trustedWeakSetConstructor2;
+
+// src/protocol/store/policy-authority-capability/index.ts
+var trustedReflectApply4 = Reflect.apply;
+var trustedWeakSetAdd4 = WeakSet.prototype.add;
+var trustedWeakSetHas4 = WeakSet.prototype.has;
+var trustedWeakSetConstructor3 = WeakSet;
+var currentPolicyAuthorityCommitCapabilities = new trustedWeakSetConstructor3;
+function createCurrentPolicyAuthorityCommitCapability() {
+  const capability = { kind: "current-policy-authority-commit" };
+  trustedReflectApply4(trustedWeakSetAdd4, currentPolicyAuthorityCommitCapabilities, [capability]);
+  return capability;
+}
+// src/protocol/areas/aggregate-authority/schemas.ts
+var AUTHORITY_REFERENCE_MAX_LENGTH = 160;
+var BINDING_TEXT_MAX_LENGTH = 1000;
+var ACTION_COUNT_QUANTITY_MAX_DIGITS = 1000;
+var AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS = 1000;
+var CANONICAL_UTC_MILLISECOND_PATTERN = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
+var AggregateAuthorityReferenceSchema = exports_external.string().min(1).max(AUTHORITY_REFERENCE_MAX_LENGTH).refine((value) => value === value.trim(), {
+  message: "aggregate authority references must already be trimmed"
+}).refine((value) => !/[\u0000-\u001f\u007f]/u.test(value), {
+  message: "aggregate authority references must not contain control characters"
+}).refine(isWellFormedUnicode2, {
+  message: "aggregate authority references must contain well-formed Unicode"
+});
+var AggregateBindingTextSchema = exports_external.string().min(1).max(BINDING_TEXT_MAX_LENGTH).refine((value) => value === value.trim(), {
+  message: "aggregate binding text must already be trimmed"
+}).refine((value) => !/[\u0000-\u001f\u007f]/u.test(value), {
+  message: "aggregate binding text must not contain control characters"
+}).refine(isWellFormedUnicode2, {
+  message: "aggregate binding text must contain well-formed Unicode"
+});
+var ActionCountQuantitySchema = exports_external.string().max(ACTION_COUNT_QUANTITY_MAX_DIGITS).regex(/^(?:0|[1-9]\d*)$/);
+var ActionFamilyAggregatePostureSchema = exports_external.enum(["required", "not_applicable"]);
+var AggregateActionFamilyIdentitySchema = exports_external.strictObject({
+  actionTypeRef: AggregateAuthorityReferenceSchema
+});
+var AggregateActionFamilyArtifactSchema = exports_external.strictObject({
+  identity: AggregateActionFamilyIdentitySchema,
+  familyDigest: DigestSchema
+});
+var AggregateAuthorityLocatorSchema = exports_external.strictObject({
+  aggregateProfileAuthorityRef: AggregateAuthorityReferenceSchema,
+  tenantAuthorityRef: AggregateAuthorityReferenceSchema,
+  organizationAuthorityRef: AggregateAuthorityReferenceSchema,
+  aggregateScopeAuthorityRef: AggregateAuthorityReferenceSchema
+});
+var CanonicalUtcMillisecondInstantSchema = exports_external.string().regex(CANONICAL_UTC_MILLISECOND_PATTERN).refine(isCanonicalUtcMillisecondInstant, {
+  message: "aggregate authority instants must use exact canonical UTC millisecond form"
+});
+var AggregateAuthorityWindowSchema = exports_external.strictObject({
+  startsAt: CanonicalUtcMillisecondInstantSchema,
+  endsAt: CanonicalUtcMillisecondInstantSchema
+}).superRefine((window, context) => {
+  if (window.startsAt >= window.endsAt) {
+    context.addIssue({
+      code: "custom",
+      message: "aggregate authority windows must be non-empty and half-open",
+      path: ["endsAt"]
+    });
+  }
+});
+var AggregateAuthorityWindowRelationSchema = exports_external.enum(["before_start", "inside_window", "at_or_after_end"]);
+var AggregateAllowedGatewaySchema = exports_external.strictObject({
+  gatewayAuthorityRef: AggregateAuthorityReferenceSchema,
+  gatewayVersion: AggregateAuthorityReferenceSchema
+});
+var AggregateAuthorityBindingInputSchema = exports_external.strictObject({
+  principalAuthorityRef: AggregateAuthorityReferenceSchema,
+  aggregateScopeDigest: DigestSchema,
+  actionTypeRef: AggregateAuthorityReferenceSchema,
+  actionTypeDigest: DigestSchema,
+  actionClass: AggregateBindingTextSchema,
+  protectedSurfaceKind: AggregateBindingTextSchema,
+  canonicalProtectedResourceScope: AggregateBindingTextSchema,
+  allowedGateways: exports_external.array(AggregateAllowedGatewaySchema).min(1),
+  exposureUnit: exports_external.literal("action_count"),
+  limitQuantity: ActionCountQuantitySchema,
+  window: AggregateAuthorityWindowSchema,
+  policyAuthorityRef: AggregateAuthorityReferenceSchema,
+  policyDigest: DigestSchema,
+  policyEvaluatorRef: AggregateAuthorityReferenceSchema,
+  policyEvaluatorDigest: DigestSchema,
+  policyVersionRef: AggregateAuthorityReferenceSchema,
+  policyVersionDigest: DigestSchema,
+  readinessRef: AggregateAuthorityReferenceSchema,
+  readinessDigest: DigestSchema,
+  handlerAuthorityRef: AggregateAuthorityReferenceSchema,
+  handlerVersion: AggregateAuthorityReferenceSchema,
+  canonicalizerAuthorityRef: AggregateAuthorityReferenceSchema,
+  canonicalizerVersion: AggregateAuthorityReferenceSchema
+});
+var AggregateAuthorityBindingSchema = AggregateAuthorityBindingInputSchema.extend({
+  locatorDigest: DigestSchema
+});
+var AggregateAuthorityBindingBuildInputSchema = exports_external.strictObject({
+  locator: AggregateAuthorityLocatorSchema,
+  binding: AggregateAuthorityBindingInputSchema
+});
+var AggregateAuthorityLocatorArtifactSchema = exports_external.strictObject({
+  locator: AggregateAuthorityLocatorSchema,
+  locatorDigest: DigestSchema
+});
+var AggregateAuthorityDomainBuildInputSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  family: AggregateActionFamilyIdentitySchema
+});
+var AggregateAuthorityDomainArtifactSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  family: AggregateActionFamilyIdentitySchema,
+  familyDigest: DigestSchema,
+  domainDigest: DigestSchema
+});
+var AggregateAuthorityBindingArtifactSchema = exports_external.strictObject({
+  locator: AggregateAuthorityLocatorSchema,
+  locatorDigest: DigestSchema,
+  binding: AggregateAuthorityBindingSchema,
+  bindingDigest: DigestSchema
+});
+var AggregateExposureReservationStateSchema = exports_external.enum([
+  "authority_reserved",
+  "effect_in_flight",
+  "blocked_unknown",
+  "released_confirmed_not_committed",
+  "terminal_committed"
+]);
+var AggregateReservationStateEdgeClassificationSchema = exports_external.strictObject({
+  classification: exports_external.enum([
+    "same_state_only",
+    "non_restorative_edge",
+    "restorative_edge_requires_authenticated_noncommitment"
+  ]),
+  authority: exports_external.literal("none")
+});
+var AggregateReservationLineageOriginSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  bindingDigest: DigestSchema,
+  quantity: exports_external.literal("1"),
+  actionContractDigest: DigestSchema,
+  owningGreenlightRef: AggregateAuthorityReferenceSchema,
+  originMutationRef: AggregateAuthorityReferenceSchema
+});
+var AggregateReservationLineageCandidateSchema = exports_external.strictObject({
+  origin: AggregateReservationLineageOriginSchema,
+  lineageDigest: DigestSchema,
+  reservationRef: AggregateAuthorityReferenceSchema,
+  authority: exports_external.literal("none")
+});
+var AggregateAuthoritySourceWitnessSchema = exports_external.strictObject({
+  record: exports_external.strictObject({
+    recordKind: exports_external.enum(AUTHORITY_RECORD_KINDS),
+    localId: AggregateAuthorityReferenceSchema
+  }),
+  semanticState: AggregateAuthorityReferenceSchema,
+  version: exports_external.number().int().positive().safe(),
+  digest: DigestSchema
+});
+var AggregateReservationPredecessorWitnessSchema = AggregateAuthoritySourceWitnessSchema.extend({
+  semanticState: AggregateExposureReservationStateSchema
+});
+var AggregateNonRestorativeStateCandidateInputSchema = exports_external.strictObject({
+  lineage: AggregateReservationLineageCandidateSchema,
+  state: AggregateExposureReservationStateSchema,
+  predecessor: AggregateReservationPredecessorWitnessSchema.nullable(),
+  transitionMutationRef: AggregateAuthorityReferenceSchema
+});
+var AggregateNonRestorativeStateCandidateSchema = AggregateNonRestorativeStateCandidateInputSchema.extend({
+  candidateDigest: DigestSchema,
+  authority: exports_external.literal("none")
+});
+var AggregateReservationStateSourcePayloadSchema = exports_external.strictObject({
+  aggregateReservationStateSourceVersion: exports_external.literal("aggregate-reservation-state-source-1"),
+  stateCandidate: AggregateNonRestorativeStateCandidateSchema
+});
+var AggregateExposureReservationSnapshotSchema = exports_external.strictObject({
+  lineage: AggregateReservationLineageCandidateSchema,
+  state: AggregateExposureReservationStateSchema,
+  sourceWitness: AggregateReservationPredecessorWitnessSchema
+}).superRefine((snapshot, context) => {
+  if (snapshot.sourceWitness.semanticState !== snapshot.state) {
+    context.addIssue({
+      code: "custom",
+      message: "aggregate reservation source witness must bind the exact analyzed state",
+      path: ["sourceWitness", "semanticState"]
+    });
+  }
+});
+var AggregateConservationDerivationInputSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  bindingDigest: DigestSchema,
+  limitQuantity: ActionCountQuantitySchema,
+  reservations: exports_external.array(AggregateExposureReservationSnapshotSchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  predecessorEncumbrances: exports_external.array(exports_external.lazy(() => AggregateRolloverCarryEntrySchema)).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS)
+});
+var AggregateReservationStateQuantitiesSchema = exports_external.strictObject({
+  authority_reserved: ActionCountQuantitySchema,
+  effect_in_flight: ActionCountQuantitySchema,
+  blocked_unknown: ActionCountQuantitySchema,
+  released_confirmed_not_committed: ActionCountQuantitySchema,
+  terminal_committed: ActionCountQuantitySchema
+});
+var AggregateAvailabilitySchema = exports_external.enum(["available", "none", "blocked_over_limit"]);
+var AggregateConservationSnapshotSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  bindingDigest: DigestSchema,
+  limitQuantity: ActionCountQuantitySchema,
+  reservationLineageDigests: exports_external.array(DigestSchema),
+  predecessorEncumbranceLineageDigests: exports_external.array(DigestSchema),
+  stateQuantities: AggregateReservationStateQuantitiesSchema,
+  encumberedQuantity: ActionCountQuantitySchema,
+  releasedQuantity: ActionCountQuantitySchema,
+  availableQuantity: ActionCountQuantitySchema,
+  overLimitQuantity: ActionCountQuantitySchema,
+  availability: AggregateAvailabilitySchema,
+  lineageSetDigest: DigestSchema,
+  snapshotDigest: DigestSchema,
+  authority: exports_external.literal("none")
+});
+var AggregateConservationValidationInputSchema = exports_external.strictObject({
+  snapshot: AggregateConservationSnapshotSchema,
+  reservations: exports_external.array(AggregateExposureReservationSnapshotSchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  predecessorEncumbrances: exports_external.array(exports_external.lazy(() => AggregateRolloverCarryEntrySchema)).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS)
+});
+var AggregateConservationValidationSchema = exports_external.strictObject({
+  matches: exports_external.literal(true),
+  authority: exports_external.literal("none")
+});
+var AggregateRolloverCarryStateSchema = exports_external.enum(["authority_reserved", "effect_in_flight", "blocked_unknown"]);
+var AggregateRolloverCarryEntrySchema = exports_external.strictObject({
+  lineage: AggregateReservationLineageCandidateSchema,
+  state: AggregateRolloverCarryStateSchema,
+  sourceWitness: AggregateReservationPredecessorWitnessSchema,
+  quantity: exports_external.literal("1")
+}).superRefine((entry, context) => {
+  if (entry.sourceWitness.semanticState !== entry.state) {
+    context.addIssue({
+      code: "custom",
+      message: "aggregate rollover carry must retain the exact predecessor state witness",
+      path: ["sourceWitness", "semanticState"]
+    });
+  }
+});
+var AggregateReleasedNonCarryDispositionSchema = exports_external.strictObject({
+  lineage: AggregateReservationLineageCandidateSchema,
+  state: exports_external.literal("released_confirmed_not_committed"),
+  sourceWitness: AggregateReservationPredecessorWitnessSchema,
+  disposition: exports_external.literal("released_no_carry")
+});
+var AggregateCommittedNonCarryDispositionSchema = exports_external.strictObject({
+  lineage: AggregateReservationLineageCandidateSchema,
+  state: exports_external.literal("terminal_committed"),
+  sourceWitness: AggregateReservationPredecessorWitnessSchema,
+  disposition: exports_external.literal("closed_window_commitment_retained_not_charged_to_successor")
+});
+var AggregateRolloverNonCarryDispositionSchema = exports_external.discriminatedUnion("disposition", [
+  AggregateReleasedNonCarryDispositionSchema,
+  AggregateCommittedNonCarryDispositionSchema
+]);
+var AggregateRolloverCandidateInputSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  predecessorBindingDigest: DigestSchema,
+  successorBindingDigest: DigestSchema,
+  predecessorWindow: AggregateAuthorityWindowSchema,
+  successorWindow: AggregateAuthorityWindowSchema,
+  expectedCurrentFence: AggregateAuthoritySourceWitnessSchema.nullable(),
+  predecessorSnapshot: AggregateConservationSnapshotSchema,
+  reservations: exports_external.array(AggregateExposureReservationSnapshotSchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  predecessorEncumbrances: exports_external.array(exports_external.lazy(() => AggregateRolloverCarryEntrySchema)).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS)
+});
+var AggregateRolloverCandidateSchema = exports_external.strictObject({
+  kind: exports_external.literal("non_authoritative_rollover_candidate"),
+  authority: exports_external.literal("none"),
+  locatorDigest: DigestSchema,
+  predecessorBindingDigest: DigestSchema,
+  successorBindingDigest: DigestSchema,
+  predecessorWindow: AggregateAuthorityWindowSchema,
+  successorWindow: AggregateAuthorityWindowSchema,
+  predecessorSnapshotDigest: DigestSchema,
+  expectedCurrentFence: AggregateAuthoritySourceWitnessSchema.nullable(),
+  carried: exports_external.array(AggregateRolloverCarryEntrySchema),
+  nonCarryDispositions: exports_external.array(AggregateRolloverNonCarryDispositionSchema),
+  carryQuantity: ActionCountQuantitySchema,
+  candidateDigest: DigestSchema
+});
+var AggregateExposureBucketStateInputSchema = exports_external.strictObject({
+  bindingArtifact: AggregateAuthorityBindingArtifactSchema,
+  reservations: exports_external.array(AggregateExposureReservationSnapshotSchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  predecessorEncumbrances: exports_external.array(AggregateRolloverCarryEntrySchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS)
+});
+var AggregateExposureBucketStateSchema = exports_external.strictObject({
+  locatorDigest: DigestSchema,
+  bindingDigest: DigestSchema,
+  window: AggregateAuthorityWindowSchema,
+  limitQuantity: ActionCountQuantitySchema,
+  reservations: exports_external.array(AggregateExposureReservationSnapshotSchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  predecessorEncumbrances: exports_external.array(AggregateRolloverCarryEntrySchema).max(AGGREGATE_RESERVATION_ANALYSIS_MAX_ITEMS),
+  conservation: AggregateConservationSnapshotSchema,
+  stateDigest: DigestSchema,
+  authority: exports_external.literal("none")
+});
+var AggregateAuthorityBindingSourcePayloadSchema = exports_external.strictObject({
+  aggregateAuthorityBindingSourceVersion: exports_external.literal("aggregate-authority-binding-source-1"),
+  locator: AggregateAuthorityLocatorSchema,
+  locatorDigest: DigestSchema,
+  binding: AggregateAuthorityBindingSchema,
+  bindingDigest: DigestSchema
+});
+var AggregateExposureBucketSourcePayloadSchema = exports_external.strictObject({
+  aggregateExposureBucketSourceVersion: exports_external.literal("aggregate-exposure-bucket-source-1"),
+  locatorDigest: DigestSchema,
+  bindingDigest: DigestSchema,
+  bindingRecordWitness: AggregateAuthoritySourceWitnessSchema,
+  bucketState: AggregateExposureBucketStateSchema
+});
+var AggregateAuthoritySourceScopeSchema = exports_external.strictObject({
+  tenantId: AggregateAuthorityReferenceSchema,
+  organizationId: AggregateAuthorityReferenceSchema
+});
+var AggregateAuthoritySourceRecordSchema = exports_external.strictObject({
+  record: exports_external.strictObject({
+    recordKind: exports_external.enum(AUTHORITY_RECORD_KINDS),
+    localId: AggregateAuthorityReferenceSchema
+  }),
+  semanticState: AggregateAuthorityReferenceSchema,
+  version: exports_external.number().int().positive().safe(),
+  digest: DigestSchema,
+  payload: JsonValueSchema,
+  predecessor: AggregateAuthoritySourceWitnessSchema.nullable()
+});
+var AggregateAuthoritySourcePredecessorSchema = exports_external.discriminatedUnion("kind", [
+  exports_external.strictObject({ kind: exports_external.literal("absent") }),
+  exports_external.strictObject({
+    kind: exports_external.literal("exact"),
+    record: AggregateAuthoritySourceRecordSchema
+  })
+]);
+var NonRestorativeAggregateSourceArtifactCandidateInputSchema = exports_external.strictObject({
+  sourceScope: AggregateAuthoritySourceScopeSchema,
+  bindingArtifact: AggregateAuthorityBindingArtifactSchema,
+  bucketState: AggregateExposureBucketStateSchema,
+  predecessor: AggregateAuthoritySourcePredecessorSchema
+});
+var AggregateModelInvalidCodeSchema = exports_external.enum([
+  "invalid_action_count_quantity",
+  "action_count_representation_limit",
+  "action_count_underflow",
+  "invalid_action_family_aggregate_posture",
+  "invalid_window_classification_instant",
+  "invalid_action_family_identity",
+  "invalid_aggregate_domain",
+  "invalid_aggregate_locator",
+  "invalid_aggregate_binding",
+  "duplicate_allowed_gateway",
+  "invalid_binding_window",
+  "invalid_reservation_transition",
+  "invalid_reservation_lineage",
+  "invalid_non_restorative_reservation_candidate",
+  "restorative_reservation_candidate_forbidden",
+  "invalid_conservation_state",
+  "invalid_aggregate_bucket_state",
+  "aggregate_reservation_analysis_limit",
+  "invalid_rollover_state",
+  "rollover_snapshot_mismatch",
+  "invalid_authority_source_artifact",
+  "restorative_source_artifact_forbidden",
+  "rollover_source_artifact_forbidden",
+  "source_predecessor_conflict"
+]);
+var AggregateModelConflictCodeSchema = exports_external.enum([
+  "binding_conflict",
+  "reservation_transition_conflict",
+  "reservation_lineage_conflict",
+  "rollover_conflict"
+]);
+function isCanonicalUtcMillisecondInstant(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+function isWellFormedUnicode2(value) {
+  for (let index = 0;index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 55296 && codeUnit <= 56319) {
+      const nextCodeUnit = value.charCodeAt(index + 1);
+      if (!(nextCodeUnit >= 56320 && nextCodeUnit <= 57343))
+        return false;
+      index += 1;
+      continue;
+    }
+    if (codeUnit >= 56320 && codeUnit <= 57343)
+      return false;
+  }
+  return true;
+}
+// src/protocol/areas/aggregate-authority/model.ts
+var trustedArrayConstructor = Array;
+var trustedArrayPop = Array.prototype.pop;
+var trustedArrayPrototype2 = Array.prototype;
+var trustedArrayPush = Array.prototype.push;
+var trustedArraySort3 = Array.prototype.sort;
+var trustedBigIntToString = BigInt.prototype.toString;
+var trustedMapConstructor = Map;
+var trustedMapGet = Map.prototype.get;
+var trustedMapHas = Map.prototype.has;
+var trustedMapPrototype = Map.prototype;
+var trustedMapSet = Map.prototype.set;
+var trustedNumber = Number;
+var trustedObjectConstructor = Object;
+var trustedObjectPrototype3 = Object.prototype;
+var trustedReflectObject = Reflect;
+var trustedReflectApply5 = Reflect.apply;
+var trustedReflectGetOwnPropertyDescriptor = Reflect.getOwnPropertyDescriptor;
+var trustedReflectOwnKeys = Reflect.ownKeys;
+var trustedSetAdd4 = Set.prototype.add;
+var trustedSetConstructor = Set;
+var trustedSetDelete2 = Set.prototype.delete;
+var trustedSetHas4 = Set.prototype.has;
+var trustedSetPrototype = Set.prototype;
+var trustedString2 = String;
+var trustedStringCharCodeAt3 = String.prototype.charCodeAt;
+var trustedStringPrototype = String.prototype;
+var trustedDate = Date;
+var trustedDatePrototype = Date.prototype;
+var trustedJson = JSON;
+var trustedRegExp = RegExp;
+var trustedRegExpPrototype = RegExp.prototype;
+var trustedObjectPrototypeDescriptors = captureIntrinsicPrototype(trustedObjectPrototype3);
+var trustedArrayPrototypeDescriptors = captureIntrinsicPrototype(trustedArrayPrototype2);
+var trustedObjectConstructorDescriptors = captureIntrinsicPrototype(trustedObjectConstructor);
+var trustedArrayConstructorDescriptors = captureIntrinsicPrototype(trustedArrayConstructor);
+var trustedNumberConstructorDescriptors = captureIntrinsicPrototype(trustedNumber);
+var trustedReflectDescriptors = captureIntrinsicPrototype(trustedReflectObject);
+var trustedStringConstructorDescriptors = captureIntrinsicPrototype(trustedString2);
+var trustedStringPrototypeDescriptors = captureIntrinsicPrototype(trustedStringPrototype);
+var trustedRegExpConstructorDescriptors = captureIntrinsicPrototype(trustedRegExp);
+var trustedRegExpPrototypeDescriptors = captureIntrinsicPrototype(trustedRegExpPrototype);
+var trustedDateConstructorDescriptors = captureIntrinsicPrototype(trustedDate);
+var trustedDatePrototypeDescriptors = captureIntrinsicPrototype(trustedDatePrototype);
+var trustedJsonDescriptors = captureIntrinsicPrototype(trustedJson);
+var trustedMapConstructorDescriptors = captureIntrinsicPrototype(trustedMapConstructor);
+var trustedMapPrototypeDescriptors = captureIntrinsicPrototype(trustedMapPrototype);
+var trustedSetConstructorDescriptors = captureIntrinsicPrototype(trustedSetConstructor);
+var trustedSetPrototypeDescriptors = captureIntrinsicPrototype(trustedSetPrototype);
+function captureIntrinsicPrototype(prototype) {
+  const entries = [];
+  const keys = trustedReflectOwnKeys(prototype);
+  for (let index = 0;index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === undefined) {
+      throw new Error("Trusted intrinsic prototype changed during module initialization.");
+    }
+    const descriptor = trustedReflectGetOwnPropertyDescriptor(prototype, key);
+    if (descriptor === undefined) {
+      throw new Error("Trusted intrinsic prototype changed during module initialization.");
+    }
+    trustedReflectApply5(trustedArrayPush, entries, [{ key, descriptor }]);
+  }
+  return entries;
+}
+// src/protocol/areas/policy-greenlight/admission/snapshot.ts
+var BoundedReferenceSchema = exports_external.string().min(1).max(500);
+var AuthorityCommitIdentitySchema = exports_external.strictObject({
+  mutationKind: exports_external.enum(AUTHORITY_MUTATION_KINDS),
+  localId: exports_external.string().min(1).max(512)
+});
+var AuthorityPointerIdentitySchema = exports_external.strictObject({
+  pointerKind: exports_external.enum(AUTHORITY_POINTER_KINDS),
+  localId: exports_external.string().min(1).max(512)
+});
+var AuthorityRecordIdentitySchema = exports_external.strictObject({
+  recordKind: exports_external.enum(AUTHORITY_RECORD_KINDS),
+  localId: exports_external.string().min(1).max(512)
+});
+var AuthorityRecordWitnessSchema = exports_external.strictObject({
+  record: AuthorityRecordIdentitySchema,
+  semanticState: exports_external.string().min(1).max(256),
+  version: exports_external.number().int().positive().safe(),
+  digest: DigestSchema
+});
+var AuthorityPointerExpectationSchema = exports_external.discriminatedUnion("kind", [
+  exports_external.strictObject({ kind: exports_external.literal("absent") }),
+  exports_external.strictObject({
+    kind: exports_external.literal("exact"),
+    witness: AuthorityRecordWitnessSchema
+  })
+]);
+var AuthorityPointerGuardSchema = exports_external.strictObject({
+  pointer: AuthorityPointerIdentitySchema,
+  expected: AuthorityPointerExpectationSchema
+});
+var AuthorityCommitMarkerSchema = exports_external.strictObject({
+  scope: AggregateAuthoritySourceScopeSchema,
+  identity: AuthorityCommitIdentitySchema,
+  manifestVersion: exports_external.enum(AUTHORITY_MANIFEST_VERSIONS),
+  requestDigest: DigestSchema,
+  manifestDigest: DigestSchema
+});
+var AuthorityPointerTransitionSchema = exports_external.strictObject({
+  scope: AggregateAuthoritySourceScopeSchema,
+  commit: AuthorityCommitIdentitySchema,
+  pointer: AuthorityPointerIdentitySchema,
+  expected: AuthorityPointerExpectationSchema,
+  successor: AuthorityRecordWitnessSchema
+});
+var AggregateConfigurationHeadProofSchema = exports_external.strictObject({
+  proofFormat: exports_external.literal("aggregate-configuration-head-proof-1"),
+  validationBasis: exports_external.literal("exact-configuration-writer-transition"),
+  recordWitness: AuthorityRecordWitnessSchema,
+  pointerTransition: AuthorityPointerTransitionSchema,
+  commitMarker: AuthorityCommitMarkerSchema
+});
+var AggregateBucketCheckpointCommitProofSchema = exports_external.strictObject({
+  marker: AuthorityCommitMarkerSchema,
+  bucketTransition: AuthorityPointerTransitionSchema,
+  checkpointTransition: AuthorityPointerTransitionSchema
+});
+var AggregateAdmissionHeadProofSchema = exports_external.strictObject({
+  proofFormat: exports_external.literal("aggregate-admission-head-proof-2"),
+  validationBasis: exports_external.literal("constant-size-two-generation-induction-under-closed-writer-tcb"),
+  writerProfile: exports_external.literal("aggregate-bucket-writer-profile-1"),
+  headRecordWitness: AuthorityRecordWitnessSchema,
+  predecessorRecordWitness: AuthorityRecordWitnessSchema.nullable(),
+  headBindingRecordWitness: AuthorityRecordWitnessSchema,
+  predecessorBindingRecordWitness: AuthorityRecordWitnessSchema.nullable(),
+  checkpointRecordWitness: AuthorityRecordWitnessSchema,
+  predecessorCheckpointRecordWitness: AuthorityRecordWitnessSchema.nullable(),
+  headCommit: AggregateBucketCheckpointCommitProofSchema,
+  predecessorCommit: AggregateBucketCheckpointCommitProofSchema.nullable()
+});
+var AggregateArchitectureDecisionSchema = exports_external.strictObject({
+  ref: BoundedReferenceSchema,
+  digest: DigestSchema
+});
+var ResolvedAggregateConfigurationSchema = exports_external.strictObject({
+  posture: exports_external.enum(["required", "not_applicable"]),
+  sourceScope: AggregateAuthoritySourceScopeSchema,
+  actionFamily: AggregateActionFamilyIdentitySchema,
+  familyDigest: DigestSchema,
+  domainDigest: DigestSchema,
+  actionTypeDigest: DigestSchema,
+  locator: AggregateAuthorityLocatorSchema,
+  locatorDigest: DigestSchema,
+  configurationPointer: AuthorityPointerIdentitySchema,
+  bucketPointer: AuthorityPointerIdentitySchema,
+  checkpointPointer: AuthorityPointerIdentitySchema,
+  configurationRecord: AggregateAuthoritySourceRecordSchema,
+  bucketRecord: AggregateAuthoritySourceRecordSchema.nullable(),
+  checkpointRecord: AggregateAuthoritySourceRecordSchema.nullable(),
+  bindingArtifact: AggregateAuthorityBindingArtifactSchema.nullable(),
+  bucketState: AggregateExposureBucketStateSchema.nullable(),
+  architectureDecision: AggregateArchitectureDecisionSchema.nullable()
+});
+var CanonicalResourceMembershipSchema = exports_external.strictObject({
+  membershipFormat: exports_external.literal("canonical-resource-membership-1"),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  actionContractRecordDigest: DigestSchema,
+  actionContractRecordEnvelopeDigest: DigestSchema,
+  inputResourceRef: ResourceRefSchema,
+  inputBindingDigest: DigestSchema,
+  canonicalResourceRef: ResourceRefSchema,
+  canonicalProtectedResourceScope: ResourceRefSchema,
+  actionTypeId: IdSchema,
+  actionTypeAuthorityRef: BoundedReferenceSchema,
+  actionTypeDigest: DigestSchema,
+  actionTypeRecordEnvelopeDigest: DigestSchema,
+  actionClass: BoundedReferenceSchema,
+  protectedSurfaceKind: BoundedReferenceSchema,
+  gatewayRegistryEntryId: IdSchema,
+  gatewayRegistryDigest: DigestSchema,
+  gatewayRegistryRecordEnvelopeDigest: DigestSchema,
+  gatewayId: IdSchema,
+  gatewayAuthorityRef: BoundedReferenceSchema,
+  gatewayVersion: DigestSchema,
+  gatewayResourceNamespaceRef: BoundedReferenceSchema,
+  registryRef: BoundedReferenceSchema,
+  registryVersion: BoundedReferenceSchema,
+  registryDigest: DigestSchema,
+  canonicalizerAuthorityRef: BoundedReferenceSchema,
+  canonicalizerVersion: BoundedReferenceSchema,
+  canonicalizerProfileDigest: DigestSchema,
+  membershipDigest: DigestSchema
+});
+var CommonAggregateAdmissionSnapshotShape = {
+  contextGuard: AuthorityPointerGuardSchema,
+  configurationGuard: AuthorityPointerGuardSchema,
+  bucketFence: AuthorityPointerGuardSchema,
+  checkpointFence: AuthorityPointerGuardSchema,
+  resourceMembership: CanonicalResourceMembershipSchema
+};
+var RequiredAggregateAdmissionSnapshotSchema = exports_external.strictObject({
+  posture: exports_external.literal("required"),
+  ...CommonAggregateAdmissionSnapshotShape,
+  configuration: ResolvedAggregateConfigurationSchema,
+  configurationHeadProof: AggregateConfigurationHeadProofSchema,
+  admissionHeadProof: AggregateAdmissionHeadProofSchema
+}).superRefine((snapshot, context) => {
+  if (snapshot.configuration.posture !== "required" || snapshot.configuration.bindingArtifact === null || snapshot.configuration.bucketState === null || snapshot.configuration.bucketRecord === null || snapshot.configuration.checkpointRecord === null || snapshot.configuration.architectureDecision !== null) {
+    context.addIssue({
+      code: "custom",
+      message: "required aggregate admission must carry a complete required configuration",
+      path: ["configuration"]
+    });
+  }
+});
+var NotApplicableAggregateAdmissionSnapshotSchema = exports_external.strictObject({
+  posture: exports_external.literal("not_applicable"),
+  ...CommonAggregateAdmissionSnapshotShape,
+  architectureDecision: AggregateArchitectureDecisionSchema,
+  configurationHeadProof: AggregateConfigurationHeadProofSchema
+});
+var MissingAggregateAdmissionSnapshotSchema = exports_external.strictObject({
+  posture: exports_external.literal("missing"),
+  ...CommonAggregateAdmissionSnapshotShape
+});
+var AggregateAdmissionSnapshotSchema = exports_external.discriminatedUnion("posture", [
+  RequiredAggregateAdmissionSnapshotSchema,
+  NotApplicableAggregateAdmissionSnapshotSchema,
+  MissingAggregateAdmissionSnapshotSchema
+]);
+
+// src/protocol/areas/policy-greenlight/admission/source/source-schemas.ts
+var POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_DESCRIPTOR_VERSION = "authority-projection-outbox-protocol-record-descriptor-1";
+var POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_DELIVERY_POLICY_VERSION = "authority-projection-outbox-protocol-record-delivery-policy-1";
+var POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_ROUTE_VERSION = "authority-projection-outbox-protocol-record-route-1";
+var PolicyAdmissionOutcomeKindSchema = exports_external.enum([
+  "greenlight",
+  "refuse",
+  "review_required",
+  "halt",
+  "quarantine",
+  "proof_gap"
+]);
+var PolicyAdmissionArtifactWitnessSchema = exports_external.strictObject({
+  objectId: IdSchema,
+  canonicalDigest: DigestSchema
+});
+var PolicyAdmissionProtocolRecordWitnessSchema = exports_external.strictObject({
+  role: exports_external.enum(["request_context", "policy_decision", "greenlight", "refusal", "proof_gap"]),
+  objectType: exports_external.enum(["transition_request_context", "policy_decision", "greenlight", "refusal", "proof_gap"]),
+  objectId: IdSchema,
+  canonicalDigest: DigestSchema,
+  envelopeDigest: DigestSchema
+});
+var PolicyAdmissionStoredProtocolRecordSchema = exports_external.strictObject({
+  objectId: IdSchema,
+  objectType: exports_external.enum(["transition_request_context", "policy_decision", "greenlight", "refusal", "proof_gap"]),
+  tenantId: IdSchema,
+  organizationId: IdSchema,
+  schemaVersion: exports_external.string().min(1),
+  canonicalDigest: DigestSchema,
+  payload: JsonValueSchema,
+  createdAt: exports_external.string().datetime({ offset: true }),
+  sourceEventId: exports_external.null()
+});
+var AuthorityRecordWitnessSchema2 = exports_external.strictObject({
+  record: exports_external.strictObject({
+    recordKind: exports_external.enum(["authority_binding", "authority_state", "authority_evidence", "projection_state"]),
+    localId: exports_external.string().min(1).max(512)
+  }),
+  semanticState: exports_external.string().min(1).max(256),
+  version: exports_external.number().int().positive(),
+  digest: DigestSchema
+});
+var AuthorityPointerIdentitySchema2 = exports_external.strictObject({
+  pointerKind: exports_external.enum([
+    "authority_context",
+    "configuration_state",
+    "aggregate_authority",
+    "idempotency_claim",
+    "operation_claim",
+    "effect_lineage",
+    "effect_observation",
+    "isolation_state",
+    "access_lease",
+    "access_usage",
+    "projection_delivery"
+  ]),
+  localId: exports_external.string().min(1).max(512)
+});
+var AuthorityPointerExpectationSchema2 = exports_external.discriminatedUnion("kind", [
+  exports_external.strictObject({ kind: exports_external.literal("absent") }),
+  exports_external.strictObject({ kind: exports_external.literal("exact"), witness: AuthorityRecordWitnessSchema2 })
+]);
+var AuthorityPointerGuardSchema2 = exports_external.strictObject({
+  pointer: AuthorityPointerIdentitySchema2,
+  expected: AuthorityPointerExpectationSchema2
+});
+var PolicyAdmissionConflictAttemptSchema = exports_external.strictObject({
+  sourceCommit: exports_external.strictObject({
+    mutationKind: exports_external.literal("policy_admission"),
+    localId: exports_external.string().min(1).max(512)
+  }),
+  requestDigest: DigestSchema,
+  transactionDigest: DigestSchema,
+  attemptDigest: DigestSchema,
+  aggregateSnapshotDigest: DigestSchema
+});
+var PolicyAdmissionConflictObservationSchema = exports_external.strictObject({
+  conflictClass: exports_external.enum(["aggregate_cas_conflict", "aggregate_record_binding_conflict", "prerequisite_guard_conflict"]),
+  pointer: AuthorityPointerIdentitySchema2,
+  expected: AuthorityPointerExpectationSchema2,
+  current: AuthorityRecordWitnessSchema2.nullable(),
+  attempted: PolicyAdmissionConflictAttemptSchema
+});
+var PolicyAdmissionConflictWitnessSchema = PolicyAdmissionConflictObservationSchema.extend({
+  ordinal: exports_external.number().int().min(1).max(3)
+});
+var PolicyAdmissionTerminalEvidenceSchema = exports_external.strictObject({
+  terminalNonauthorityVersion: exports_external.literal("policy-admission-terminal-nonauthority-1"),
+  terminalReason: exports_external.enum(["prerequisite_drift", "contention_exhausted"]),
+  conflicts: exports_external.array(PolicyAdmissionConflictWitnessSchema).min(1).max(3)
+}).superRefine((evidence, context) => {
+  const prerequisiteDrift = evidence.terminalReason === "prerequisite_drift";
+  const expectedCount = prerequisiteDrift ? 1 : 3;
+  if (evidence.conflicts.length !== expectedCount) {
+    context.addIssue({
+      code: "custom",
+      message: `terminal ${evidence.terminalReason} requires exactly ${expectedCount} conflict witness(es)`,
+      path: ["conflicts"]
+    });
+    return;
+  }
+  for (let index = 0;index < evidence.conflicts.length; index += 1) {
+    const conflict = evidence.conflicts[index];
+    if (conflict === undefined || conflict.ordinal !== index + 1 || (prerequisiteDrift ? conflict.conflictClass !== "prerequisite_guard_conflict" : !(conflict.conflictClass === "aggregate_cas_conflict" || conflict.conflictClass === "aggregate_record_binding_conflict"))) {
+      context.addIssue({
+        code: "custom",
+        message: "terminal conflict chronology or class is invalid",
+        path: ["conflicts", index]
+      });
+    }
+  }
+});
+var PolicyAdmissionAttemptBindingSchema = exports_external.strictObject({
+  policyAdmissionAttemptVersion: exports_external.literal("policy-admission-attempt-2"),
+  sourceScope: exports_external.strictObject({
+    tenantId: IdSchema,
+    organizationId: IdSchema
+  }),
+  actionContract: exports_external.strictObject({
+    objectId: IdSchema,
+    canonicalDigest: DigestSchema,
+    actionContractDigest: DigestSchema
+  }),
+  envelope: exports_external.strictObject({
+    objectId: IdSchema,
+    canonicalDigest: DigestSchema
+  }),
+  policyEvaluator: exports_external.strictObject({
+    ref: exports_external.string().min(1).max(500),
+    digest: DigestSchema
+  }),
+  request: exports_external.strictObject({
+    actionContractId: IdSchema,
+    envelopeId: IdSchema,
+    policyEvaluatorVersion: exports_external.string().min(1).max(500),
+    requiredTypedCommitmentRefs: exports_external.array(IdSchema).max(128),
+    requiredTypedCommitmentSetDigest: DigestSchema.nullable(),
+    typedCommitments: exports_external.array(TypedActionCommitmentSummarySchema).max(128),
+    reviewDecisionId: IdSchema.nullable()
+  })
+});
+var PolicyAdmissionProjectionProfileV1Schema = exports_external.strictObject({
+  descriptorVersion: exports_external.literal(POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_DESCRIPTOR_VERSION),
+  deliveryPolicy: exports_external.strictObject({
+    policyVersion: exports_external.literal(POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_DELIVERY_POLICY_VERSION),
+    maxAttempts: exports_external.literal(16),
+    maxLeaseTicks: exports_external.literal(1e4)
+  }),
+  route: exports_external.strictObject({
+    routeVersion: exports_external.literal(POLICY_ADMISSION_CODEC2_PROTOCOL_RECORD_ROUTE_VERSION),
+    authoritySourceNamespace: exports_external.literal("handshake-policy-authority-source"),
+    destinationNamespace: exports_external.literal("handshake-protocol-read-model"),
+    configurationDigest: DigestSchema
+  })
+});
+var PolicyAdmissionTransactionBindingV2Schema = exports_external.strictObject({
+  policyAdmissionTransactionBindingVersion: exports_external.literal("policy-admission-transaction-binding-2"),
+  logicalAttempt: PolicyAdmissionAttemptBindingSchema,
+  logicalAttemptDigest: DigestSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyInput: JsonValueSchema,
+  policyInputDigest: DigestSchema,
+  aggregateSnapshot: AggregateAdmissionSnapshotSchema,
+  aggregateSnapshotDigest: DigestSchema,
+  isolationSnapshotDigest: DigestSchema,
+  aggregatePosture: exports_external.enum(["required", "not_applicable", "missing"]),
+  pointerGuardSetDigest: DigestSchema,
+  pointerGuards: exports_external.array(AuthorityPointerGuardSchema2).max(128),
+  temporalFence: exports_external.strictObject({
+    kind: exports_external.literal("store_time_in_half_open_interval"),
+    notBefore: exports_external.string().datetime({ offset: true }),
+    notAfter: exports_external.string().datetime({ offset: true })
+  }).nullable(),
+  outcome: PolicyAdmissionOutcomeKindSchema,
+  decision: PolicyAdmissionArtifactWitnessSchema,
+  greenlight: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  refusal: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  proofGap: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  protocolRecords: exports_external.array(PolicyAdmissionProtocolRecordWitnessSchema).min(1).max(3),
+  eventDescriptorDigests: exports_external.array(DigestSchema).length(2),
+  eventProjectionBindingDigests: exports_external.array(DigestSchema).length(2),
+  protocolRecordProjectionProfile: PolicyAdmissionProjectionProfileV1Schema,
+  protocolRecordProjectionProfileDigest: DigestSchema
+});
+var PolicyAdmissionOutcomeSourcePayloadV2Schema = exports_external.strictObject({
+  policyAdmissionOutcomeSourceVersion: exports_external.literal("policy-admission-outcome-source-2"),
+  attemptDigest: DigestSchema,
+  transactionDigest: DigestSchema,
+  transactionBinding: PolicyAdmissionTransactionBindingV2Schema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyDecisionId: IdSchema,
+  policyInputDigest: DigestSchema,
+  aggregateSnapshotDigest: DigestSchema,
+  isolationSnapshotDigest: DigestSchema,
+  aggregatePosture: exports_external.enum(["required", "not_applicable", "missing"]),
+  outcome: PolicyAdmissionOutcomeKindSchema,
+  greenlightId: IdSchema.nullable(),
+  refusalId: IdSchema.nullable(),
+  proofGapId: IdSchema.nullable(),
+  protocolRecords: exports_external.array(PolicyAdmissionStoredProtocolRecordSchema).min(1).max(3)
+});
+var PolicyAdmissionProjectionDispositionV1Schema = exports_external.discriminatedUnion("kind", [
+  exports_external.strictObject({
+    policyAdmissionProjectionDispositionVersion: exports_external.literal("policy-admission-projection-disposition-1"),
+    kind: exports_external.literal("none"),
+    reason: exports_external.enum(["greenlight", "proof_gap", "review_required"]),
+    projectionIntentCount: exports_external.literal(0),
+    materializationPosture: exports_external.literal("not_requested")
+  }),
+  exports_external.strictObject({
+    policyAdmissionProjectionDispositionVersion: exports_external.literal("policy-admission-projection-disposition-1"),
+    kind: exports_external.literal("exact_refusal_protocol_record_v2"),
+    projectionIntentCount: exports_external.literal(1),
+    materializationPosture: exports_external.literal("intent_only_uncomposed"),
+    intentDescriptorBinding: exports_external.strictObject({
+      descriptorVersion: exports_external.literal("authority-projection-outbox-protocol-record-descriptor-2"),
+      route: exports_external.strictObject({
+        routeVersion: exports_external.literal("authority-projection-outbox-protocol-record-route-2"),
+        authoritySourceNamespace: exports_external.literal("handshake-policy-authority-source"),
+        destinationNamespace: exports_external.literal("handshake-protocol-read-model"),
+        configurationDigest: DigestSchema
+      }),
+      destination: exports_external.strictObject({
+        objectType: exports_external.literal("refusal"),
+        objectId: IdSchema,
+        tenantId: IdSchema,
+        organizationId: IdSchema,
+        schemaVersion: exports_external.string().min(1),
+        canonicalPayloadDigest: DigestSchema
+      }),
+      recordEnvelopeDigest: DigestSchema
+    })
+  })
+]);
+var PolicyAdmissionTransactionBindingV3Schema = exports_external.strictObject({
+  policyAdmissionTransactionBindingVersion: exports_external.literal("policy-admission-transaction-binding-3"),
+  logicalAttempt: PolicyAdmissionAttemptBindingSchema,
+  logicalAttemptDigest: DigestSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyInput: JsonValueSchema,
+  policyInputDigest: DigestSchema,
+  aggregateSnapshot: AggregateAdmissionSnapshotSchema,
+  aggregateSnapshotDigest: DigestSchema,
+  isolationSnapshotDigest: DigestSchema,
+  aggregatePosture: exports_external.enum(["required", "not_applicable", "missing"]),
+  pointerGuardSetDigest: DigestSchema,
+  pointerGuards: exports_external.array(AuthorityPointerGuardSchema2).max(128),
+  temporalFence: exports_external.strictObject({
+    kind: exports_external.literal("store_time_in_half_open_interval"),
+    notBefore: exports_external.string().datetime({ offset: true }),
+    notAfter: exports_external.string().datetime({ offset: true })
+  }).nullable(),
+  outcome: PolicyAdmissionOutcomeKindSchema,
+  decision: PolicyAdmissionArtifactWitnessSchema,
+  greenlight: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  refusal: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  proofGap: PolicyAdmissionArtifactWitnessSchema.nullable(),
+  embeddedRecordWitnesses: exports_external.array(PolicyAdmissionProtocolRecordWitnessSchema).min(1).max(3),
+  projectionDisposition: PolicyAdmissionProjectionDispositionV1Schema
+});
+var PolicyAdmissionOutcomeSourcePayloadV3Schema = exports_external.strictObject({
+  policyAdmissionOutcomeSourceVersion: exports_external.literal("policy-admission-outcome-source-3"),
+  attemptDigest: DigestSchema,
+  transactionDigest: DigestSchema,
+  transactionBinding: PolicyAdmissionTransactionBindingV3Schema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyDecisionId: IdSchema,
+  policyInputDigest: DigestSchema,
+  aggregateSnapshotDigest: DigestSchema,
+  isolationSnapshotDigest: DigestSchema,
+  aggregatePosture: exports_external.enum(["required", "not_applicable", "missing"]),
+  outcome: PolicyAdmissionOutcomeKindSchema,
+  greenlightId: IdSchema.nullable(),
+  refusalId: IdSchema.nullable(),
+  proofGapId: IdSchema.nullable(),
+  embeddedProtocolRecords: exports_external.array(PolicyAdmissionStoredProtocolRecordSchema).min(1).max(3)
+});
+var PolicyAdmissionOutcomeSourcePayloadDiscriminatorSchema = exports_external.discriminatedUnion("policyAdmissionOutcomeSourceVersion", [PolicyAdmissionOutcomeSourcePayloadV2Schema, PolicyAdmissionOutcomeSourcePayloadV3Schema]);
+var GreenlightIssuanceSourcePayloadSchema = exports_external.strictObject({
+  greenlightIssuanceSourceVersion: exports_external.literal("greenlight-issuance-source-1"),
+  attemptDigest: DigestSchema,
+  transactionDigest: DigestSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyDecisionId: IdSchema,
+  policyInputDigest: DigestSchema,
+  greenlightId: IdSchema,
+  maxUses: exports_external.literal(1),
+  expiresAt: exports_external.string().datetime({ offset: true })
+});
+var PolicyIdempotencyClaimSourcePayloadSchema = exports_external.strictObject({
+  policyIdempotencyClaimSourceVersion: exports_external.literal("policy-idempotency-claim-source-1"),
+  attemptDigest: DigestSchema,
+  transactionDigest: DigestSchema,
+  ledgerKeyDigest: DigestSchema,
+  idempotencyKey: IdSchema,
+  paramsDigest: DigestSchema,
+  actionContractId: IdSchema,
+  actionContractDigest: DigestSchema,
+  policyDecisionId: IdSchema,
+  greenlightId: IdSchema,
+  state: exports_external.literal("authority_reserved")
+});
+
+// src/protocol/store/record-exactness.ts
+var STORED_PROTOCOL_RECORD_KEYS = Object.freeze([
+  "objectId",
+  "objectType",
+  "tenantId",
+  "organizationId",
+  "schemaVersion",
+  "canonicalDigest",
+  "payload",
+  "createdAt",
+  "sourceEventId"
+]);
+var trustedObjectPrototype4 = Object.prototype;
+// src/protocol/areas/object-registry/index.ts
+var protocolObjectTypes = Object.freeze([
+  ...ProtocolObjectTypeSchema.options
+]);
+var protocolObjectRegistryEntries = {
+  tool_capability: entry("tool_capability", ToolCapabilitySchema, (record2) => record2.payload.toolCapabilityId, "catalog_public", "control_plane_read"),
+  action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
+  gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
+  operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
+  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
+  delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
+  delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
+  gateway_custody_proof_packet: entry("gateway_custody_proof_packet", GatewayCustodyProofPacketSchema, (record2) => record2.payload.gatewayCustodyProofPacketId, "transition_evidence", "audit_read"),
+  credential_resolution_evidence: entry("credential_resolution_evidence", CredentialResolutionEvidenceSchema, (record2) => record2.payload.credentialResolutionEvidenceId, "transition_evidence", "audit_read"),
+  typed_action_commitment: entry("typed_action_commitment", TypedActionCommitmentRecordSchema, (record2) => record2.payload.typedActionCommitmentId, "transition_evidence", "audit_read"),
+  transition_request_context: entry("transition_request_context", TransitionRequestContextSchema, (record2) => record2.payload.transitionRequestContextId, "internal_evidence", "internal_only"),
+  runtime_execution: entry("runtime_execution", RuntimeExecutionRecordSchema, (record2) => record2.payload.runtimeExecutionId, "transition_evidence", "audit_read"),
+  generated_execution_graph: entry("generated_execution_graph", GeneratedExecutionGraphSchema, (record2) => record2.payload.generatedExecutionGraphId, "transition_evidence", "audit_read"),
+  idempotency_ledger_entry: entry("idempotency_ledger_entry", IdempotencyLedgerEntrySchema, (record2) => record2.payload.idempotencyLedgerEntryId, "internal_evidence", "internal_only"),
+  bypass_probe: entry("bypass_probe", BypassProbeSchema, (record2) => record2.payload.bypassProbeId, "internal_evidence", "internal_only"),
+  tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
+  protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
+  intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
+  delegation_evidence_record: entry("delegation_evidence_record", StoredDelegationEvidenceRecordSchema, (record2) => record2.payload.delegationEvidenceRecordId, "transition_evidence", "audit_read"),
+  negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
+  negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
+  negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
+  linked_agreement: entry("linked_agreement", LinkedAgreementSchema, (record2) => record2.payload.linkedAgreementId, "transition_evidence", "audit_read"),
+  agreement_obligation_binding: entry("agreement_obligation_binding", AgreementObligationBindingSchema, (record2) => record2.payload.agreementObligationBindingId, "transition_evidence", "audit_read"),
+  agreement_status_transition: entry("agreement_status_transition", AgreementStatusTransitionSchema, (record2) => record2.payload.agreementStatusTransitionId, "transition_evidence", "audit_read"),
+  action_contract: entry("action_contract", ActionContractSchema, (record2) => record2.payload.actionContractId, "transition_evidence", "audit_read"),
+  authority_certificate: entry("authority_certificate", AuthorityCertificateSchema, (record2) => record2.payload.authorityCertificateId, "receipt_evidence", "audit_read"),
+  policy_decision: entry("policy_decision", PolicyDecisionSchema, (record2) => record2.payload.policyDecisionId, "transition_evidence", "audit_read"),
+  greenlight: entry("greenlight", GreenlightSchema, (record2) => record2.payload.greenlightId, "transition_evidence", "audit_read"),
+  review_artifact: entry("review_artifact", ReviewArtifactRecordSchema, (record2) => record2.payload.reviewArtifactId, "transition_evidence", "audit_read"),
+  review_decision: entry("review_decision", ReviewDecisionSchema, (record2) => record2.payload.reviewDecisionId, "transition_evidence", "audit_read"),
+  breaker_decision: entry("breaker_decision", BreakerDecisionSchema, (record2) => record2.payload.breakerDecisionId, "transition_evidence", "audit_read"),
+  isolation_state: entry("isolation_state", IsolationStateSchema, (record2) => record2.payload.isolationStateId, "transition_evidence", "audit_read"),
+  gateway_check_attempt: entry("gateway_check_attempt", GatewayCheckAttemptSchema, (record2) => record2.payload.gateAttemptId, "transition_evidence", "audit_read"),
+  mutation_attempt: entry("mutation_attempt", MutationAttemptSchema, (record2) => record2.payload.mutationAttemptId, "transition_evidence", "audit_read"),
+  protected_surface_operation_claim: entry("protected_surface_operation_claim", ProtectedSurfaceOperationClaimSchema, (record2) => record2.payload.protectedSurfaceOperationClaimId, "internal_evidence", "internal_only"),
+  surface_operation_reconciliation: entry("surface_operation_reconciliation", SurfaceOperationReconciliationSchema, (record2) => record2.payload.reconciliationId, "transition_evidence", "audit_read"),
+  proof_gap: entry("proof_gap", ProofGapSchema, (record2) => record2.payload.proofGapId, "transition_evidence", "audit_read"),
+  refusal: entry("refusal", RefusalSchema, (record2) => record2.payload.refusalId, "transition_evidence", "audit_read"),
+  receipt: entry("receipt", ReceiptSchema, (record2) => record2.payload.receiptId, "receipt_evidence", "audit_read"),
+  receipt_export: entry("receipt_export", ReceiptExportSchema, (record2) => record2.payload.receiptExportId, "receipt_evidence", "audit_read"),
+  raw_record_read_audit: entry("raw_record_read_audit", RawRecordReadAuditSchema, (record2) => record2.payload.rawRecordReadAuditId, "internal_evidence", "internal_only"),
+  recovery_recommendation: entry("recovery_recommendation", RecoveryRecommendationSchema, (record2) => record2.payload.recoveryRecommendationId, "transition_evidence", "audit_read"),
+  recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
+  contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
+};
+var protocolObjectRegistry = Object.freeze(protocolObjectRegistryEntries);
+var protocolRecordSchemas = Object.freeze(Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema])));
+function entry(objectType, schema, idSelector, exportPosture, rawReadPosture, schemaVersion = PROTOCOL_VERSION, additionalSchemaRegistrations = []) {
+  const selectCurrentObjectId = (payload) => idSelector({
+    objectType,
+    payload
+  });
+  const registrations = Object.freeze([
+    Object.freeze({
+      schemaVersion,
+      schema,
+      objectIdSelector: selectCurrentObjectId
+    }),
+    ...additionalSchemaRegistrations.map((registration) => Object.freeze({
+      schemaVersion: registration.schemaVersion,
+      schema: registration.schema,
+      objectIdSelector: registration.objectIdSelector
+    }))
+  ]);
+  return Object.freeze({
+    objectType,
+    schema,
+    idSelector: (record2) => idSelector(record2),
+    schemaRegistrations: registrations,
+    exportPosture,
+    rawReadPosture
+  });
+}
+
+// src/protocol/areas/action-contract/isolation-guard-binding.ts
+var trustedStructuredClone4 = structuredClone;
+var trustedArraySort4 = Array.prototype.sort;
+// src/protocol/areas/aggregate-authority/configuration.ts
+var AGGREGATE_CONFIGURATION_SOURCE_VERSION = "aggregate-configuration-source-1";
+var AGGREGATE_INDUCTION_CHECKPOINT_SOURCE_VERSION = "aggregate-induction-checkpoint-source-1";
+var AGGREGATE_BUCKET_WRITER_PROFILE = "aggregate-bucket-writer-profile-1";
+var AggregateArchitectureDecisionSchema2 = exports_external.strictObject({
+  ref: AggregateAuthorityReferenceSchema,
+  digest: DigestSchema
+});
+var AggregateRequiredDescriptorSchema = exports_external.strictObject({
+  posture: exports_external.literal("required"),
+  actionTypeRef: AggregateAuthorityReferenceSchema,
+  actionTypeDigest: DigestSchema,
+  actionClass: AggregateAuthorityReferenceSchema,
+  protectedSurfaceKind: AggregateAuthorityReferenceSchema,
+  canonicalProtectedResourceScope: exports_external.string().min(1).max(1000).refine((value) => value.trim() === value),
+  allowedGateways: exports_external.array(AggregateAllowedGatewaySchema).min(1),
+  limitQuantity: ActionCountQuantitySchema,
+  window: AggregateAuthorityWindowSchema,
+  handlerAuthorityRef: AggregateAuthorityReferenceSchema,
+  handlerVersion: AggregateAuthorityReferenceSchema,
+  canonicalizerAuthorityRef: AggregateAuthorityReferenceSchema,
+  canonicalizerVersion: AggregateAuthorityReferenceSchema
+});
+var AggregateNotApplicableDescriptorSchema = exports_external.strictObject({
+  posture: exports_external.literal("not_applicable"),
+  actionTypeRef: AggregateAuthorityReferenceSchema,
+  actionTypeDigest: DigestSchema,
+  actionClass: AggregateAuthorityReferenceSchema,
+  protectedSurfaceKind: AggregateAuthorityReferenceSchema,
+  architectureDecision: AggregateArchitectureDecisionSchema2
+});
+var AggregatePostureDescriptorSchema = exports_external.discriminatedUnion("posture", [
+  AggregateRequiredDescriptorSchema,
+  AggregateNotApplicableDescriptorSchema
+]);
+var NullableAuthorityBindingPairSchema = exports_external.strictObject({
+  ref: AggregateAuthorityReferenceSchema.nullable(),
+  digest: DigestSchema.nullable()
+}).superRefine((value, context) => {
+  if (value.ref === null !== (value.digest === null)) {
+    context.addIssue({
+      code: "custom",
+      message: "aggregate configuration authority pairs must be both present or both absent"
+    });
+  }
+});
+var AggregateConfigurationContextWitnessSchema = exports_external.strictObject({
+  authorityContextRecordWitness: AggregateAuthoritySourceWitnessSchema,
+  authorityContextLocatorAnchorWitness: AggregateAuthoritySourceWitnessSchema,
+  authorityContextBindingDigest: DigestSchema,
+  principalAuthorityRef: AggregateAuthorityReferenceSchema,
+  aggregateScopeDigest: DigestSchema,
+  policyEvaluatorRef: AggregateAuthorityReferenceSchema,
+  policyEvaluatorDigest: DigestSchema,
+  policyVersion: NullableAuthorityBindingPairSchema,
+  readiness: NullableAuthorityBindingPairSchema
+});
+var ResolvedAuthorityContextSnapshotSchema = exports_external.strictObject({
+  sourceScope: AggregateAuthoritySourceScopeSchema,
+  record: AggregateAuthoritySourceRecordSchema,
+  binding: AuthorityContextSourcePayloadSchema
+});
+var AggregateRequiredConfigurationPayloadSchema = exports_external.strictObject({
+  aggregateConfigurationSourceVersion: exports_external.literal(AGGREGATE_CONFIGURATION_SOURCE_VERSION),
+  posture: exports_external.literal("required"),
+  domain: AggregateAuthorityDomainArtifactSchema,
+  actionTypeDigest: DigestSchema,
+  locator: AggregateAuthorityLocatorSchema,
+  contextWitness: AggregateConfigurationContextWitnessSchema,
+  bindingArtifact: AggregateAuthorityBindingArtifactSchema,
+  bindingRecordWitness: AggregateAuthoritySourceWitnessSchema
+});
+var AggregateNotApplicableConfigurationPayloadSchema = exports_external.strictObject({
+  aggregateConfigurationSourceVersion: exports_external.literal(AGGREGATE_CONFIGURATION_SOURCE_VERSION),
+  posture: exports_external.literal("not_applicable"),
+  domain: AggregateAuthorityDomainArtifactSchema,
+  actionTypeDigest: DigestSchema,
+  locator: AggregateAuthorityLocatorSchema,
+  contextWitness: AggregateConfigurationContextWitnessSchema,
+  architectureDecision: AggregateArchitectureDecisionSchema2
+});
+var AggregateConfigurationPayloadSchema = exports_external.discriminatedUnion("posture", [
+  AggregateRequiredConfigurationPayloadSchema,
+  AggregateNotApplicableConfigurationPayloadSchema
+]);
+var AggregateInductionCheckpointPayloadSchema = exports_external.strictObject({
+  aggregateInductionCheckpointSourceVersion: exports_external.literal(AGGREGATE_INDUCTION_CHECKPOINT_SOURCE_VERSION),
+  writerProfile: exports_external.literal(AGGREGATE_BUCKET_WRITER_PROFILE),
+  rootKind: exports_external.enum(["genesis", "audited_cutover", "closed_writer_successor"]),
+  locatorDigest: DigestSchema,
+  familyDigest: DigestSchema,
+  domainDigest: DigestSchema,
+  headBucketWitness: AggregateAuthoritySourceWitnessSchema
+});
+
+// src/protocol/areas/policy-greenlight/admission/source/source-model.ts
+var trustedObjectPrototype5 = Object.prototype;
+var trustedArraySort5 = Array.prototype.sort;
+var trustedRegExpTest3 = RegExp.prototype.test;
+var trustedStringSlice = String.prototype.slice;
+var trustedStringStartsWith = String.prototype.startsWith;
+
+// src/protocol/areas/object-registry/schema-capability.ts
+var trustedArrayIncludes2 = Array.prototype.includes;
+var trustedStringTrim3 = String.prototype.trim;
+
+// src/protocol/events/outbox-v2-intent.ts
+var trustedRegExpTest4 = RegExp.prototype.test;
+var trustedStringCharCodeAt4 = String.prototype.charCodeAt;
+var trustedStringTrim4 = String.prototype.trim;
+var trustedTextEncoder3 = new TextEncoder;
+var trustedTextEncoderEncode3 = TextEncoder.prototype.encode;
+
+// src/protocol/areas/policy-greenlight/admission/source/source-codec3.ts
+var trustedStructuredClone5 = structuredClone;
+var trustedArraySort6 = Array.prototype.sort;
+var trustedRegExpTest5 = RegExp.prototype.test;
+var trustedStringSlice2 = String.prototype.slice;
+var trustedStringStartsWith2 = String.prototype.startsWith;
+
+// src/protocol/events/outbox.ts
+var trustedArrayIsArray2 = Array.isArray;
+var trustedArrayIncludes3 = Array.prototype.includes;
+var trustedNumberIsSafeInteger = Number.isSafeInteger;
+var trustedObjectHasOwn = Object.hasOwn;
+var trustedObjectKeys2 = Object.keys;
+var trustedRegExpTest6 = RegExp.prototype.test;
+var trustedReflectApply6 = Reflect.apply;
+var trustedStringTrim5 = String.prototype.trim;
+var trustedStructuredClone6 = structuredClone;
+var PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION = "authority-projection-outbox-protocol-record-claim-receipt-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_VERSION = "authority-projection-outbox-protocol-record-claim-command-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_IDENTITY_VERSION_V1 = "authority-projection-outbox-protocol-record-claim-command-identity-1";
+var PROTOCOL_RECORD_PROJECTION_CLAIM_TRANSITION_VERSION = "authority-projection-outbox-protocol-record-claim-transition-1";
+var PROJECTION_OUTBOX_STATUSES = Object.freeze([
+  "claimed",
+  "materialized",
+  "projection_conflict",
+  "acknowledged",
+  "poisoned",
+  "exhausted"
+]);
+var protocolRecordProjectionRuntimeConfigurations = new WeakMap;
+var protocolRecordProjectionClaimCommandProtocols = Object.freeze([
+  Object.freeze({
+    commandVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_VERSION,
+    receiptVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION,
+    transitionVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_TRANSITION_VERSION,
+    pointerSelector: protocolRecordProjectionClaimCommandPointerIdentityV1,
+    leaseSelector: protocolRecordProjectionClaimLeaseIdentityV1,
+    receiptCodec: parseProtocolRecordProjectionClaimReceiptV1
+  })
+]);
+async function protocolRecordProjectionClaimCommandPointerIdentityV1(input) {
+  const digest = await digestCanonical({
+    protocolRecordProjectionClaimCommandIdentityVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_COMMAND_IDENTITY_VERSION_V1,
+    projection: input.projection,
+    workerId: input.workerId,
+    command: input.command
+  });
+  return authorityPointerIdentity("projection_delivery", `claim:${digest.slice("sha256:".length)}`);
+}
+function protocolRecordProjectionClaimLeaseIdentityV1(commandPointer) {
+  if (commandPointer.pointerKind !== "projection_delivery" || !trustedReflectApply6(trustedRegExpTest6, /^claim:[a-f0-9]{64}$/, [commandPointer.localId])) {
+    throw new Error("Protocol-record projection claim-command pointer is invalid.");
+  }
+  return `lease_${commandPointer.localId.slice("claim:".length)}`;
+}
+function parseProtocolRecordProjectionClaimReceiptV1(record2, item, route, command, workerId, leaseId) {
+  try {
+    const payload = asJsonObject(record2.payload);
+    const claimedState = payload ? parseProtocolRecordProjectionClaimedStateWitness(payload.claimedState) : null;
+    const lease = payload ? parseProtocolRecordProjectionLease(payload.lease) : null;
+    if (!payload || !hasExactKeys2(payload, [
+      "receiptVersion",
+      "commandVersion",
+      "projection",
+      "sourceCommit",
+      "sourceRequestDigest",
+      "sourceManifestDigest",
+      "source",
+      "descriptorDigest",
+      "route",
+      "commandId",
+      "workerId",
+      "lease",
+      "claimedState"
+    ]) || payload.receiptVersion !== PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION || payload.commandVersion !== command.commandVersion || canonicalize(payload.projection) !== canonicalize(item.intent.projection) || canonicalize(payload.sourceCommit) !== canonicalize(item.marker.identity) || payload.sourceRequestDigest !== item.marker.requestDigest || payload.sourceManifestDigest !== item.marker.manifestDigest || canonicalize(payload.source) !== canonicalize(item.intent.source) || payload.descriptorDigest !== item.intent.descriptorDigest || canonicalize(payload.route) !== canonicalize(route) || payload.commandId !== command.commandId || payload.workerId !== workerId || !lease || lease.leaseId !== leaseId || lease.workerId !== workerId || !claimedState || record2.record.recordKind !== "authority_evidence" || !trustedReflectApply6(trustedRegExpTest6, /^projection_claim_[a-f0-9]{64}$/, [record2.record.localId]) || record2.semanticState !== "projection_claim" || record2.version !== 1 || record2.predecessor !== null) {
+      return { ok: false, reason: "projection_claim_receipt_invalid" };
+    }
+    return {
+      ok: true,
+      receipt: {
+        receiptVersion: PROTOCOL_RECORD_PROJECTION_CLAIM_RECEIPT_VERSION,
+        commandVersion: command.commandVersion,
+        projection: trustedStructuredClone6(item.intent.projection),
+        sourceCommit: trustedStructuredClone6(item.marker.identity),
+        sourceRequestDigest: item.marker.requestDigest,
+        sourceManifestDigest: item.marker.manifestDigest,
+        source: trustedStructuredClone6(item.intent.source),
+        descriptorDigest: item.intent.descriptorDigest,
+        route: trustedStructuredClone6(route),
+        commandId: command.commandId,
+        workerId,
+        lease,
+        claimedState
+      }
+    };
+  } catch {
+    return { ok: false, reason: "projection_claim_receipt_invalid" };
+  }
+}
+function parseProtocolRecordProjectionClaimedStateWitness(value) {
+  const witnessValue = asJsonObject(value);
+  const identity = witnessValue ? asJsonObject(witnessValue.record) : null;
+  if (!witnessValue || !hasExactKeys2(witnessValue, ["record", "semanticState", "version", "digest"]) || !identity || !hasExactKeys2(identity, ["recordKind", "localId"]) || identity.recordKind !== "projection_state" || typeof identity.localId !== "string" || !trustedReflectApply6(trustedRegExpTest6, /^projection_state_[a-f0-9]{64}$/, [identity.localId]) || witnessValue.semanticState !== "claimed" && witnessValue.semanticState !== "materialized" || !trustedNumberIsSafeInteger(witnessValue.version) || witnessValue.version < 1 || typeof witnessValue.digest !== "string" || !isDigest2(witnessValue.digest)) {
+    return null;
+  }
+  return {
+    record: {
+      recordKind: "projection_state",
+      localId: identity.localId
+    },
+    semanticState: witnessValue.semanticState,
+    version: witnessValue.version,
+    digest: witnessValue.digest
+  };
+}
+function parseProtocolRecordProjectionClockWitness(value) {
+  const clockWitness = asJsonObject(value);
+  const recordWitness = clockWitness ? asJsonObject(clockWitness.record) : null;
+  const recordIdentity = recordWitness ? asJsonObject(recordWitness.record) : null;
+  if (!clockWitness || !hasExactKeys2(clockWitness, ["record", "tick"]) || !trustedNumberIsSafeInteger(clockWitness.tick) || clockWitness.tick < 0 || !recordWitness || !hasExactKeys2(recordWitness, ["record", "semanticState", "version", "digest"]) || !recordIdentity || !hasExactKeys2(recordIdentity, ["recordKind", "localId"]) || recordIdentity.recordKind !== "authority_state" || typeof recordIdentity.localId !== "string" || !trustedReflectApply6(trustedRegExpTest6, /^projection_clock_[a-f0-9]{64}$/, [recordIdentity.localId]) || recordWitness.semanticState !== "projection_clock" || !trustedNumberIsSafeInteger(recordWitness.version) || recordWitness.version < 1 || typeof recordWitness.digest !== "string" || !isDigest2(recordWitness.digest) || recordWitness.version !== clockWitness.tick + 1) {
+    return null;
+  }
+  return {
+    record: {
+      record: {
+        recordKind: "authority_state",
+        localId: recordIdentity.localId
+      },
+      semanticState: "projection_clock",
+      version: recordWitness.version,
+      digest: recordWitness.digest
+    },
+    tick: clockWitness.tick
+  };
+}
+function parseProtocolRecordProjectionLease(value) {
+  const lease = asJsonObject(value);
+  if (!lease || !hasExactKeys2(lease, ["leaseId", "workerId", "fence", "acquiredTick", "expiresAtTickExclusive", "clockWitness"]) || !validLocalText(lease.leaseId) || !validLocalText(lease.workerId) || !trustedNumberIsSafeInteger(lease.fence) || lease.fence < 1 || !trustedNumberIsSafeInteger(lease.acquiredTick) || lease.acquiredTick < 0 || !trustedNumberIsSafeInteger(lease.expiresAtTickExclusive) || lease.expiresAtTickExclusive <= lease.acquiredTick) {
+    return null;
+  }
+  const clockWitness = parseProtocolRecordProjectionClockWitness(lease.clockWitness);
+  if (!clockWitness || clockWitness.tick !== lease.acquiredTick || clockWitness.record.version !== lease.acquiredTick + 1) {
+    return null;
+  }
+  return {
+    leaseId: lease.leaseId,
+    workerId: lease.workerId,
+    fence: lease.fence,
+    acquiredTick: lease.acquiredTick,
+    expiresAtTickExclusive: lease.expiresAtTickExclusive,
+    clockWitness
+  };
+}
+function asJsonObject(value) {
+  if (value === null || typeof value !== "object" || trustedArrayIsArray2(value))
+    return null;
+  return value;
+}
+function hasExactKeys2(value, expected) {
+  const actual = trustedObjectKeys2(value);
+  if (actual.length !== expected.length)
+    return false;
+  for (let index = 0;index < expected.length; index += 1) {
+    const key = expected[index];
+    if (key === undefined || !trustedObjectHasOwn(value, key))
+      return false;
+  }
+  return true;
+}
+function validLocalText(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 500 && trustedReflectApply6(trustedStringTrim5, value, []) === value;
+}
+function isDigest2(value) {
+  if (value.length !== 71 || !value.startsWith("sha256:"))
+    return false;
+  for (let index = "sha256:".length;index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    const decimal = code >= 48 && code <= 57;
+    const lowerHex = code >= 97 && code <= 102;
+    if (!decimal && !lowerHex)
+      return false;
+  }
+  return true;
+}
+
+// src/protocol/areas/policy-greenlight/admission/source/source-codec2.ts
+var trustedStructuredClone7 = structuredClone;
+var trustedArraySort7 = Array.prototype.sort;
+var trustedRegExpTest7 = RegExp.prototype.test;
+var trustedStringSlice3 = String.prototype.slice;
+var trustedStringStartsWith3 = String.prototype.startsWith;
+
+// src/protocol/areas/policy-greenlight/admission/source/source-writer.ts
+var trustedStructuredClone8 = structuredClone;
+var trustedStringSlice4 = String.prototype.slice;
+var trustedStringStartsWith4 = String.prototype.startsWith;
+var currentPolicyAuthorityCommitCapability = createCurrentPolicyAuthorityCommitCapability();
+
+// src/protocol/areas/policy-greenlight/admission/greenlight-readback.ts
+var GreenlightConsumptionSourcePayloadSchema = exports_external.strictObject({
+  greenlightConsumptionSourceVersion: exports_external.literal("greenlight-consumption-source-1"),
+  issuance: GreenlightIssuanceSourcePayloadSchema,
+  gatewayTransactionDigest: DigestSchema,
+  state: exports_external.literal("effect_in_flight")
+});
+var PolicyIdempotencyConsumptionSourcePayloadSchema = exports_external.strictObject({
+  policyIdempotencyConsumptionSourceVersion: exports_external.literal("policy-idempotency-consumption-source-1"),
+  reservation: PolicyIdempotencyClaimSourcePayloadSchema,
+  gatewayTransactionDigest: DigestSchema,
+  state: exports_external.literal("effect_in_flight")
+});
+// src/protocol/areas/action-contract/inputs.ts
+var ProposeActionContractInputSchema = exports_external.strictObject({
+  intentCompilationId: exports_external.string().min(1),
+  candidateActionId: exports_external.string().min(1),
+  candidateDigest: DigestSchema,
+  signingSecret: exports_external.string().min(1).optional()
+});
+// src/protocol/areas/policy-greenlight/admission/resource-membership.ts
+var trustedArrayIncludes4 = Array.prototype.includes;
+var trustedArraySort8 = Array.prototype.sort;
+var trustedMapGet2 = Map.prototype.get;
+var trustedMapHas2 = Map.prototype.has;
+var trustedMapSet2 = Map.prototype.set;
+var trustedObjectFreeze = Object.freeze;
+var trustedObjectPrototype6 = Object.prototype;
+var trustedRegExpTest8 = RegExp.prototype.test;
+var trustedStringCharCodeAt5 = String.prototype.charCodeAt;
+var trustedStringTrim6 = String.prototype.trim;
+var trustedWeakMapConstructor = WeakMap;
+var trustedWeakMapGet = WeakMap.prototype.get;
+var trustedWeakMapSet = WeakMap.prototype.set;
+var DECLARATIVE_RESOURCE_CANONICALIZER_PROFILE = trustedObjectFreeze({
+  profileFormat: "resource-canonicalizer-profile-1",
+  profileKind: "declarative-exact-alias-table",
+  inputComparison: "exact-code-unit-equality",
+  duplicateInputDisposition: "reject-registry",
+  unknownInputDisposition: "refuse-membership",
+  outputSelection: "registered-canonical-resource-and-protected-scope"
+});
+var registryStates = new trustedWeakMapConstructor;
+
+// src/protocol/areas/policy-greenlight/admission/capability.ts
+var trustedRegExpTest9 = RegExp.prototype.test;
+var trustedWeakMapConstructor2 = WeakMap;
+var trustedWeakMapGet2 = WeakMap.prototype.get;
+var trustedWeakMapHas = WeakMap.prototype.has;
+var trustedWeakMapSet2 = WeakMap.prototype.set;
+var carrierStates = new trustedWeakMapConstructor2;
+// src/protocol/authority-context/capability.ts
+var trustedFunctionBind = Function.prototype.bind;
+var trustedDateParse2 = Date.parse;
+var trustedObjectFreeze2 = Object.freeze;
+var trustedObjectPrototype7 = Object.prototype;
+var trustedRegExpTest10 = RegExp.prototype.test;
+var trustedStringTrim7 = String.prototype.trim;
+var trustedStructuredClone9 = structuredClone;
+var trustedWeakMapConstructor3 = WeakMap;
+var trustedWeakMapGet3 = WeakMap.prototype.get;
+var trustedWeakMapSet3 = WeakMap.prototype.set;
+var PROTOCOL_STORE_METHODS = completeMethodRegistry()([
+  "putRecord",
+  "putRecordIfAbsentOrSame",
+  "getRecord",
+  "listRecordsByType",
+  "listRecordsByActionContract",
+  "getStreamTail",
+  "getStreamEvent",
+  "listStreamEvents",
+  "getCurrentProtectedPathPosture",
+  "getCurrentIdempotencyLedgerEntry",
+  "getCurrentProtectedSurfaceOperationClaim",
+  "getReceiptByMutationAttemptId",
+  "listIsolationStates",
+  "consumeGreenlight",
+  "commitProtocolRecords",
+  "commitGatewayCheck",
+  "commitEndpointAccessLease",
+  "getEndpointAccessLeaseByGreenlightId",
+  "getEndpointAccessClearanceBindingByAttemptId",
+  "listEndpointAccessUsageEventsByLeaseId",
+  "getEndpointAccessUsageCounter",
+  "commitEndpointAccessUsage"
+]);
+function completeMethodRegistry() {
+  return (keys) => trustedObjectFreeze2(keys);
+}
+var carrierStates2 = new trustedWeakMapConstructor3;
 // src/protocol/areas/delegated-authority/inputs.ts
 var RegisterDelegatedAuthorityRefInputSchema = exports_external.strictObject({
   tenantId: exports_external.string().min(1),
@@ -18696,73 +21881,92 @@ var CreateBreakerDecisionInputSchema = exports_external.strictObject({
   proofGapRefs: exports_external.array(exports_external.string().min(1)).default([]),
   decisionExpiresAt: exports_external.string().datetime({ offset: true }).nullable().default(null)
 });
-// src/protocol/areas/object-registry/index.ts
-var protocolObjectTypes = ProtocolObjectTypeSchema.options;
-var protocolObjectRegistry = {
-  tool_capability: entry("tool_capability", ToolCapabilitySchema, (record2) => record2.payload.toolCapabilityId, "catalog_public", "control_plane_read"),
-  action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
-  gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
-  operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
-  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read"),
-  gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
-  delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
-  delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
-  gateway_custody_proof_packet: entry("gateway_custody_proof_packet", GatewayCustodyProofPacketSchema, (record2) => record2.payload.gatewayCustodyProofPacketId, "transition_evidence", "audit_read"),
-  credential_resolution_evidence: entry("credential_resolution_evidence", CredentialResolutionEvidenceSchema, (record2) => record2.payload.credentialResolutionEvidenceId, "transition_evidence", "audit_read"),
-  typed_action_commitment: entry("typed_action_commitment", TypedActionCommitmentRecordSchema, (record2) => record2.payload.typedActionCommitmentId, "transition_evidence", "audit_read"),
-  transition_request_context: entry("transition_request_context", TransitionRequestContextSchema, (record2) => record2.payload.transitionRequestContextId, "internal_evidence", "internal_only"),
-  runtime_execution: entry("runtime_execution", RuntimeExecutionRecordSchema, (record2) => record2.payload.runtimeExecutionId, "transition_evidence", "audit_read"),
-  generated_execution_graph: entry("generated_execution_graph", GeneratedExecutionGraphSchema, (record2) => record2.payload.generatedExecutionGraphId, "transition_evidence", "audit_read"),
-  idempotency_ledger_entry: entry("idempotency_ledger_entry", IdempotencyLedgerEntrySchema, (record2) => record2.payload.idempotencyLedgerEntryId, "internal_evidence", "internal_only"),
-  bypass_probe: entry("bypass_probe", BypassProbeSchema, (record2) => record2.payload.bypassProbeId, "internal_evidence", "internal_only"),
-  tool_call_draft: entry("tool_call_draft", ToolCallDraftSchema, (record2) => record2.payload.toolCallDraftId, "internal_evidence", "internal_only"),
-  protected_path_posture: entry("protected_path_posture", ProtectedPathPostureSchema, (record2) => record2.payload.protectedPathPostureId, "transition_evidence", "audit_read"),
-  intent_compilation: entry("intent_compilation", IntentCompilationRecordSchema, (record2) => record2.payload.intentCompilationId, "transition_evidence", "audit_read"),
-  delegation_evidence_record: entry("delegation_evidence_record", StoredDelegationEvidenceRecordSchema, (record2) => record2.payload.delegationEvidenceRecordId, "transition_evidence", "audit_read"),
-  negotiation_session: entry("negotiation_session", NegotiationSessionSchema, (record2) => record2.payload.negotiationSessionId, "transition_evidence", "audit_read"),
-  negotiation_offer: entry("negotiation_offer", NegotiationOfferSchema, (record2) => record2.payload.negotiationOfferId, "transition_evidence", "audit_read"),
-  negotiation_decision: entry("negotiation_decision", NegotiationDecisionSchema, (record2) => record2.payload.negotiationDecisionId, "transition_evidence", "audit_read"),
-  linked_agreement: entry("linked_agreement", LinkedAgreementSchema, (record2) => record2.payload.linkedAgreementId, "transition_evidence", "audit_read"),
-  agreement_obligation_binding: entry("agreement_obligation_binding", AgreementObligationBindingSchema, (record2) => record2.payload.agreementObligationBindingId, "transition_evidence", "audit_read"),
-  agreement_status_transition: entry("agreement_status_transition", AgreementStatusTransitionSchema, (record2) => record2.payload.agreementStatusTransitionId, "transition_evidence", "audit_read"),
-  action_contract: entry("action_contract", ActionContractSchema, (record2) => record2.payload.actionContractId, "transition_evidence", "audit_read"),
-  authority_certificate: entry("authority_certificate", AuthorityCertificateSchema, (record2) => record2.payload.authorityCertificateId, "receipt_evidence", "audit_read"),
-  policy_decision: entry("policy_decision", PolicyDecisionSchema, (record2) => record2.payload.policyDecisionId, "transition_evidence", "audit_read"),
-  greenlight: entry("greenlight", GreenlightSchema, (record2) => record2.payload.greenlightId, "transition_evidence", "audit_read"),
-  review_artifact: entry("review_artifact", ReviewArtifactRecordSchema, (record2) => record2.payload.reviewArtifactId, "transition_evidence", "audit_read"),
-  review_decision: entry("review_decision", ReviewDecisionSchema, (record2) => record2.payload.reviewDecisionId, "transition_evidence", "audit_read"),
-  breaker_decision: entry("breaker_decision", BreakerDecisionSchema, (record2) => record2.payload.breakerDecisionId, "transition_evidence", "audit_read"),
-  isolation_state: entry("isolation_state", IsolationStateSchema, (record2) => record2.payload.isolationStateId, "transition_evidence", "audit_read"),
-  gateway_check_attempt: entry("gateway_check_attempt", GatewayCheckAttemptSchema, (record2) => record2.payload.gateAttemptId, "transition_evidence", "audit_read"),
-  mutation_attempt: entry("mutation_attempt", MutationAttemptSchema, (record2) => record2.payload.mutationAttemptId, "transition_evidence", "audit_read"),
-  protected_surface_operation_claim: entry("protected_surface_operation_claim", ProtectedSurfaceOperationClaimSchema, (record2) => record2.payload.protectedSurfaceOperationClaimId, "internal_evidence", "internal_only"),
-  surface_operation_reconciliation: entry("surface_operation_reconciliation", SurfaceOperationReconciliationSchema, (record2) => record2.payload.reconciliationId, "transition_evidence", "audit_read"),
-  proof_gap: entry("proof_gap", ProofGapSchema, (record2) => record2.payload.proofGapId, "transition_evidence", "audit_read"),
-  refusal: entry("refusal", RefusalSchema, (record2) => record2.payload.refusalId, "transition_evidence", "audit_read"),
-  receipt: entry("receipt", ReceiptSchema, (record2) => record2.payload.receiptId, "receipt_evidence", "audit_read"),
-  receipt_export: entry("receipt_export", ReceiptExportSchema, (record2) => record2.payload.receiptExportId, "receipt_evidence", "audit_read"),
-  raw_record_read_audit: entry("raw_record_read_audit", RawRecordReadAuditSchema, (record2) => record2.payload.rawRecordReadAuditId, "internal_evidence", "internal_only"),
-  recovery_recommendation: entry("recovery_recommendation", RecoveryRecommendationSchema, (record2) => record2.payload.recoveryRecommendationId, "transition_evidence", "audit_read"),
-  recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
-  contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
-};
-var protocolRecordSchemas = Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema]));
-function entry(objectType, schema, idSelector, exportPosture, rawReadPosture) {
-  return {
-    objectType,
-    schema,
-    idSelector: (record2) => idSelector(record2),
-    exportPosture,
-    rawReadPosture
-  };
-}
+// src/protocol/store/authority-commit.ts
+var trustedSetAdd5 = Set.prototype.add;
+var trustedSetHas5 = Set.prototype.has;
+var trustedStructuredClone10 = structuredClone;
+
+// src/protocol/areas/isolation-breaker/authority-source/authority-state-schemas.ts
+var ISOLATION_AUTHORITY_SOURCE_VERSION = "isolation-authority-source-2";
+var ISOLATION_AUTHORITY_SOURCE_VERSION_V3 = "isolation-authority-source-3";
+var ISOLATION_CAUSE_RECORD_VERSION = "isolation-cause-record-1";
+var IsolationScopeSchema = exports_external.strictObject({
+  tenantId: exports_external.string().min(1),
+  organizationId: exports_external.string().min(1),
+  scopeType: IsolationStateSchema.shape.scopeType,
+  scopeId: IdSchema
+});
+var IsolationCauseSemanticsSchema = exports_external.strictObject({
+  state: BreakerIsolationDecisionSchema,
+  reasonCode: ReasonCodeSchema,
+  reasonSummary: exports_external.string().min(1).max(1000),
+  sourceDecisionRef: exports_external.string().min(1),
+  effectiveAt: IsoDateSchema,
+  expiresAt: IsoDateSchema.nullable(),
+  observedStreamOffsets: exports_external.array(StreamWatermarkSchema)
+});
+var IsolationCauseRecordWitnessSchema = exports_external.strictObject({
+  record: exports_external.strictObject({
+    recordKind: exports_external.literal("authority_evidence"),
+    localId: exports_external.string().min(1)
+  }),
+  semanticState: exports_external.literal("isolation_cause"),
+  version: exports_external.literal(1),
+  digest: DigestSchema
+});
+var IsolationCauseRecordPayloadSchema = exports_external.strictObject({
+  isolationCauseRecordVersion: exports_external.literal(ISOLATION_CAUSE_RECORD_VERSION),
+  scope: IsolationScopeSchema,
+  scopeDigest: DigestSchema,
+  causeId: IdSchema,
+  causeDigest: DigestSchema,
+  cause: IsolationCauseSemanticsSchema,
+  originalResult: IsolationStateSchema
+});
+var IsolationActiveCauseBindingSchema = exports_external.strictObject({
+  causeId: IdSchema,
+  causeDigest: DigestSchema,
+  causeRecord: IsolationCauseRecordWitnessSchema
+});
+var IsolationAuthoritySourcePayloadSchema = exports_external.strictObject({
+  isolationAuthoritySourceVersion: exports_external.literal(ISOLATION_AUTHORITY_SOURCE_VERSION),
+  scopeDigest: DigestSchema,
+  activeCauses: exports_external.array(IsolationActiveCauseBindingSchema).min(1),
+  activeCauseSetDigest: DigestSchema,
+  isolationState: IsolationStateSchema
+});
+var IsolationAuthoritySourcePayloadV3Schema = exports_external.strictObject({
+  isolationAuthoritySourceVersion: exports_external.literal(ISOLATION_AUTHORITY_SOURCE_VERSION_V3),
+  scopeDigest: DigestSchema,
+  chronologyVersion: exports_external.number().int().positive(),
+  activeCauses: exports_external.array(IsolationActiveCauseBindingSchema),
+  activeCauseSetDigest: DigestSchema,
+  isolationState: IsolationStateSchema
+});
+var IsolationAuthoritySourcePayloadAnySchema = exports_external.union([
+  IsolationAuthoritySourcePayloadSchema,
+  IsolationAuthoritySourcePayloadV3Schema
+]);
+
+// src/protocol/areas/isolation-breaker/source-read-capability.ts
+var trustedFunctionBind2 = Function.prototype.bind;
+var trustedWeakMapConstructor4 = WeakMap;
+var trustedWeakMapGet4 = WeakMap.prototype.get;
+var trustedWeakMapSet4 = WeakMap.prototype.set;
+var isolationReaders = new trustedWeakMapConstructor4;
+var preparedIsolationReaderBindings = new trustedWeakMapConstructor4;
+
+// src/protocol/areas/isolation-breaker/source-mutation-capability.ts
+var trustedFunctionBind3 = Function.prototype.bind;
+var trustedWeakMapConstructor5 = WeakMap;
+var trustedWeakMapGet5 = WeakMap.prototype.get;
+var trustedWeakMapSet5 = WeakMap.prototype.set;
+var isolationSources = new trustedWeakMapConstructor5;
+var isolationCommitters = new trustedWeakMapConstructor5;
+var preparedIsolationMutationBindings = new trustedWeakMapConstructor5;
+var causeAdditionMutations = new trustedWeakMapConstructor5;
+var causeClearanceMutations = new trustedWeakMapConstructor5;
+var isolationCommitCapability = createCurrentIsolationTransitionAuthorityCommitCapability();
 // src/protocol/areas/operation-lifecycle/inputs.ts
 var ReconcileSurfaceOperationInputSchema = exports_external.strictObject({
   mutationAttemptId: exports_external.string().min(1),
@@ -18825,7 +22029,9 @@ async function runPackageInstallGateway(input) {
     const outcome = gatewayCheck.gateAttempt.gateDecision === "refused" ? "gateway_check_refused" : "gateway_check_not_authoritative";
     return { outcome, gatewayCheck, reconciliation: null, mutationEvidence: null };
   }
+  let effectInvocationStarted = false;
   try {
+    effectInvocationStarted = true;
     const mutationEvidence = await input.surface.applyPackageInstall({
       verifiedGate,
       parameters: observedParameters,
@@ -18854,6 +22060,7 @@ async function runPackageInstallGateway(input) {
     });
     return { outcome: "mutation_reconciled", gatewayCheck, reconciliation, mutationEvidence };
   } catch (error51) {
+    const failureObservation = downstreamFailureObservation({ error: error51, effectInvocationStarted });
     const failureEvidence = await downstreamFailureEvidence({
       adapterId: "package-install",
       surfaceOperationRef,
@@ -18864,11 +22071,17 @@ async function runPackageInstallGateway(input) {
       mutationAttemptId: verifiedGate.mutationAttemptId,
       idempotencyKey: verifiedGate.idempotencyKey,
       observedSurfaceOperationRef: surfaceOperationRef,
-      observedDownstreamStatus: "failed",
+      observedDownstreamStatus: failureObservation.observedDownstreamStatus,
       ...failureEvidence,
-      resolvedProofGapIds: []
+      resolvedProofGapIds: [],
+      orphanIsolationRequested: failureObservation.orphanIsolationRequested
     });
-    return { outcome: "mutation_failed", gatewayCheck, reconciliation, mutationEvidence: null };
+    return {
+      outcome: failureObservation.observedDownstreamStatus === "failed" ? "mutation_failed" : "mutation_outcome_unknown",
+      gatewayCheck,
+      reconciliation,
+      mutationEvidence: null
+    };
   }
 }
 // node_modules/@x402/core/node_modules/zod/v3/external.js
@@ -21838,12 +25051,12 @@ class ZodTuple2 extends ZodType2 {
     });
   }
 }
-ZodTuple2.create = (schemas64, params) => {
-  if (!Array.isArray(schemas64)) {
+ZodTuple2.create = (schemas66, params) => {
+  if (!Array.isArray(schemas66)) {
     throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
   }
   return new ZodTuple2({
-    items: schemas64,
+    items: schemas66,
     typeName: ZodFirstPartyTypeKind2.ZodTuple,
     rest: null,
     ...processCreateParams(params)
@@ -22983,9 +26196,15 @@ var NETWORKS = Object.keys(EVM_NETWORK_CHAIN_ID_MAP);
 // node_modules/@x402/evm/dist/esm/chunk-QUV2O6MC.mjs
 var MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
-// src/adapters/x402-payment/wallet-gateway.ts
+// src/adapters/x402-payment/typed-action-commitment/verification.ts
+function assertCallerTypedPayloadEvidenceIsNonAuthoritative(evidence) {
+  if (evidence !== undefined) {
+    throw new Error("x402 typed observation refused signing (caller_typed_observation_non_authoritative): trusted host observation is required.");
+  }
+}
+
+// src/adapters/x402-payment/signing-command/types.ts
 var AtomicAmountSchema2 = exports_external.string().regex(/^(?:0|[1-9]\d*)$/);
-var PaymentIdentifierSchema = exports_external.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/);
 var X402EvidenceProfileSchema = exports_external.enum(["official_payment_required", "local_digest_profile"]);
 var X402RequestBodyPostureSchema = exports_external.enum(["no_body", "digest_bound", "omitted", "unsupported"]);
 var X402ProviderEnvironmentPostureSchema = exports_external.enum(["local_reference_sandbox", "external_sandbox", "live", "unknown"]);
@@ -23025,6 +26244,169 @@ var X402PaymentParametersSchema = exports_external.strictObject({
   policyVersionRef: exports_external.string().min(1),
   policyVersionDigest: DigestSchema
 });
+// src/adapters/x402-payment/signing-command/construction.ts
+async function credentialResolutionRequestDigest(verifiedGate, parameters) {
+  return digestCanonical({
+    profile: "x402_credential_resolution_request.v0",
+    actionContractId: verifiedGate.actionContractId,
+    gateAttemptId: verifiedGate.gateAttemptId,
+    gatewayCredentialRefDigest: parameters.gatewayCredentialRefDigest,
+    endpointUrl: parameters.endpointUrl,
+    intendedHttpMethod: parameters.intendedHttpMethod,
+    intendedRequestUrl: parameters.intendedRequestUrl,
+    intendedRequestBodyPosture: parameters.intendedRequestBodyPosture,
+    intendedRequestBodyDigest: parameters.intendedRequestBodyDigest,
+    selectedHeadersDigest: parameters.selectedHeadersDigest,
+    paymentRequirementsDigest: parameters.paymentRequirementsDigest,
+    selectedPaymentRequirementIndex: parameters.selectedPaymentRequirementIndex,
+    selectedPaymentRequirementDigest: parameters.selectedPaymentRequirementDigest,
+    paymentIdentifierDigest: parameters.paymentIdentifierDigest,
+    gatewayReadinessDigest: parameters.gatewayReadinessDigest,
+    policyVersionDigest: parameters.policyVersionDigest
+  });
+}
+async function buildX402Eip712TypedCommitmentInput(input) {
+  const {
+    gatewayCheck,
+    verifiedGate,
+    parameters,
+    credentialResolutionEvidence,
+    typedPayloadEvidence,
+    signatureEvidence
+  } = input;
+  const selectedPaymentRequirementIndex = requireSelectedPaymentRequirementIndex(typedPayloadEvidence?.selectedPaymentRequirementIndex ?? parameters.selectedPaymentRequirementIndex);
+  const selectedPaymentRequirementDigest = requireSelectedPaymentRequirementDigest(typedPayloadEvidence?.selectedPaymentRequirementDigest ?? parameters.selectedPaymentRequirementDigest);
+  const paramsDigest = typedPayloadEvidence?.paramsDigest ?? asDigest(gatewayCheck.gateAttempt.paramsDigestSeen);
+  const idempotencyKey = typedPayloadEvidence?.idempotencyKey ?? verifiedGate.idempotencyKey;
+  const chainId = typedPayloadEvidence?.chainId ?? parameters.network;
+  const verifyingContract = typedPayloadEvidence?.verifyingContract ?? parameters.token;
+  const providerEnvironmentRef = parameters.providerEnvironmentRef ?? `provider-environment:x402:${parameters.providerEnvironmentPosture}`;
+  const nonceDigest = typedPayloadEvidence?.nonceDigest ?? await digestCanonical({
+    actionContractId: verifiedGate.actionContractId,
+    idempotencyKey,
+    paymentIdentifierDigest: parameters.paymentIdentifierDigest,
+    selectedPaymentRequirementDigest
+  });
+  return {
+    profile: "eip712",
+    typedActionCommitmentId: signatureEvidence ? `tac_eip712_signed_${safeIdPart2(verifiedGate.gateAttemptId)}` : `tac_eip712_unsigned_${safeIdPart2(verifiedGate.gateAttemptId)}`,
+    purpose: signatureEvidence ? "post_gateway_payment_evidence" : "policy_required_evidence",
+    actionContractId: verifiedGate.actionContractId,
+    actionContractDigest: asDigest(gatewayCheck.gateAttempt.contractDigestSeen),
+    expectedActionContractDigest: asDigest(gatewayCheck.gateAttempt.contractDigestSeen),
+    paramsDigest,
+    expectedParamsDigest: asDigest(gatewayCheck.gateAttempt.paramsDigestSeen),
+    idempotencyKey,
+    expectedIdempotencyKey: verifiedGate.idempotencyKey,
+    gatewayId: verifiedGate.gatewayId,
+    greenlightId: verifiedGate.greenlightId,
+    gateAttemptId: verifiedGate.gateAttemptId,
+    mutationAttemptId: verifiedGate.mutationAttemptId,
+    credentialResolutionEvidenceId: credentialResolutionEvidence.credentialResolutionEvidenceId,
+    credentialResolutionEvidenceDigest: asDigest(credentialResolutionEvidence.evidenceDigest),
+    domain: {
+      name: "x402 exact",
+      version: String(parameters.x402Version ?? "unknown"),
+      chainId,
+      expectedChainId: parameters.network,
+      verifyingContract,
+      expectedVerifyingContract: parameters.token
+    },
+    primaryType: "TransferWithAuthorization",
+    domainSeparator: typedPayloadEvidence?.domainSeparator ?? `eip712-domain:${parameters.network}:${parameters.token}`,
+    structHash: typedPayloadEvidence?.structHash ?? `eip712-struct:${selectedPaymentRequirementDigest}`,
+    eip712Digest: typedPayloadEvidence?.eip712Digest ?? `eip712-digest:${gatewayCheck.gateAttempt.paramsDigestSeen}`,
+    signingMethod: typedPayloadEvidence?.signingMethod ?? "eth_signTypedData_v4",
+    signerKind: typedPayloadEvidence?.signerKind ?? "eoa",
+    signerRef: typedPayloadEvidence?.signerRef ?? `signer:x402:${parameters.gatewayCredentialRefId}`,
+    verifierContextRef: parameters.providerEnvironmentRef ?? `verifier:x402:${parameters.network}:${parameters.token}:${parameters.payTo}`,
+    ...typedPayloadEvidence?.verifierContextDigest ? { verifierContextDigest: typedPayloadEvidence.verifierContextDigest } : {},
+    ...typedPayloadEvidence?.expectedVerifierContextDigest ? { expectedVerifierContextDigest: typedPayloadEvidence.expectedVerifierContextDigest } : {},
+    signatureRef: signatureEvidence ? `typed_action_commitment_signature_ref:${safeIdPart2(verifiedGate.gateAttemptId)}` : null,
+    signatureDigest: signatureEvidence?.paymentSignatureDigest ?? null,
+    replayStatus: typedPayloadEvidence?.replayStatus ?? "fresh",
+    nonceRef: typedPayloadEvidence?.nonceRef ?? `x402_eip712_nonce:${idempotencyKey}`,
+    nonceDigest,
+    paymentRequirementsDigest: asDigest(parameters.paymentRequirementsDigest),
+    selectedPaymentRequirementIndex,
+    expectedSelectedPaymentRequirementIndex: parameters.selectedPaymentRequirementIndex ?? selectedPaymentRequirementIndex,
+    selectedPaymentRequirementDigest,
+    expectedSelectedPaymentRequirementDigest: parameters.selectedPaymentRequirementDigest ? asDigest(parameters.selectedPaymentRequirementDigest) : selectedPaymentRequirementDigest,
+    paymentIdentifierDigest: asNullableDigest(parameters.paymentIdentifierDigest),
+    payTo: parameters.payTo ?? parameters.payee,
+    network: parameters.network,
+    token: parameters.token,
+    asset: parameters.asset,
+    atomicAmount: parameters.atomicAmount,
+    intendedHttpMethod: parameters.intendedHttpMethod,
+    intendedRequestUrl: parameters.intendedRequestUrl,
+    intendedRequestBodyPosture: parameters.intendedRequestBodyPosture,
+    intendedRequestBodyDigest: asNullableDigest(parameters.intendedRequestBodyDigest),
+    selectedHeadersDigest: asNullableDigest(parameters.selectedHeadersDigest),
+    providerEnvironmentPosture: parameters.providerEnvironmentPosture,
+    providerEnvironmentRef,
+    downstreamStatus: signatureEvidence?.downstreamPaymentStatus ?? "not_observed"
+  };
+}
+function assertPreSignTypedActionCommitment(commitment) {
+  const status2 = commitment.signerOrVerifier.verificationStatus;
+  if (isBlockingTypedActionCommitment(commitment))
+    throw new Error(`x402 typed payload pre-validation refused signing (${commitment.signerOrVerifier.verificationReasonCode ?? status2})`);
+}
+function isBlockingTypedActionCommitment(commitment) {
+  return ["refused", "proof_gap", "unsupported"].includes(commitment.signerOrVerifier.verificationStatus);
+}
+function recordTypedActionCommitmentInputFromNormalized(input) {
+  const n = input.normalized;
+  return {
+    tenantId: input.tenantId,
+    organizationId: input.organizationId,
+    typedActionCommitmentId: n.typedActionCommitmentId,
+    actionContractId: input.actionContractId,
+    subject: n.subject,
+    domain: n.domain,
+    purpose: n.purpose,
+    profile: n.profile,
+    typedPayload: n.typedPayload,
+    replayPosture: n.replayPosture,
+    signerOrVerifier: n.signerOrVerifier,
+    safetyPosture: n.safetyPosture,
+    projectionClass: "operator_redacted",
+    authorityBoundary: n.authorityBoundary,
+    refusalRefs: n.refusalRefs,
+    proofGapRefs: n.proofGapRefs,
+    evidenceRefs: n.evidenceRefs
+  };
+}
+function providerRefsForGate(verifiedGate) {
+  return {
+    providerRequestRef: `provider-request:x402:${verifiedGate.gateAttemptId}`,
+    providerOperationRef: `provider-operation:x402:${verifiedGate.gateAttemptId}`
+  };
+}
+function requireSelectedPaymentRequirementIndex(value) {
+  if (value === null)
+    throw new Error("x402 typed commitment requires selected payment requirement index.");
+  return value;
+}
+function requireSelectedPaymentRequirementDigest(value) {
+  if (value === null)
+    throw new Error("x402 typed commitment requires selected payment requirement digest.");
+  return asDigest(value);
+}
+function asDigest(value) {
+  return DigestSchema.parse(value);
+}
+function asNullableDigest(value) {
+  return value === null ? null : asDigest(value);
+}
+function safeIdPart2(value) {
+  const normalized = value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 72);
+  return normalized.length >= 3 ? normalized : normalized.padEnd(3, "_");
+}
+
+// src/adapters/x402-payment/wallet-gateway.ts
+var PaymentIdentifierSchema = exports_external.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/);
 function assertGatewayHeldSigningCommand(command) {
   const refuse = (reasonCode, detail) => {
     throw new Error(`x402 gateway-held custody refused signing (${reasonCode}): ${detail}`);
@@ -23098,6 +26480,7 @@ function assertGatewayHeldSigningCommand(command) {
 }
 async function runX402WalletGateway(input) {
   const observedParameters = X402PaymentParametersSchema.parse(input.observedParameters);
+  assertCallerTypedPayloadEvidenceIsNonAuthoritative(input.typedPayloadEvidence);
   const surfaceOperationRef = input.surfaceOperationRef ?? `surface-op:x402:${input.actionContractId}`;
   const gatewayCheck = await input.protocol.gatewayCheck({
     actionContractId: input.actionContractId,
@@ -23119,6 +26502,7 @@ async function runX402WalletGateway(input) {
   }
   let credentialResolutionEvidence = null;
   let typedActionCommitment = null;
+  let effectInvocationStarted = false;
   try {
     const providerRefs = providerRefsForGate(verifiedGate);
     credentialResolutionEvidence = await input.protocol.recordCredentialResolutionEvidence({
@@ -23169,6 +26553,7 @@ async function runX402WalletGateway(input) {
       ...providerRefs
     };
     assertGatewayHeldSigningCommand(signingCommand);
+    effectInvocationStarted = true;
     const signatureEvidence = await input.surface.signPayment(signingCommand);
     const finalTypedActionCommitment = await normalizeEip712TypedCommitment(await buildX402Eip712TypedCommitmentInput({
       gatewayCheck,
@@ -23223,12 +26608,13 @@ async function runX402WalletGateway(input) {
       reconciliation,
       signatureEvidence
     };
-  } catch {
+  } catch (error51) {
+    const failureObservation = downstreamFailureObservation({ error: error51, effectInvocationStarted });
     const { reconciliation } = await input.protocol.reconcileSurfaceOperation({
       mutationAttemptId: verifiedGate.mutationAttemptId,
       idempotencyKey: verifiedGate.idempotencyKey,
       observedSurfaceOperationRef: surfaceOperationRef,
-      observedDownstreamStatus: "failed",
+      observedDownstreamStatus: failureObservation.observedDownstreamStatus,
       downstreamRetryability: "unknown",
       providerRequestRef: null,
       providerOperationRef: surfaceOperationRef,
@@ -23242,10 +26628,11 @@ async function runX402WalletGateway(input) {
         ] : [],
         ...credentialResolutionEvidence ? [`credential_resolution_evidence:${credentialResolutionEvidence.credentialResolutionEvidenceId}`] : []
       ],
-      resolvedProofGapIds: []
+      resolvedProofGapIds: [],
+      orphanIsolationRequested: failureObservation.orphanIsolationRequested
     });
     return {
-      outcome: "payment_signature_failed",
+      outcome: failureObservation.observedDownstreamStatus === "failed" ? "payment_signature_failed" : "payment_signature_outcome_unknown",
       gatewayCheck,
       credentialResolutionEvidence,
       typedActionCommitment,
@@ -23254,172 +26641,8 @@ async function runX402WalletGateway(input) {
     };
   }
 }
-async function credentialResolutionRequestDigest(verifiedGate, parameters) {
-  return digestCanonical({
-    profile: "x402_credential_resolution_request.v0",
-    actionContractId: verifiedGate.actionContractId,
-    gateAttemptId: verifiedGate.gateAttemptId,
-    gatewayCredentialRefDigest: parameters.gatewayCredentialRefDigest,
-    endpointUrl: parameters.endpointUrl,
-    intendedHttpMethod: parameters.intendedHttpMethod,
-    intendedRequestUrl: parameters.intendedRequestUrl,
-    intendedRequestBodyPosture: parameters.intendedRequestBodyPosture,
-    intendedRequestBodyDigest: parameters.intendedRequestBodyDigest,
-    selectedHeadersDigest: parameters.selectedHeadersDigest,
-    paymentRequirementsDigest: parameters.paymentRequirementsDigest,
-    selectedPaymentRequirementIndex: parameters.selectedPaymentRequirementIndex,
-    selectedPaymentRequirementDigest: parameters.selectedPaymentRequirementDigest,
-    paymentIdentifierDigest: parameters.paymentIdentifierDigest,
-    gatewayReadinessDigest: parameters.gatewayReadinessDigest,
-    policyVersionDigest: parameters.policyVersionDigest
-  });
-}
-async function buildX402Eip712TypedCommitmentInput(input) {
-  const {
-    gatewayCheck,
-    verifiedGate,
-    parameters,
-    credentialResolutionEvidence,
-    typedPayloadEvidence,
-    signatureEvidence
-  } = input;
-  const selectedPaymentRequirementIndex = requireSelectedPaymentRequirementIndex(typedPayloadEvidence?.selectedPaymentRequirementIndex ?? parameters.selectedPaymentRequirementIndex);
-  const selectedPaymentRequirementDigest = requireSelectedPaymentRequirementDigest(typedPayloadEvidence?.selectedPaymentRequirementDigest ?? parameters.selectedPaymentRequirementDigest);
-  const paramsDigest = typedPayloadEvidence?.paramsDigest ?? asDigest(gatewayCheck.gateAttempt.paramsDigestSeen);
-  const idempotencyKey = typedPayloadEvidence?.idempotencyKey ?? verifiedGate.idempotencyKey;
-  const chainId = typedPayloadEvidence?.chainId ?? parameters.network;
-  const verifyingContract = typedPayloadEvidence?.verifyingContract ?? parameters.token;
-  const signingMethod = typedPayloadEvidence?.signingMethod ?? "eth_signTypedData_v4";
-  const signerKind = typedPayloadEvidence?.signerKind ?? "eoa";
-  const providerEnvironmentRef = parameters.providerEnvironmentRef ?? `provider-environment:x402:${parameters.providerEnvironmentPosture}`;
-  const nonceDigest = typedPayloadEvidence?.nonceDigest ?? await digestCanonical({
-    actionContractId: verifiedGate.actionContractId,
-    idempotencyKey,
-    paymentIdentifierDigest: parameters.paymentIdentifierDigest,
-    selectedPaymentRequirementDigest
-  });
-  return {
-    profile: "eip712",
-    typedActionCommitmentId: signatureEvidence ? `tac_eip712_signed_${safeIdPart2(verifiedGate.gateAttemptId)}` : `tac_eip712_unsigned_${safeIdPart2(verifiedGate.gateAttemptId)}`,
-    purpose: signatureEvidence ? "post_gateway_payment_evidence" : "policy_required_evidence",
-    actionContractId: verifiedGate.actionContractId,
-    actionContractDigest: asDigest(gatewayCheck.gateAttempt.contractDigestSeen),
-    expectedActionContractDigest: asDigest(gatewayCheck.gateAttempt.contractDigestSeen),
-    paramsDigest,
-    expectedParamsDigest: asDigest(gatewayCheck.gateAttempt.paramsDigestSeen),
-    idempotencyKey,
-    expectedIdempotencyKey: verifiedGate.idempotencyKey,
-    gatewayId: verifiedGate.gatewayId,
-    greenlightId: verifiedGate.greenlightId,
-    gateAttemptId: verifiedGate.gateAttemptId,
-    mutationAttemptId: verifiedGate.mutationAttemptId,
-    credentialResolutionEvidenceId: credentialResolutionEvidence.credentialResolutionEvidenceId,
-    credentialResolutionEvidenceDigest: asDigest(credentialResolutionEvidence.evidenceDigest),
-    domain: {
-      name: "x402 exact",
-      version: String(parameters.x402Version ?? "unknown"),
-      chainId,
-      expectedChainId: parameters.network,
-      verifyingContract,
-      expectedVerifyingContract: parameters.token
-    },
-    primaryType: "TransferWithAuthorization",
-    domainSeparator: typedPayloadEvidence?.domainSeparator ?? `eip712-domain:${parameters.network}:${parameters.token}`,
-    structHash: typedPayloadEvidence?.structHash ?? `eip712-struct:${selectedPaymentRequirementDigest}`,
-    eip712Digest: typedPayloadEvidence?.eip712Digest ?? `eip712-digest:${gatewayCheck.gateAttempt.paramsDigestSeen}`,
-    signingMethod,
-    signerKind,
-    signerRef: typedPayloadEvidence?.signerRef ?? `signer:x402:${parameters.gatewayCredentialRefId}`,
-    verifierContextRef: parameters.providerEnvironmentRef ?? `verifier:x402:${parameters.network}:${parameters.token}:${parameters.payTo}`,
-    ...typedPayloadEvidence?.verifierContextDigest ? { verifierContextDigest: typedPayloadEvidence.verifierContextDigest } : {},
-    ...typedPayloadEvidence?.expectedVerifierContextDigest ? { expectedVerifierContextDigest: typedPayloadEvidence.expectedVerifierContextDigest } : {},
-    signatureRef: signatureEvidence ? `typed_action_commitment_signature_ref:${safeIdPart2(verifiedGate.gateAttemptId)}` : null,
-    signatureDigest: signatureEvidence?.paymentSignatureDigest ?? null,
-    replayStatus: typedPayloadEvidence?.replayStatus ?? "fresh",
-    nonceRef: typedPayloadEvidence?.nonceRef ?? `x402_eip712_nonce:${idempotencyKey}`,
-    nonceDigest,
-    paymentRequirementsDigest: asDigest(parameters.paymentRequirementsDigest),
-    selectedPaymentRequirementIndex,
-    expectedSelectedPaymentRequirementIndex: parameters.selectedPaymentRequirementIndex ?? selectedPaymentRequirementIndex,
-    selectedPaymentRequirementDigest,
-    expectedSelectedPaymentRequirementDigest: parameters.selectedPaymentRequirementDigest ? asDigest(parameters.selectedPaymentRequirementDigest) : selectedPaymentRequirementDigest,
-    paymentIdentifierDigest: asNullableDigest(parameters.paymentIdentifierDigest),
-    payTo: parameters.payTo ?? parameters.payee,
-    network: parameters.network,
-    token: parameters.token,
-    asset: parameters.asset,
-    atomicAmount: parameters.atomicAmount,
-    intendedHttpMethod: parameters.intendedHttpMethod,
-    intendedRequestUrl: parameters.intendedRequestUrl,
-    intendedRequestBodyPosture: parameters.intendedRequestBodyPosture,
-    intendedRequestBodyDigest: asNullableDigest(parameters.intendedRequestBodyDigest),
-    selectedHeadersDigest: asNullableDigest(parameters.selectedHeadersDigest),
-    providerEnvironmentPosture: parameters.providerEnvironmentPosture,
-    providerEnvironmentRef,
-    downstreamStatus: signatureEvidence?.downstreamPaymentStatus ?? "not_observed"
-  };
-}
-function assertPreSignTypedActionCommitment(commitment) {
-  const status2 = commitment.signerOrVerifier.verificationStatus;
-  if (isBlockingTypedActionCommitment(commitment)) {
-    throw new Error(`x402 typed payload pre-validation refused signing (${commitment.signerOrVerifier.verificationReasonCode ?? status2})`);
-  }
-}
-function isBlockingTypedActionCommitment(commitment) {
-  const status2 = commitment.signerOrVerifier.verificationStatus;
-  return status2 === "refused" || status2 === "proof_gap" || status2 === "unsupported";
-}
-function recordTypedActionCommitmentInputFromNormalized(input) {
-  const { normalized } = input;
-  return {
-    tenantId: input.tenantId,
-    organizationId: input.organizationId,
-    typedActionCommitmentId: normalized.typedActionCommitmentId,
-    actionContractId: input.actionContractId,
-    subject: normalized.subject,
-    domain: normalized.domain,
-    purpose: normalized.purpose,
-    profile: normalized.profile,
-    typedPayload: normalized.typedPayload,
-    replayPosture: normalized.replayPosture,
-    signerOrVerifier: normalized.signerOrVerifier,
-    safetyPosture: normalized.safetyPosture,
-    projectionClass: "operator_redacted",
-    authorityBoundary: normalized.authorityBoundary,
-    refusalRefs: normalized.refusalRefs,
-    proofGapRefs: normalized.proofGapRefs,
-    evidenceRefs: normalized.evidenceRefs
-  };
-}
-function requireSelectedPaymentRequirementIndex(value) {
-  if (value === null)
-    throw new Error("x402 typed commitment requires selected payment requirement index.");
-  return value;
-}
-function requireSelectedPaymentRequirementDigest(value) {
-  if (value === null)
-    throw new Error("x402 typed commitment requires selected payment requirement digest.");
-  return asDigest(value);
-}
-function providerRefsForGate(verifiedGate) {
-  return {
-    providerRequestRef: `provider-request:x402:${verifiedGate.gateAttemptId}`,
-    providerOperationRef: `provider-operation:x402:${verifiedGate.gateAttemptId}`
-  };
-}
 function isPlainObject2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function safeIdPart2(value) {
-  const normalized = value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 72);
-  return normalized.length >= 3 ? normalized : normalized.padEnd(3, "_");
-}
-function asDigest(value) {
-  const parsed = DigestSchema.parse(value);
-  return parsed;
-}
-function asNullableDigest(value) {
-  return value === null ? null : asDigest(value);
 }
 // src/adapters/http-profile/schemas.ts
 var HttpProtectedMutationProfileSchema = exports_external.strictObject({
@@ -24725,6 +27948,7 @@ async function runAuthMdProtectedApiCallGateway(input) {
     };
   }
   let credentialResolutionEvidence = null;
+  let effectInvocationStarted = false;
   try {
     const providerRefs = providerRefsForGate2(verifiedGate);
     credentialResolutionEvidence = await input.protocol.recordCredentialResolutionEvidence({
@@ -24756,6 +27980,7 @@ async function runAuthMdProtectedApiCallGateway(input) {
       parameters: observedParameters,
       expectedActionContractId: input.actionContractId
     });
+    effectInvocationStarted = true;
     const apiCallEvidence = AuthMdProtectedApiCallEvidenceSchema.parse(await input.surface.executeProtectedApiCall(command));
     assertNoLeakedAuthMdCredentialMaterial(apiCallEvidence);
     const { reconciliation } = await input.protocol.reconcileSurfaceOperation({
@@ -24783,6 +28008,7 @@ async function runAuthMdProtectedApiCallGateway(input) {
       apiCallEvidence
     };
   } catch (error51) {
+    const failureObservation = downstreamFailureObservation({ error: error51, effectInvocationStarted });
     const failureEvidence = await redactedAuthMdFailureEvidence({
       surfaceOperationRef,
       error: error51
@@ -24791,16 +28017,17 @@ async function runAuthMdProtectedApiCallGateway(input) {
       mutationAttemptId: verifiedGate.mutationAttemptId,
       idempotencyKey: verifiedGate.idempotencyKey,
       observedSurfaceOperationRef: surfaceOperationRef,
-      observedDownstreamStatus: "failed",
+      observedDownstreamStatus: failureObservation.observedDownstreamStatus,
       ...failureEvidence,
       evidenceRefs: [
         ...failureEvidence.evidenceRefs ?? [],
         ...credentialResolutionEvidence ? [`credential_resolution_evidence:${credentialResolutionEvidence.credentialResolutionEvidenceId}`] : []
       ],
-      resolvedProofGapIds: []
+      resolvedProofGapIds: [],
+      orphanIsolationRequested: failureObservation.orphanIsolationRequested
     });
     return {
-      outcome: "protected_api_call_failed",
+      outcome: failureObservation.observedDownstreamStatus === "failed" ? "protected_api_call_failed" : "protected_api_call_outcome_unknown",
       gatewayCheck,
       credentialResolutionEvidence,
       reconciliation,

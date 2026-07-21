@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -15339,6 +15343,24 @@ var CreateBypassProbeInputSchema = exports_external.strictObject({
   observedAt: exports_external.string().datetime({ offset: true }).optional(),
   expiresAt: exports_external.string().datetime({ offset: true })
 });
+// src/protocol/foundation/canonical.ts
+var trustedArrayPrototype = Array.prototype;
+var trustedArraySort = Array.prototype.sort;
+var trustedArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+var trustedDataViewGetUint8 = DataView.prototype.getUint8;
+var trustedNumberMaxSafeInteger = Number.MAX_SAFE_INTEGER;
+var trustedObjectPrototype = Object.prototype;
+var trustedSetAdd = Set.prototype.add;
+var trustedSetDelete = Set.prototype.delete;
+var trustedSetHas = Set.prototype.has;
+var trustedStringCharCodeAt = String.prototype.charCodeAt;
+var trustedSubtle = crypto.subtle;
+var trustedSubtleDigest = trustedSubtle.digest;
+var trustedSubtleImportKey = trustedSubtle.importKey;
+var trustedSubtleSign = trustedSubtle.sign;
+var trustedTextEncoder = new TextEncoder;
+var trustedTextEncoderEncode = TextEncoder.prototype.encode;
+
 // src/protocol/foundation/ids.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 var protocolIdSourceStorage = new AsyncLocalStorage;
@@ -20243,13 +20265,13 @@ var currentProductLaunchPackage = {
 };
 var currentPackageRef = `${currentProductLaunchPackage.name}@${currentProductLaunchPackage.version}`;
 var currentExpectedVersionRef = `expected_version=${currentProductLaunchPackage.version}`;
-var lastVerifiedPublishedPackageRef = `${currentProductLaunchPackage.name}@0.3.0`;
+var lastVerifiedHostActivationPackageRef = `${currentProductLaunchPackage.name}@0.3.0`;
 var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().length(ProductLaunchGateIdSchema.options.length).parse([
   {
     gateId: "first_external_runtime_transcript",
     status: "resolved_selected",
-    decision: "Codex-local is the first live runtime target, and historical run-local evidence shows a fresh Codex host attempted handshake.actions.x402_payment.propose through a handshake_x402 MCP server entry pinned to an older 0.2.8 local artifact.",
-    launchLanguageBoundary: "Codex-local host-origin MCP tool invocation may be claimed only as historical host-activation evidence unless a current-version host transcript is captured. Do not claim native certification, host-wide containment, policy authority, gateway checks, signer use, payment material, customer gateway custody, live paid execution, or registry discovery.",
+    decision: `Codex-local is the first live runtime target, and the latest verified run-local evidence used a handshake_x402 MCP server entry pinned to the historical ${lastVerifiedHostActivationPackageRef} artifact.`,
+    launchLanguageBoundary: "Codex-local host-origin MCP tool invocation may be claimed only as historical host-activation evidence until a current-version transcript is captured. Do not claim native certification, host-wide containment, policy authority, gateway checks, signer use, payment material, customer gateway custody, live paid execution, or registry discovery.",
     requiredEvidence: [
       "read /Users/joelchan/.codex/config.toml",
       "observe mcp_servers.handshake_x402 in Codex config",
@@ -20257,8 +20279,8 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "record proposal/readback transcript and raw sibling posture"
     ],
     currentEvidence: [
-      "historical /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to handshake-protocol-kernel@0.2.8 artifact sha256 c80c3985a9c695c6008c9c9eb5323085e2dcfa262f9c090aab2a78056e6bcf42",
-      "historical Codex host observed and attempted handshake.actions.x402_payment.propose; empty-object input failed schema validation before authority or mutation"
+      `historical /Users/joelchan/.codex/config.toml readback found handshake_x402 pinned to an artifact-bound ${lastVerifiedHostActivationPackageRef} MCP executable; the external Codex host activation proof carries the exact artifact sha256`,
+      "historical Codex host observed and attempted handshake.actions.x402_payment.propose; dummy x402_payment.exact input returned action_contract_proposed with no credential, payment, authority, gateway check, signer use, or mutation"
     ],
     blockerReasonCodes: [],
     nonClaims: ["not_authority_by_host_invocation", "not_host_wide_containment", "not_native_codex_certification"]
@@ -20293,9 +20315,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "search endpoint returns the server by package or MCP name"
     ],
     currentEvidence: [
-      `npm registry latest returned ${lastVerifiedPublishedPackageRef}; current source release target is ${currentPackageRef}`,
-      `trusted-publish workflow must complete for ${currentExpectedVersionRef} before current-surface npm availability is claimable`,
-      `clean installed-artifact smoke must pass for ${currentPackageRef}`,
+      `npm registry latest returned ${currentPackageRef}`,
+      `trusted-publish workflow completed for ${currentExpectedVersionRef}`,
+      `clean installed-artifact smoke passed for ${currentPackageRef}`,
       "official MCP Registry GET by io.github.CreasyBear/handshake-protocol-kernel returned 404 Server not found",
       "official MCP Registry search for handshake-protocol-kernel returned an empty server list"
     ],
@@ -20304,18 +20326,23 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   },
   {
     gateId: "first_buyer_segment",
-    status: "resolved_selected",
-    decision: "The first buyer segment is agent builders and engineering organizations delegating paid x402 resource calls to agents and needing bounded spend, signer custody, replay refusal, and reconstructable evidence.",
-    launchLanguageBoundary: "Agentic.Market services are the first paid-resource corpus for validation. Services exposing paid APIs are not the first buyer unless Handshake ships a real x402-payable seller endpoint.",
+    status: "resolved_raised_bar",
+    decision: "No first buyer segment is locked. Agent builders buying x402 resources, credentialed API operators, and engineering-infrastructure teams remain competing validation hypotheses until urgency, budget, distribution, and adoption evidence disconfirm the alternatives.",
+    launchLanguageBoundary: "x402 and Agentic.Market may be used as a bounded payment canary and paid-resource corpus, not as proof of the first market. Do not describe Handshake as an Agentic.Market seller, marketplace product, or selected buyer solution without matching evidence.",
     requiredEvidence: [
-      "one paid-resource corpus with listed x402 endpoints",
-      "one delegated buyer-side gateway policy",
-      "one receipt/refusal/proof-gap readback that a buyer operator can inspect"
+      "disconfirming interviews or usage evidence across at least three competing buyer hypotheses",
+      "evidence of urgent, frequent, budgeted pain for the selected buyer",
+      "one repeatable distribution path and one bounded adoption path",
+      "one protected-action proof that matches the selected buyer without broadening the kernel"
     ],
     currentEvidence: [
-      "Agentic.Market service page and live regimeshift.xyz 402 challenge establish a paid-resource corpus"
+      "Agentic.Market service page and live regimeshift.xyz 402 challenge establish only a paid-resource corpus",
+      "local x402, auth.md, and engineering-infrastructure proofs establish enforcement hypotheses, not buyer demand"
     ],
-    blockerReasonCodes: ["funded_buyer_gateway_signed_retry_missing"],
+    blockerReasonCodes: [
+      "first_buyer_disconfirming_evidence_missing",
+      "first_buyer_budget_and_distribution_not_verified"
+    ],
     nonClaims: ["not_seller_middleware", "not_facilitator_operation", "not_agentic_market_listing"]
   },
   {
@@ -20335,7 +20362,7 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   {
     gateId: "auth_md_x402_expansion_trigger",
     status: "resolved_raised_bar",
-    decision: "auth.md + x402 is the first expansion candidate after buyer-side x402 protected spend, but it enters only through an admission packet that keeps auth.md credential issuance as provenance and routes each paid credentialed call through exact contract, policy, one-use greenlight, and gateway check.",
+    decision: "auth.md + x402 is one competing expansion hypothesis, not the locked next market. It enters only through an admission packet that keeps auth.md credential issuance as provenance and routes each paid credentialed call through exact contract, policy, one-use greenlight, and gateway check.",
     launchLanguageBoundary: "auth.md may be called credential discovery, registration, provenance, and lifecycle evidence. It must not be called authority until a concrete auth.md protected API call clears the same Handshake gateway chain.",
     requiredEvidence: [
       "auth.md discovery and authorization-server metadata digests",
@@ -20375,9 +20402,9 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
   },
   {
     gateId: "package_provenance_npm_attestation",
-    status: "resolved_blocked",
-    decision: `Package provenance for ${currentProductLaunchPackage.version} is the current release target and is blocked until npm trusted publishing and remote registry readback pass for the exact version.`,
-    launchLanguageBoundary: `Published ${currentProductLaunchPackage.version} can be described as npm-available only after registry signature metadata, GitHub Actions provenance, and clean installed-artifact smoke are verified for the exact version. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.`,
+    status: "resolved_selected",
+    decision: `Package provenance for ${currentProductLaunchPackage.version} is verified through npm trusted publishing, remote registry readback, and clean installed-artifact smoke for the exact version.`,
+    launchLanguageBoundary: `Published ${currentProductLaunchPackage.version} may be described as npm-available with registry signature metadata and GitHub Actions provenance. Do not describe publication as authority, supply-chain safety, MCP Registry discoverability, or hosted operation.`,
     requiredEvidence: [
       "npm latest returns the intended product version",
       "npm dist.integrity and dist.signatures are recorded",
@@ -20385,12 +20412,12 @@ var productLaunchGateResolutions = ProductLaunchGateResolutionSchema.array().len
       "clean install smoke passes against the newly published artifact"
     ],
     currentEvidence: [
-      `npm latest currently returns ${lastVerifiedPublishedPackageRef}, not ${currentPackageRef}`,
-      `trusted-publish workflow has not yet succeeded for ${currentExpectedVersionRef}`,
-      "npm publish provenance and SLSA readback remain pending for the current release target",
-      `clean installed-artifact smoke remains pending for ${currentPackageRef}`
+      `npm latest returns ${currentPackageRef}`,
+      `trusted-publish workflow succeeded for ${currentExpectedVersionRef}`,
+      "npm registry readback records integrity, signature, and provenance metadata for the current release",
+      `clean installed-artifact smoke passed for ${currentPackageRef}`
     ],
-    blockerReasonCodes: ["npm_current_release_not_published", "trusted_publish_current_version_not_verified"],
+    blockerReasonCodes: [],
     nonClaims: ["not_authority_by_publication", "not_supply_chain_safety", "not_npm_audit_replacement"]
   }
 ]);
@@ -24943,6 +24970,9 @@ var PRODUCT_COMPLETION_GATE_IDS = [
   "public_distribution_and_registry",
   "customer_gateway_live_x402_paid_proof",
   "auth_md_x402_admission_packet",
+  "customer_edge_cloud_control_plane_source_proof",
+  "customer_edge_cloud_transport_parity_proof",
+  "hosted_provider_caller_identity_proof",
   "dual_enforcement_posture",
   "per_customer_bypass_scaffold"
 ];
@@ -24983,15 +25013,19 @@ function productCompletionReadbackInputFromSourceEvidence(input) {
       publicDistributionAndRegistry: {
         status: "blocked",
         localVersion: input.localPackage.version,
-        npmLatestVersion: input.localPackage.version,
-        currentSurfacePublished: true,
+        npmLatestVersion: null,
+        currentSurfacePublished: false,
         mcpRegistryAccepted: false,
         mcpRegistryDiscoverable: false,
-        provenanceAttempted: true,
-        provenanceSupported: true,
-        proofGapReasonCodes: ["mcp_registry_discoverability_not_verified"],
+        provenanceAttempted: false,
+        provenanceSupported: null,
+        proofGapReasonCodes: [
+          "npm_latest_readback_failed",
+          "current_surface_not_publicly_published",
+          "mcp_registry_discoverability_not_verified"
+        ],
         evidenceRefs: [
-          `source-evidence:npm:${input.localPackage.name}@${input.localPackage.version}:published`,
+          `source-evidence:npm:${input.localPackage.name}@${input.localPackage.version}:publication-not-observed`,
           `source-evidence:mcp-registry:${input.localPackage.mcpName}:not-discoverable`
         ],
         ...source.publicDistributionAndRegistry
@@ -25015,6 +25049,58 @@ function productCompletionReadbackInputFromSourceEvidence(input) {
         evidenceRefs: ["source-evidence:auth-md-x402-admission:not-completed"],
         ...source.authMdX402AdmissionPacket
       },
+      customerEdgeCloudControlPlaneSourceProof: {
+        status: "blocked",
+        cloudRepoBoundary: "not_captured",
+        middlewareContractDocPresent: false,
+        sharedSchemaPackagePresent: false,
+        configPullRoutePresent: false,
+        eventIngestRoutePresent: false,
+        registerRoutePresent: false,
+        callbackPushSourcePresent: false,
+        publicReadbackSourcePresent: false,
+        aeRefsReadbackSourcePresent: false,
+        deploymentEvidenceRunbookPresent: false,
+        cloudNeverIssuesAuthorityBoundaryPresent: false,
+        cloudAuthorityCreated: false,
+        aeAuthorityCreated: false,
+        downstreamMutationAuthorityCreated: false,
+        proofGapReasonCodes: ["customer_edge_cloud_control_plane_source_not_captured"],
+        evidenceRefs: ["source-evidence:customer-edge-cloud-control-plane:not-captured"],
+        ...source.customerEdgeCloudControlPlaneSourceProof
+      },
+      customerEdgeCloudTransportParityProof: {
+        status: "blocked",
+        cloudRepoBoundary: "not_captured",
+        kernelRouteBoundHmacPresent: false,
+        cloudSharedRouteBoundHmacPresent: false,
+        remoteDeploymentEvidencePresent: false,
+        middlewareE2EEvidencePresent: false,
+        remoteConfigPullObserved: false,
+        remoteEventIngestObserved: false,
+        remoteCallbackPushObserved: false,
+        remoteReadbackObserved: false,
+        handlerWithheldBeforeLeaseObserved: false,
+        cloudAuthorityCreated: false,
+        aeAuthorityCreated: false,
+        downstreamMutationAuthorityCreated: false,
+        proofGapReasonCodes: ["customer_edge_cloud_transport_parity_not_captured"],
+        evidenceRefs: ["source-evidence:customer-edge-cloud-transport:not-captured"],
+        ...source.customerEdgeCloudTransportParityProof
+      },
+      hostedProviderCallerIdentityProof: {
+        status: "blocked",
+        deploymentBoundary: "not_captured",
+        verifierStrategy: "not_configured",
+        providerVerificationPosture: "not_observed",
+        productionEligibleAdapterMode: false,
+        normalizedCallerIdentityEvidencePresent: false,
+        rawIdentityMaterialPersisted: false,
+        authorityCreated: false,
+        proofGapReasonCodes: ["hosted_provider_caller_identity_deployment_not_captured"],
+        evidenceRefs: ["source-evidence:hosted-caller-provider:not-captured"],
+        ...source.hostedProviderCallerIdentityProof
+      },
       dualEnforcementPosture: source.dualEnforcementPosture ?? {
         dualEnforcementPostureTestPassed: false,
         mutationManifestGatingTestPassed: false,
@@ -25033,9 +25119,9 @@ function projectProductCompletionReadback(input) {
     productCompletionGateResult({
       gateId: "codex_local_host_activation",
       title: "Codex-local runtime activation from pinned current-surface artifact",
-      completed: input.gates.codexLocalHostActivation.status === "host_tool_invocation_observed" && input.gates.codexLocalHostActivation.observesHostToolInvocation && !input.gates.codexLocalHostActivation.authorityCreated,
+      completed: input.gates.codexLocalHostActivation.status === "host_tool_invocation_observed" && input.gates.codexLocalHostActivation.observesHostToolInvocation && input.gates.codexLocalHostActivation.artifactSha256 !== null && input.gates.codexLocalHostActivation.artifactSha256.length > 0 && !input.gates.codexLocalHostActivation.authorityCreated,
       hardBlocked: false,
-      blockers: [],
+      blockers: codexLocalHostActivationBlockers(input),
       evidenceRefs: input.gates.codexLocalHostActivation.evidenceRefs
     }),
     productCompletionGateResult({
@@ -25062,6 +25148,9 @@ function projectProductCompletionReadback(input) {
       blockers: [],
       evidenceRefs: input.gates.authMdX402AdmissionPacket.evidenceRefs
     }),
+    customerEdgeCloudControlPlaneSourceProofGateResult(input),
+    customerEdgeCloudTransportParityProofGateResult(input),
+    hostedProviderCallerIdentityProofGateResult(input),
     dualEnforcementPostureGateResult(input),
     perCustomerBypassScaffoldGateResult(input)
   ];
@@ -25097,8 +25186,151 @@ function projectProductCompletionReadback(input) {
       hostsOperation: false,
       certifiesMarketplace: false
     },
-    nextMechanism: status2 === "completed" ? "Move from local/product-surface closeout to hosted operation design." : hardBlockedGateIds.includes("public_distribution_and_registry") ? "Resolve public distribution: publish the current package with provenance support or explicitly accept the no-provenance release risk, then verify npm and MCP Registry readback." : "Resolve the remaining incomplete gate with source-owned evidence before claiming product closeout."
+    nextMechanism: status2 === "completed" ? "Move from local/product-surface closeout to hosted operation design." : hardBlockedGateIds.includes("public_distribution_and_registry") ? "Resolve public distribution: publish the current package with provenance support or explicitly accept the no-provenance release risk, then verify npm and MCP Registry readback." : incompleteGateIds.includes("customer_edge_cloud_control_plane_source_proof") ? "Bind the separate Handshake Cloud repo as control-plane/readback source evidence before making customer-edge Cloud claims." : incompleteGateIds.includes("customer_edge_cloud_transport_parity_proof") ? customerEdgeCloudTransportNextMechanism(input.gates.customerEdgeCloudTransportParityProof) : incompleteGateIds.includes("hosted_provider_caller_identity_proof") ? "Capture deployed provider-backed hosted caller identity proof without raw identity material or authority claims." : "Resolve the remaining incomplete gate with source-owned evidence before claiming product closeout."
   };
+}
+function customerEdgeCloudTransportNextMechanism(gate) {
+  return gate.kernelRouteBoundHmacPresent && gate.cloudSharedRouteBoundHmacPresent ? "Capture deployed middleware-to-Cloud config, event, callback, readback, and handler-withholding E2E evidence." : "Align Cloud and kernel middleware HMAC/transport parity, then capture deployed middleware-to-Cloud config, event, callback, readback, and handler-withholding evidence.";
+}
+function codexLocalHostActivationBlockers(input) {
+  const gate = input.gates.codexLocalHostActivation;
+  const blockers = new Set;
+  if (gate.status !== "host_tool_invocation_observed" || !gate.observesHostToolInvocation) {
+    blockers.add("codex_host_tool_invocation_not_observed");
+  }
+  if (gate.artifactSha256 === null || gate.artifactSha256.length === 0) {
+    blockers.add("codex_host_current_artifact_digest_absent");
+  }
+  if (gate.authorityCreated) {
+    blockers.add("codex_host_activation_claims_authority");
+  }
+  return [...blockers].sort();
+}
+function customerEdgeCloudControlPlaneSourceProofGateResult(input) {
+  const gate = input.gates.customerEdgeCloudControlPlaneSourceProof;
+  const completed = gate.status === "source_control_plane_verified" && gate.cloudRepoBoundary === "separate_cloud_repo" && gate.middlewareContractDocPresent && gate.sharedSchemaPackagePresent && gate.configPullRoutePresent && gate.eventIngestRoutePresent && gate.registerRoutePresent && gate.callbackPushSourcePresent && gate.publicReadbackSourcePresent && gate.aeRefsReadbackSourcePresent && gate.deploymentEvidenceRunbookPresent && gate.cloudNeverIssuesAuthorityBoundaryPresent && !gate.cloudAuthorityCreated && !gate.aeAuthorityCreated && !gate.downstreamMutationAuthorityCreated;
+  return productCompletionGateResult({
+    gateId: "customer_edge_cloud_control_plane_source_proof",
+    title: "Customer-edge Cloud control-plane source contract in separate non-authority repo",
+    completed,
+    hardBlocked: false,
+    blockers: completed ? [] : customerEdgeCloudControlPlaneSourceProofBlockers(gate),
+    evidenceRefs: gate.evidenceRefs
+  });
+}
+function customerEdgeCloudControlPlaneSourceProofBlockers(gate) {
+  const blockers = new Set(gate.proofGapReasonCodes);
+  if (gate.cloudRepoBoundary !== "separate_cloud_repo") {
+    blockers.add("customer_edge_cloud_separate_repo_source_not_captured");
+  }
+  if (!gate.middlewareContractDocPresent)
+    blockers.add("customer_edge_cloud_middleware_contract_doc_absent");
+  if (!gate.sharedSchemaPackagePresent)
+    blockers.add("customer_edge_cloud_shared_schema_package_absent");
+  if (!gate.configPullRoutePresent)
+    blockers.add("customer_edge_cloud_config_pull_route_absent");
+  if (!gate.eventIngestRoutePresent)
+    blockers.add("customer_edge_cloud_event_ingest_route_absent");
+  if (!gate.registerRoutePresent)
+    blockers.add("customer_edge_cloud_register_route_absent");
+  if (!gate.callbackPushSourcePresent)
+    blockers.add("customer_edge_cloud_callback_push_source_absent");
+  if (!gate.publicReadbackSourcePresent)
+    blockers.add("customer_edge_cloud_public_readback_source_absent");
+  if (!gate.aeRefsReadbackSourcePresent)
+    blockers.add("customer_edge_cloud_ae_refs_readback_source_absent");
+  if (!gate.deploymentEvidenceRunbookPresent)
+    blockers.add("customer_edge_cloud_deployment_evidence_runbook_absent");
+  if (!gate.cloudNeverIssuesAuthorityBoundaryPresent)
+    blockers.add("customer_edge_cloud_non_authority_boundary_absent");
+  if (gate.cloudAuthorityCreated)
+    blockers.add("customer_edge_cloud_claims_authority");
+  if (gate.aeAuthorityCreated)
+    blockers.add("customer_edge_cloud_ae_claims_authority");
+  if (gate.downstreamMutationAuthorityCreated)
+    blockers.add("customer_edge_cloud_downstream_authority_claimed");
+  return [...blockers].sort();
+}
+function customerEdgeCloudTransportParityProofGateResult(input) {
+  const gate = input.gates.customerEdgeCloudTransportParityProof;
+  const completed = gate.status === "remote_middleware_e2e_verified" && gate.cloudRepoBoundary === "separate_cloud_repo" && gate.kernelRouteBoundHmacPresent && gate.cloudSharedRouteBoundHmacPresent && gate.remoteDeploymentEvidencePresent && gate.middlewareE2EEvidencePresent && gate.remoteConfigPullObserved && gate.remoteEventIngestObserved && gate.remoteCallbackPushObserved && gate.remoteReadbackObserved && gate.handlerWithheldBeforeLeaseObserved && !gate.cloudAuthorityCreated && !gate.aeAuthorityCreated && !gate.downstreamMutationAuthorityCreated;
+  return productCompletionGateResult({
+    gateId: "customer_edge_cloud_transport_parity_proof",
+    title: "Customer-edge Cloud transport parity and deployed middleware E2E proof",
+    completed,
+    hardBlocked: false,
+    blockers: completed ? [] : customerEdgeCloudTransportParityProofBlockers(gate),
+    evidenceRefs: gate.evidenceRefs
+  });
+}
+function customerEdgeCloudTransportParityProofBlockers(gate) {
+  const blockers = new Set(gate.proofGapReasonCodes);
+  if (gate.cloudRepoBoundary !== "separate_cloud_repo") {
+    blockers.add("customer_edge_cloud_separate_repo_source_not_captured");
+  }
+  if (!gate.kernelRouteBoundHmacPresent)
+    blockers.add("customer_edge_kernel_route_bound_hmac_not_observed");
+  if (!gate.cloudSharedRouteBoundHmacPresent)
+    blockers.add("customer_edge_cloud_route_bound_hmac_not_observed");
+  if (!gate.remoteDeploymentEvidencePresent)
+    blockers.add("customer_edge_cloud_remote_deployment_not_observed");
+  if (!gate.middlewareE2EEvidencePresent)
+    blockers.add("customer_edge_cloud_middleware_e2e_not_observed");
+  if (!gate.remoteConfigPullObserved)
+    blockers.add("customer_edge_cloud_remote_config_pull_not_observed");
+  if (!gate.remoteEventIngestObserved)
+    blockers.add("customer_edge_cloud_remote_event_ingest_not_observed");
+  if (!gate.remoteCallbackPushObserved)
+    blockers.add("customer_edge_cloud_remote_callback_push_not_observed");
+  if (!gate.remoteReadbackObserved)
+    blockers.add("customer_edge_cloud_remote_readback_not_observed");
+  if (!gate.handlerWithheldBeforeLeaseObserved) {
+    blockers.add("customer_edge_cloud_handler_withholding_not_bound_to_remote_e2e");
+  }
+  if (gate.cloudAuthorityCreated)
+    blockers.add("customer_edge_cloud_claims_authority");
+  if (gate.aeAuthorityCreated)
+    blockers.add("customer_edge_cloud_ae_claims_authority");
+  if (gate.downstreamMutationAuthorityCreated)
+    blockers.add("customer_edge_cloud_downstream_authority_claimed");
+  return [...blockers].sort();
+}
+function hostedProviderCallerIdentityProofGateResult(input) {
+  const gate = input.gates.hostedProviderCallerIdentityProof;
+  const completed = gate.status === "provider_deployment_verified" && gate.deploymentBoundary === "deployed_provider" && gate.verifierStrategy !== "not_configured" && gate.verifierStrategy !== "local_test_verifier" && gate.providerVerificationPosture !== "not_observed" && gate.providerVerificationPosture !== "fixture_verified" && gate.productionEligibleAdapterMode && gate.normalizedCallerIdentityEvidencePresent && !gate.rawIdentityMaterialPersisted && !gate.authorityCreated;
+  return productCompletionGateResult({
+    gateId: "hosted_provider_caller_identity_proof",
+    title: "Hosted caller identity proof from deployed provider-backed verifier",
+    completed,
+    hardBlocked: false,
+    blockers: completed ? [] : hostedProviderCallerIdentityProofBlockers(gate),
+    evidenceRefs: gate.evidenceRefs
+  });
+}
+function hostedProviderCallerIdentityProofBlockers(gate) {
+  const blockers = new Set(gate.proofGapReasonCodes);
+  if (gate.deploymentBoundary !== "deployed_provider") {
+    blockers.add("hosted_provider_caller_identity_deployment_not_captured");
+  }
+  if (gate.verifierStrategy === "not_configured" || gate.verifierStrategy === "local_test_verifier") {
+    blockers.add("hosted_provider_caller_identity_production_verifier_absent");
+  }
+  if (gate.providerVerificationPosture === "not_observed" || gate.providerVerificationPosture === "fixture_verified") {
+    blockers.add("hosted_provider_caller_identity_provider_verification_absent");
+  }
+  if (!gate.productionEligibleAdapterMode) {
+    blockers.add("hosted_provider_caller_identity_production_adapter_mode_absent");
+  }
+  if (!gate.normalizedCallerIdentityEvidencePresent) {
+    blockers.add("hosted_provider_caller_identity_digest_ref_evidence_absent");
+  }
+  if (gate.rawIdentityMaterialPersisted) {
+    blockers.add("hosted_provider_caller_identity_raw_material_persisted");
+  }
+  if (gate.authorityCreated) {
+    blockers.add("hosted_provider_caller_identity_authority_claimed");
+  }
+  return [...blockers].sort();
 }
 function dualEnforcementPostureGateResult(input) {
   const structuralEvidenceReady = input.gates.dualEnforcementPosture?.dualEnforcementPostureTestPassed === true && input.gates.dualEnforcementPosture?.mutationManifestGatingTestPassed === true;
@@ -25147,6 +25379,9 @@ function productCompletionOverclaimViolations(input) {
   if (input.gates.codexLocalHostActivation.authorityCreated) {
     violations.push("codex_host_activation_claims_authority");
   }
+  if (input.gates.codexLocalHostActivation.status === "host_tool_invocation_observed" && (input.gates.codexLocalHostActivation.artifactSha256 === null || input.gates.codexLocalHostActivation.artifactSha256.length === 0)) {
+    violations.push("codex_host_activation_lacks_artifact_digest");
+  }
   if (input.gates.publicDistributionAndRegistry.status === "registry_discoverable") {
     if (!input.gates.publicDistributionAndRegistry.currentSurfacePublished || !input.gates.publicDistributionAndRegistry.mcpRegistryAccepted || !input.gates.publicDistributionAndRegistry.mcpRegistryDiscoverable) {
       violations.push("distribution_status_exceeds_public_readback");
@@ -25157,6 +25392,59 @@ function productCompletionOverclaimViolations(input) {
   }
   if (input.gates.authMdX402AdmissionPacket.createsAuthority) {
     violations.push("auth_md_x402_packet_claims_authority");
+  }
+  const customerEdgeCloudSource = input.gates.customerEdgeCloudControlPlaneSourceProof;
+  if (customerEdgeCloudSource.status === "source_control_plane_verified") {
+    if (customerEdgeCloudSource.cloudRepoBoundary !== "separate_cloud_repo") {
+      violations.push("customer_edge_cloud_source_not_separate_repo");
+    }
+    if (customerEdgeCloudSource.cloudAuthorityCreated) {
+      violations.push("customer_edge_cloud_source_claims_cloud_authority");
+    }
+    if (customerEdgeCloudSource.aeAuthorityCreated) {
+      violations.push("customer_edge_cloud_source_claims_ae_authority");
+    }
+    if (customerEdgeCloudSource.downstreamMutationAuthorityCreated) {
+      violations.push("customer_edge_cloud_source_claims_downstream_authority");
+    }
+  }
+  const customerEdgeCloudTransport = input.gates.customerEdgeCloudTransportParityProof;
+  if (customerEdgeCloudTransport.status === "source_parity_verified") {
+    if (!customerEdgeCloudTransport.kernelRouteBoundHmacPresent) {
+      violations.push("customer_edge_cloud_transport_lacks_kernel_route_bound_hmac");
+    }
+    if (!customerEdgeCloudTransport.cloudSharedRouteBoundHmacPresent) {
+      violations.push("customer_edge_cloud_transport_lacks_cloud_route_bound_hmac");
+    }
+    if (customerEdgeCloudTransport.cloudAuthorityCreated || customerEdgeCloudTransport.aeAuthorityCreated || customerEdgeCloudTransport.downstreamMutationAuthorityCreated) {
+      violations.push("customer_edge_cloud_transport_claims_authority");
+    }
+  }
+  if (customerEdgeCloudTransport.status === "remote_middleware_e2e_verified") {
+    if (customerEdgeCloudTransport.cloudRepoBoundary !== "separate_cloud_repo" || !customerEdgeCloudTransport.remoteDeploymentEvidencePresent || !customerEdgeCloudTransport.middlewareE2EEvidencePresent) {
+      violations.push("customer_edge_cloud_remote_status_exceeds_evidence");
+    }
+    if (!customerEdgeCloudTransport.remoteConfigPullObserved || !customerEdgeCloudTransport.remoteEventIngestObserved || !customerEdgeCloudTransport.remoteCallbackPushObserved || !customerEdgeCloudTransport.remoteReadbackObserved || !customerEdgeCloudTransport.handlerWithheldBeforeLeaseObserved) {
+      violations.push("customer_edge_cloud_remote_path_incomplete");
+    }
+    if (customerEdgeCloudTransport.cloudAuthorityCreated || customerEdgeCloudTransport.aeAuthorityCreated || customerEdgeCloudTransport.downstreamMutationAuthorityCreated) {
+      violations.push("customer_edge_cloud_transport_claims_authority");
+    }
+  }
+  const hostedProvider = input.gates.hostedProviderCallerIdentityProof;
+  if (hostedProvider.status === "provider_deployment_verified") {
+    if (hostedProvider.authorityCreated) {
+      violations.push("hosted_provider_caller_identity_claims_authority");
+    }
+    if (hostedProvider.rawIdentityMaterialPersisted) {
+      violations.push("hosted_provider_caller_identity_persists_raw_material");
+    }
+    if (hostedProvider.deploymentBoundary !== "deployed_provider" || hostedProvider.verifierStrategy === "local_test_verifier" || hostedProvider.providerVerificationPosture === "fixture_verified") {
+      violations.push("hosted_provider_caller_identity_uses_fixture_verifier");
+    }
+    if (!hostedProvider.normalizedCallerIdentityEvidencePresent) {
+      violations.push("hosted_provider_caller_identity_lacks_digest_ref_evidence");
+    }
   }
   if (!input.qualityGate.passed)
     violations.push("quality_gate_not_passing");

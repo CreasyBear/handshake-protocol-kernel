@@ -1,4 +1,5 @@
 import { z } from "zod";
+export { PROTOCOL_VERSION } from "../../foundation/schema-core";
 export declare const ProtocolObjectTypeSchema: z.ZodEnum<{
     refusal: "refusal";
     proof_gap: "proof_gap";

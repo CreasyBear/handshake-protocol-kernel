@@ -21,15 +21,16 @@ export declare const AgenticEndpointAccessCloudSharedContractDigestMaterialSchem
         "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback": "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback";
         "@handshake-cloud/shared/schemas/agentic-endpoint-public-api": "@handshake-cloud/shared/schemas/agentic-endpoint-public-api";
     }>>;
-    sourceFiles: z.ZodArray<z.ZodEnum<{
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts";
-        "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts";
-    }>>;
+    sourceProvenance: z.ZodObject<{
+        cloudRepoBoundary: z.ZodLiteral<"separate_cloud_repo">;
+        repositoryName: z.ZodLiteral<"handshake-cloud">;
+        packageName: z.ZodLiteral<"@handshake-cloud/shared">;
+        packagePath: z.ZodLiteral<"packages/shared">;
+        sourcePackageVersion: z.ZodLiteral<"0.0.0">;
+        sourceProofKind: z.ZodLiteral<"customer_edge_cloud_source_contract_readback">;
+        sourceProofDigestRequired: z.ZodLiteral<true>;
+        sourcePathLabelsAllowedInKernelPin: z.ZodLiteral<false>;
+    }, z.core.$strict>;
     constants: z.ZodObject<{
         states: z.ZodArray<z.ZodEnum<{
             proof_gap: "proof_gap";
@@ -179,15 +180,16 @@ export declare const AgenticEndpointAccessCloudSharedContractPinSchema: z.ZodObj
             "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback": "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback";
             "@handshake-cloud/shared/schemas/agentic-endpoint-public-api": "@handshake-cloud/shared/schemas/agentic-endpoint-public-api";
         }>>;
-        sourceFiles: z.ZodArray<z.ZodEnum<{
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts";
-            "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts": "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts";
-        }>>;
+        sourceProvenance: z.ZodObject<{
+            cloudRepoBoundary: z.ZodLiteral<"separate_cloud_repo">;
+            repositoryName: z.ZodLiteral<"handshake-cloud">;
+            packageName: z.ZodLiteral<"@handshake-cloud/shared">;
+            packagePath: z.ZodLiteral<"packages/shared">;
+            sourcePackageVersion: z.ZodLiteral<"0.0.0">;
+            sourceProofKind: z.ZodLiteral<"customer_edge_cloud_source_contract_readback">;
+            sourceProofDigestRequired: z.ZodLiteral<true>;
+            sourcePathLabelsAllowedInKernelPin: z.ZodLiteral<false>;
+        }, z.core.$strict>;
         constants: z.ZodObject<{
             states: z.ZodArray<z.ZodEnum<{
                 proof_gap: "proof_gap";
@@ -334,7 +336,16 @@ export declare const agenticEndpointAccessCloudSharedContractPin: {
             sourceOnlyReference: true;
         };
         pinnedModules: ("@handshake-cloud/shared/constants/agentic-endpoint-access" | "@handshake-cloud/shared/schemas/agentic-endpoint-access" | "@handshake-cloud/shared/schemas/agentic-endpoint-access-config" | "@handshake-cloud/shared/schemas/agentic-endpoint-access-events" | "@handshake-cloud/shared/schemas/agentic-endpoint-access-capabilities" | "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback" | "@handshake-cloud/shared/schemas/agentic-endpoint-public-api")[];
-        sourceFiles: ("../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts" | "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts")[];
+        sourceProvenance: {
+            cloudRepoBoundary: "separate_cloud_repo";
+            repositoryName: "handshake-cloud";
+            packageName: "@handshake-cloud/shared";
+            packagePath: "packages/shared";
+            sourcePackageVersion: "0.0.0";
+            sourceProofKind: "customer_edge_cloud_source_contract_readback";
+            sourceProofDigestRequired: true;
+            sourcePathLabelsAllowedInKernelPin: false;
+        };
         constants: {
             states: ("proof_gap" | "refused" | "revoked" | "expired" | "attempted" | "leased" | "exhausted" | "quarantined")[];
             capabilityStatuses: ("unknown" | "proof_gap" | "stale" | "unsupported" | "ready")[];

@@ -30,5 +30,5 @@ export type DelegatedAuthorityBindingPolicyInput = {
     requestedAtomicAmount: string | null;
 };
 export declare function registerDelegatedAuthorityRef(recorder: ProtocolRecorder, inputValue: RegisterDelegatedAuthorityRefInput): Promise<DelegatedAuthorityRef>;
-export declare function transitionDelegatedAuthorityStatus(recorder: ProtocolRecorder, inputValue: TransitionDelegatedAuthorityStatusInput): Promise<DelegatedAuthorityStatusTransition>;
+export declare function transitionDelegatedAuthorityStatus(store: ProtocolStore, recorder: ProtocolRecorder, inputValue: TransitionDelegatedAuthorityStatusInput): Promise<DelegatedAuthorityStatusTransition>;
 export declare function evaluateDelegatedAuthorityBindings(store: ProtocolStore, contract: ActionContract, now: string): Promise<DelegatedAuthorityBindingEvaluation>;

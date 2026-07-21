@@ -27,6 +27,7 @@ export type AgenticEndpointAccessCloudHttpClientOptions = {
     readonly routes?: AgenticEndpointAccessCloudHttpRoutes;
     readonly fetch?: AgenticEndpointAccessCloudFetch;
     readonly now?: () => Date;
+    readonly requestTimeoutMs?: number;
 };
 export type AgenticEndpointAccessCloudHttpClient = AgenticEndpointAccessConfigClient & AgenticEndpointAccessCloudEventIngest;
 export declare function createAgenticEndpointAccessCloudHttpClient(options: AgenticEndpointAccessCloudHttpClientOptions): AgenticEndpointAccessCloudHttpClient;

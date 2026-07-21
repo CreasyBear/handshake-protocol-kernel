@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -11473,7 +11477,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {} else {}
+  } else if (ctx.target === "openapi-3.0") {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -11717,7 +11721,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      } else {}
+      }
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -14668,31 +14672,110 @@ var RecordAgenticEndpointAccessUsageEventInputSchema = exports_external.strictOb
   occurredAt: IsoDateSchema.optional()
 });
 // src/protocol/foundation/canonical.ts
+var HEX_DIGITS = "0123456789abcdef";
+var trustedArrayIsArray = Array.isArray;
+var trustedArrayPrototype = Array.prototype;
+var trustedArraySort = Array.prototype.sort;
+var trustedArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+var trustedDataView = DataView;
+var trustedDataViewGetUint8 = DataView.prototype.getUint8;
+var trustedJsonStringify = JSON.stringify;
+var trustedNumberIsFinite = Number.isFinite;
+var trustedNumberMaxSafeInteger = Number.MAX_SAFE_INTEGER;
+var trustedObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var trustedObjectKeys = Object.keys;
+var trustedObjectPrototype = Object.prototype;
+var trustedReflectApply = Reflect.apply;
+var trustedSetAdd = Set.prototype.add;
+var trustedSetDelete = Set.prototype.delete;
+var trustedSetHas = Set.prototype.has;
+var trustedString = String;
+var trustedStringCharCodeAt = String.prototype.charCodeAt;
+var trustedSubtle = crypto.subtle;
+var trustedSubtleDigest = trustedSubtle.digest;
+var trustedSubtleImportKey = trustedSubtle.importKey;
+var trustedSubtleSign = trustedSubtle.sign;
+var trustedTextEncoder = new TextEncoder;
+var trustedTextEncoderEncode = TextEncoder.prototype.encode;
 function canonicalize(value) {
   if (value === null)
     return "null";
   if (typeof value === "boolean")
     return value ? "true" : "false";
   if (typeof value === "string")
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value))
+    if (!trustedNumberIsFinite(value))
       throw new Error("Cannot canonicalize non-finite number");
-    return JSON.stringify(value);
+    return stringifyCanonicalPrimitive(value);
   }
-  if (Array.isArray(value))
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
-  const keys = Object.keys(value).sort();
-  const fields = keys.map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`);
-  return `{${fields.join(",")}}`;
+  if (trustedArrayIsArray(value)) {
+    let canonical2 = "[";
+    for (let index = 0;index < value.length; index += 1) {
+      const descriptor = trustedObjectGetOwnPropertyDescriptor(value, trustedString(index));
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw new Error("Cannot canonicalize sparse or accessor-backed array");
+      }
+      if (index > 0)
+        canonical2 += ",";
+      canonical2 += canonicalize(descriptor.value);
+    }
+    return `${canonical2}]`;
+  }
+  const keys = trustedObjectKeys(value);
+  trustedReflectApply(trustedArraySort, keys, [compareCodeUnits]);
+  let canonical = "{";
+  for (let index = 0;index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === undefined)
+      throw new Error("Cannot canonicalize an unstable object key set");
+    const descriptor = trustedObjectGetOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Cannot canonicalize accessor-backed or unstable object data");
+    }
+    if (index > 0)
+      canonical += ",";
+    canonical += `${stringifyCanonicalPrimitive(key)}:${canonicalize(descriptor.value)}`;
+  }
+  return `${canonical}}`;
 }
 async function digestCanonical(value) {
-  const bytes = new TextEncoder().encode(canonicalize(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `sha256:${toHex(digest)}`;
+  const bytes = encodeUtf8(canonicalize(value));
+  const digest = await trustedReflectApply(trustedSubtleDigest, trustedSubtle, ["SHA-256", bytes]);
+  return `sha256:${toHex(digest, 32)}`;
 }
-function toHex(buffer) {
-  return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function toHex(buffer, expectedByteLength) {
+  if (trustedArrayBufferByteLength === undefined) {
+    throw new Error("Cannot inspect cryptographic result bytes");
+  }
+  const byteLength = trustedReflectApply(trustedArrayBufferByteLength, buffer, []);
+  if (byteLength !== expectedByteLength) {
+    throw new Error("Unexpected cryptographic result length");
+  }
+  const bytes = new trustedDataView(buffer);
+  let hex3 = "";
+  for (let index = 0;index < byteLength; index += 1) {
+    const byte = trustedReflectApply(trustedDataViewGetUint8, bytes, [index]);
+    hex3 += HEX_DIGITS[byte >>> 4 & 15];
+    hex3 += HEX_DIGITS[byte & 15];
+  }
+  return hex3;
+}
+function compareCodeUnits(left, right) {
+  if (left < right)
+    return -1;
+  if (left > right)
+    return 1;
+  return 0;
+}
+function stringifyCanonicalPrimitive(value) {
+  const canonical = trustedJsonStringify(value);
+  if (canonical === undefined)
+    throw new Error("Cannot canonicalize an unsupported primitive");
+  return canonical;
+}
+function encodeUtf8(value) {
+  return trustedReflectApply(trustedTextEncoderEncode, trustedTextEncoder, [value]);
 }
 
 // src/protocol/foundation/errors.ts
@@ -15885,6 +15968,196 @@ var GreenlightSchema = ProtocolBaseSchema.extend({
   consumedByGateAttemptId: IdSchema.nullable()
 });
 
+// node_modules/@noble/hashes/esm/utils.js
+/*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) */
+function isBytes(a) {
+  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
+}
+function abytes(b, ...lengths) {
+  if (!isBytes(b))
+    throw new Error("Uint8Array expected");
+  if (lengths.length > 0 && !lengths.includes(b.length))
+    throw new Error("Uint8Array expected of length " + lengths + ", got length=" + b.length);
+}
+function aexists(instance, checkFinished = true) {
+  if (instance.destroyed)
+    throw new Error("Hash instance has been destroyed");
+  if (checkFinished && instance.finished)
+    throw new Error("Hash#digest() has already been called");
+}
+function aoutput(out, instance) {
+  abytes(out);
+  const min = instance.outputLen;
+  if (out.length < min) {
+    throw new Error("digestInto() expects output buffer of length at least " + min);
+  }
+}
+function clean(...arrays) {
+  for (let i = 0;i < arrays.length; i++) {
+    arrays[i].fill(0);
+  }
+}
+function createView(arr) {
+  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+function rotr(word, shift) {
+  return word << 32 - shift | word >>> shift;
+}
+var hasHexBuiltin = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
+var hexes = /* @__PURE__ */ Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0"));
+function bytesToHex(bytes) {
+  abytes(bytes);
+  if (hasHexBuiltin)
+    return bytes.toHex();
+  let hex3 = "";
+  for (let i = 0;i < bytes.length; i++) {
+    hex3 += hexes[bytes[i]];
+  }
+  return hex3;
+}
+function utf8ToBytes(str) {
+  if (typeof str !== "string")
+    throw new Error("string expected");
+  return new Uint8Array(new TextEncoder().encode(str));
+}
+function toBytes(data) {
+  if (typeof data === "string")
+    data = utf8ToBytes(data);
+  abytes(data);
+  return data;
+}
+class Hash {
+}
+function createHasher(hashCons) {
+  const hashC = (msg) => hashCons().update(toBytes(msg)).digest();
+  const tmp = hashCons();
+  hashC.outputLen = tmp.outputLen;
+  hashC.blockLen = tmp.blockLen;
+  hashC.create = () => hashCons();
+  return hashC;
+}
+
+// node_modules/@noble/hashes/esm/_md.js
+function setBigUint64(view, byteOffset, value, isLE) {
+  if (typeof view.setBigUint64 === "function")
+    return view.setBigUint64(byteOffset, value, isLE);
+  const _32n = BigInt(32);
+  const _u32_max = BigInt(4294967295);
+  const wh = Number(value >> _32n & _u32_max);
+  const wl = Number(value & _u32_max);
+  const h = isLE ? 4 : 0;
+  const l = isLE ? 0 : 4;
+  view.setUint32(byteOffset + h, wh, isLE);
+  view.setUint32(byteOffset + l, wl, isLE);
+}
+function Chi(a, b, c) {
+  return a & b ^ ~a & c;
+}
+function Maj(a, b, c) {
+  return a & b ^ a & c ^ b & c;
+}
+
+class HashMD extends Hash {
+  constructor(blockLen, outputLen, padOffset, isLE) {
+    super();
+    this.finished = false;
+    this.length = 0;
+    this.pos = 0;
+    this.destroyed = false;
+    this.blockLen = blockLen;
+    this.outputLen = outputLen;
+    this.padOffset = padOffset;
+    this.isLE = isLE;
+    this.buffer = new Uint8Array(blockLen);
+    this.view = createView(this.buffer);
+  }
+  update(data) {
+    aexists(this);
+    data = toBytes(data);
+    abytes(data);
+    const { view, buffer, blockLen } = this;
+    const len = data.length;
+    for (let pos = 0;pos < len; ) {
+      const take = Math.min(blockLen - this.pos, len - pos);
+      if (take === blockLen) {
+        const dataView = createView(data);
+        for (;blockLen <= len - pos; pos += blockLen)
+          this.process(dataView, pos);
+        continue;
+      }
+      buffer.set(data.subarray(pos, pos + take), this.pos);
+      this.pos += take;
+      pos += take;
+      if (this.pos === blockLen) {
+        this.process(view, 0);
+        this.pos = 0;
+      }
+    }
+    this.length += data.length;
+    this.roundClean();
+    return this;
+  }
+  digestInto(out) {
+    aexists(this);
+    aoutput(out, this);
+    this.finished = true;
+    const { buffer, view, blockLen, isLE } = this;
+    let { pos } = this;
+    buffer[pos++] = 128;
+    clean(this.buffer.subarray(pos));
+    if (this.padOffset > blockLen - pos) {
+      this.process(view, 0);
+      pos = 0;
+    }
+    for (let i = pos;i < blockLen; i++)
+      buffer[i] = 0;
+    setBigUint64(view, blockLen - 8, BigInt(this.length * 8), isLE);
+    this.process(view, 0);
+    const oview = createView(out);
+    const len = this.outputLen;
+    if (len % 4)
+      throw new Error("_sha2: outputLen should be aligned to 32bit");
+    const outLen = len / 4;
+    const state = this.get();
+    if (outLen > state.length)
+      throw new Error("_sha2: outputLen bigger than state");
+    for (let i = 0;i < outLen; i++)
+      oview.setUint32(4 * i, state[i], isLE);
+  }
+  digest() {
+    const { buffer, outputLen } = this;
+    this.digestInto(buffer);
+    const res = buffer.slice(0, outputLen);
+    this.destroy();
+    return res;
+  }
+  _cloneInto(to) {
+    to || (to = new this.constructor);
+    to.set(...this.get());
+    const { blockLen, buffer, length, finished, destroyed, pos } = this;
+    to.destroyed = destroyed;
+    to.finished = finished;
+    to.length = length;
+    to.pos = pos;
+    if (length % blockLen)
+      to.buffer.set(buffer);
+    return to;
+  }
+  clone() {
+    return this._cloneInto();
+  }
+}
+var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
+  1779033703,
+  3144134277,
+  1013904242,
+  2773480762,
+  1359893119,
+  2600822924,
+  528734635,
+  1541459225
+]);
+
 // src/protocol/areas/intent-compilation/delegation-evidence-ref.ts
 var DelegationEvidenceRefSchema = exports_external.object({
   delegationEvidenceRefId: IdSchema,
@@ -16482,27 +16755,198 @@ var CreateReceiptExportInputSchema = exports_external.strictObject({
   requestedByRef: exports_external.string().min(1),
   evidenceRetentionUntil: exports_external.string().datetime({ offset: true }).nullable().default(null)
 });
+// node_modules/@noble/hashes/esm/sha2.js
+var SHA256_K = /* @__PURE__ */ Uint32Array.from([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+var SHA256_W = /* @__PURE__ */ new Uint32Array(64);
+
+class SHA256 extends HashMD {
+  constructor(outputLen = 32) {
+    super(64, outputLen, 8, false);
+    this.A = SHA256_IV[0] | 0;
+    this.B = SHA256_IV[1] | 0;
+    this.C = SHA256_IV[2] | 0;
+    this.D = SHA256_IV[3] | 0;
+    this.E = SHA256_IV[4] | 0;
+    this.F = SHA256_IV[5] | 0;
+    this.G = SHA256_IV[6] | 0;
+    this.H = SHA256_IV[7] | 0;
+  }
+  get() {
+    const { A, B, C, D, E, F, G, H } = this;
+    return [A, B, C, D, E, F, G, H];
+  }
+  set(A, B, C, D, E, F, G, H) {
+    this.A = A | 0;
+    this.B = B | 0;
+    this.C = C | 0;
+    this.D = D | 0;
+    this.E = E | 0;
+    this.F = F | 0;
+    this.G = G | 0;
+    this.H = H | 0;
+  }
+  process(view, offset) {
+    for (let i = 0;i < 16; i++, offset += 4)
+      SHA256_W[i] = view.getUint32(offset, false);
+    for (let i = 16;i < 64; i++) {
+      const W15 = SHA256_W[i - 15];
+      const W2 = SHA256_W[i - 2];
+      const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;
+      const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
+      SHA256_W[i] = s1 + SHA256_W[i - 7] + s0 + SHA256_W[i - 16] | 0;
+    }
+    let { A, B, C, D, E, F, G, H } = this;
+    for (let i = 0;i < 64; i++) {
+      const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);
+      const T1 = H + sigma1 + Chi(E, F, G) + SHA256_K[i] + SHA256_W[i] | 0;
+      const sigma0 = rotr(A, 2) ^ rotr(A, 13) ^ rotr(A, 22);
+      const T2 = sigma0 + Maj(A, B, C) | 0;
+      H = G;
+      G = F;
+      F = E;
+      E = D + T1 | 0;
+      D = C;
+      C = B;
+      B = A;
+      A = T1 + T2 | 0;
+    }
+    A = A + this.A | 0;
+    B = B + this.B | 0;
+    C = C + this.C | 0;
+    D = D + this.D | 0;
+    E = E + this.E | 0;
+    F = F + this.F | 0;
+    G = G + this.G | 0;
+    H = H + this.H | 0;
+    this.set(A, B, C, D, E, F, G, H);
+  }
+  roundClean() {
+    clean(SHA256_W);
+  }
+  destroy() {
+    this.set(0, 0, 0, 0, 0, 0, 0, 0);
+    clean(this.buffer);
+  }
+}
+var sha256 = /* @__PURE__ */ createHasher(() => new SHA256);
+
 // src/protocol/events/chains.ts
+var EVENT_IDENTITY_VERSION = "handshake-event-identity-1";
 async function buildEventChain(store, descriptors) {
   const tails = new Map;
   const events = [];
   for (const descriptor of descriptors) {
-    for (const binding of streamBindings(descriptor)) {
-      const tailKey = `${binding.streamId}:${binding.partitionKey}`;
+    for (const binding of eventDescriptorStreamBindings(descriptor)) {
+      const tailKey = eventStreamBindingIdentity(binding);
       let tail = tails.get(tailKey);
       if (!tail) {
         const storedTail = await store.getStreamTail(binding.streamId, binding.partitionKey);
         tail = storedTail ? { offset: storedTail.offset, digest: storedTail.eventDigest } : { offset: -1, digest: null };
       }
-      const event = await buildEventAt(descriptor.source, descriptor.eventType, descriptor.objectRefs, descriptor.payload, binding.streamId, binding.streamScope, binding.partitionKey, tail.offset + 1, tail.digest);
+      const event = await materializeEventAtStreamBinding(descriptor, binding, {
+        offset: tail.offset + 1,
+        previousEventDigest: tail.digest
+      });
       events.push(event);
       tails.set(tailKey, { offset: event.offset, digest: event.eventDigest });
     }
   }
   return events;
 }
-function streamBindings(descriptor) {
-  const streamId = organizationStreamId(descriptor.source);
+function organizationEventStreamId(source) {
+  return `stream_v1_${canonicalTupleDigest("organization_stream", [source.tenantId, source.organizationId])}`;
+}
+function actionEventPartitionKey(actionContractId) {
+  return `action_v1_${canonicalTupleDigest("action_partition", [actionContractId])}`;
+}
+function executionRunEventPartitionKey(runId) {
+  return `run_v1_${canonicalTupleDigest("run_partition", [runId])}`;
+}
+function protectedSurfaceResourceEventPartitionKey(gatewayId, resourceRef) {
+  return `protected_surface_resource_v1_${canonicalTupleDigest("protected_surface_resource_partition", [
+    gatewayId,
+    resourceRef
+  ])}`;
+}
+function isolationEventPartitionKey(scopeRef, scopeId) {
+  return internalEventPartitionKey("isolation", scopeId === undefined ? [scopeRef] : [scopeRef, scopeId]);
+}
+function intentEventPartitionKey(intentCompilationId) {
+  return internalEventPartitionKey("intent", [intentCompilationId]);
+}
+function objectEventPartitionKey(objectRef) {
+  return internalEventPartitionKey("object", [objectRef]);
+}
+function eventStreamBindingIdentity(binding) {
+  return `event_binding_v1_${canonicalTupleDigest("stream_binding", [binding.streamId, binding.partitionKey])}`;
+}
+function eventDescriptorStreamBindings(descriptor) {
+  const streamId = organizationEventStreamId(descriptor.source);
   const bindings = [
     {
       streamId,
@@ -16514,38 +16958,46 @@ function streamBindings(descriptor) {
     bindings.push({
       streamId,
       streamScope: "run",
-      partitionKey: `run:${descriptor.streamRefs.runId}`
+      partitionKey: executionRunEventPartitionKey(descriptor.streamRefs.runId)
     }, {
       streamId,
       streamScope: "protected_surface_resource",
-      partitionKey: `protected_surface_resource:${descriptor.streamRefs.gatewayId}:${descriptor.streamRefs.resourceRef}`
+      partitionKey: protectedSurfaceResourceEventPartitionKey(descriptor.streamRefs.gatewayId, descriptor.streamRefs.resourceRef)
     });
   }
   return dedupeBindings(bindings);
 }
-function organizationStreamId(source) {
-  return `stream_${source.tenantId}_${source.organizationId}`;
+async function materializeEventAtStreamBinding(descriptor, binding, position, identity = {
+  streamEventId: createId("evt"),
+  eventTime: nowIso()
+}) {
+  if (!eventDescriptorStreamBindings(descriptor).some((candidate) => sameStreamBinding(candidate, binding))) {
+    throw new Error("Event stream binding is not derived from the descriptor.");
+  }
+  return buildEventAt(descriptor.source, descriptor.eventType, descriptor.objectRefs, descriptor.payload, binding.streamId, binding.streamScope, binding.partitionKey, position.offset, position.previousEventDigest, identity);
 }
 function streamPartitionKey(eventType, objectRefs, streamRefs) {
   if (streamRefs)
-    return `action:${streamRefs.actionContractId}`;
+    return actionEventPartitionKey(streamRefs.actionContractId);
   const actionRef = objectRefs.find((ref) => ref.startsWith("act_"));
   if (actionRef)
-    return `action:${actionRef}`;
+    return actionEventPartitionKey(actionRef);
   if (eventType === "isolation_changed" && objectRefs[1] && objectRefs[2]) {
-    return `isolation:${objectRefs[1]}:${objectRefs[2]}`;
+    return isolationEventPartitionKey(objectRefs[1], objectRefs[2]);
   }
-  if (eventType === "isolation_changed")
-    return `isolation:${objectRefs[1] ?? objectRefs[0] ?? "unknown"}`;
-  if (eventType === "intent_compiled")
-    return `intent:${objectRefs[0] ?? "unknown"}`;
-  return `object:${objectRefs[0] ?? "unknown"}`;
+  if (eventType === "isolation_changed") {
+    return isolationEventPartitionKey(objectRefs[1] ?? objectRefs[0] ?? "unknown");
+  }
+  if (eventType === "intent_compiled") {
+    return intentEventPartitionKey(objectRefs[0] ?? "unknown");
+  }
+  return objectEventPartitionKey(objectRefs[0] ?? "unknown");
 }
 function dedupeBindings(bindings) {
   const seen = new Set;
   const deduped = [];
   for (const binding of bindings) {
-    const key = `${binding.streamId}:${binding.partitionKey}`;
+    const key = eventStreamBindingIdentity(binding);
     if (seen.has(key))
       continue;
     seen.add(key);
@@ -16553,8 +17005,17 @@ function dedupeBindings(bindings) {
   }
   return deduped;
 }
-async function buildEventAt(source, eventType, objectRefs, payload, streamId, streamScope, partitionKey, offset, previousEventDigest) {
-  const eventTime = nowIso();
+function internalEventPartitionKey(kind, components) {
+  return `${kind}_v1_${canonicalTupleDigest(`${kind}_partition`, components)}`;
+}
+function canonicalTupleDigest(domain2, components) {
+  return bytesToHex(sha256(utf8ToBytes(canonicalize([EVENT_IDENTITY_VERSION, domain2, ...components]))));
+}
+function sameStreamBinding(left, right) {
+  return left.streamId === right.streamId && left.streamScope === right.streamScope && left.partitionKey === right.partitionKey;
+}
+async function buildEventAt(source, eventType, objectRefs, payload, streamId, streamScope, partitionKey, offset, previousEventDigest, identity) {
+  const eventTime = identity.eventTime;
   const eventSeed = {
     streamId,
     streamScope,
@@ -16571,7 +17032,7 @@ async function buildEventAt(source, eventType, objectRefs, payload, streamId, st
     tenantId: source.tenantId,
     organizationId: source.organizationId,
     createdAt: eventTime,
-    streamEventId: createId("evt"),
+    streamEventId: identity.streamEventId,
     streamId,
     streamScope,
     offset,
@@ -18020,20 +18481,22 @@ var ProtocolRecordSchema = exports_external.discriminatedUnion("objectType", [
   exports_external.strictObject({ objectType: exports_external.literal("contract_stream_event"), payload: ContractStreamEventSchema })
 ]);
 // src/protocol/areas/object-registry/index.ts
-var protocolObjectTypes = ProtocolObjectTypeSchema.options;
-var protocolObjectRegistry = {
+var protocolObjectTypes = Object.freeze([
+  ...ProtocolObjectTypeSchema.options
+]);
+var protocolObjectRegistryEntries = {
   tool_capability: entry("tool_capability", ToolCapabilitySchema, (record2) => record2.payload.toolCapabilityId, "catalog_public", "control_plane_read"),
   action_type: entry("action_type", ActionTypeSchema, (record2) => record2.payload.actionTypeId, "catalog_public", "control_plane_read"),
   gateway_registry_entry: entry("gateway_registry_entry", GatewayRegistryEntrySchema, (record2) => record2.payload.gatewayRegistryEntryId, "catalog_public", "control_plane_read"),
   operating_envelope: entry("operating_envelope", OperatingEnvelopeSchema, (record2) => record2.payload.envelopeId, "catalog_public", "control_plane_read"),
-  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read"),
-  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read"),
+  endpoint_access_surface_binding: entry("endpoint_access_surface_binding", EndpointAccessSurfaceBindingSchema, (record2) => record2.payload.protectedSurfaceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_policy: entry("agentic_endpoint_access_policy", AgenticEndpointAccessPolicySchema, (record2) => record2.payload.policyId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_attempt: entry("agentic_endpoint_access_attempt", AgenticEndpointAccessAttemptSchema, (record2) => record2.payload.attemptId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_clearance_binding: entry("agentic_endpoint_access_clearance_binding", AgenticEndpointAccessClearanceBindingSchema, (record2) => record2.payload.clearanceBindingId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_lease: entry("agentic_endpoint_access_lease", AgenticEndpointAccessLeaseSchema, (record2) => record2.payload.leaseId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_usage_event: entry("agentic_endpoint_access_usage_event", AgenticEndpointAccessUsageEventSchema, (record2) => record2.payload.usageEventId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_readback: entry("agentic_endpoint_access_readback", AgenticEndpointAccessReadbackSchema, (record2) => record2.payload.readbackId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
+  agentic_endpoint_access_capabilities: entry("agentic_endpoint_access_capabilities", AgenticEndpointAccessCapabilitiesSchema, (record2) => record2.payload.capabilityReportId, "transition_evidence", "audit_read", agenticEndpointAccessSchemaVersion),
   gateway_credential_ref: entry("gateway_credential_ref", GatewayCredentialRefSchema, (record2) => record2.payload.gatewayCredentialRefId, "transition_evidence", "audit_read"),
   delegated_authority_ref: entry("delegated_authority_ref", DelegatedAuthorityRefSchema, (record2) => record2.payload.delegatedAuthorityRefId, "transition_evidence", "audit_read"),
   delegated_authority_status_transition: entry("delegated_authority_status_transition", DelegatedAuthorityStatusTransitionSchema, (record2) => record2.payload.delegatedAuthorityStatusTransitionId, "transition_evidence", "audit_read"),
@@ -18076,18 +18539,36 @@ var protocolObjectRegistry = {
   recovery_recommendation_status_transition: entry("recovery_recommendation_status_transition", RecoveryRecommendationStatusTransitionSchema, (record2) => record2.payload.recoveryRecommendationStatusTransitionId, "transition_evidence", "audit_read"),
   contract_stream_event: entry("contract_stream_event", ContractStreamEventSchema, (record2) => record2.payload.streamEventId, "internal_evidence", "internal_only")
 };
-var protocolRecordSchemas = Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema]));
+var protocolObjectRegistry = Object.freeze(protocolObjectRegistryEntries);
+var protocolRecordSchemas = Object.freeze(Object.fromEntries(protocolObjectTypes.map((objectType) => [objectType, protocolObjectRegistry[objectType].schema])));
 function getObjectId(record2) {
   return protocolObjectRegistry[record2.objectType].idSelector(record2);
 }
-function entry(objectType, schema, idSelector, exportPosture, rawReadPosture) {
-  return {
+function entry(objectType, schema, idSelector, exportPosture, rawReadPosture, schemaVersion = PROTOCOL_VERSION, additionalSchemaRegistrations = []) {
+  const selectCurrentObjectId = (payload) => idSelector({
+    objectType,
+    payload
+  });
+  const registrations = Object.freeze([
+    Object.freeze({
+      schemaVersion,
+      schema,
+      objectIdSelector: selectCurrentObjectId
+    }),
+    ...additionalSchemaRegistrations.map((registration) => Object.freeze({
+      schemaVersion: registration.schemaVersion,
+      schema: registration.schema,
+      objectIdSelector: registration.objectIdSelector
+    }))
+  ]);
+  return Object.freeze({
     objectType,
     schema,
     idSelector: (record2) => idSelector(record2),
+    schemaRegistrations: registrations,
     exportPosture,
     rawReadPosture
-  };
+  });
 }
 // src/protocol/areas/protected-path-posture/inputs.ts
 var CreateProtectedPathPostureInputSchema = exports_external.strictObject({
@@ -18185,6 +18666,8 @@ var RecordGatewayCustodyProofPacketInputSchema = exports_external.strictObject({
 var SafeRefSchema = AgenticEndpointAccessSafeReferenceSchema;
 var agenticEndpointAccessMiddlewareConfigSchemaVersion = "handshake.agentic-endpoint-access.middleware-config.v0.3.0";
 var agenticEndpointAccessMiddlewareEventSchemaVersion = "handshake.agentic-endpoint-access.middleware-event.v0.3.0";
+var agenticEndpointAccessDefaultMaxRequestBodyBytes = 1048576;
+var agenticEndpointAccessMaxRequestBodyBytesCeiling = 25 * 1048576;
 var AgenticEndpointAccessProtectionStatusSchema = exports_external.enum([
   "leased",
   "refused",
@@ -18213,13 +18696,27 @@ var agenticEndpointAccessMiddlewareAuthorityBoundary = {
   treatsRouteMatcherAsAuthority: false,
   treatsCloudReadinessAsAuthority: false
 };
+var HeaderRedactionTokenSchema = exports_external.string().trim().min(1).max(128).refine((value) => !looksLikeEndpointAccessSecret(value), {
+  message: "redaction policy tokens must be match hints, not raw authority material"
+});
+var AgenticEndpointAccessHeaderRedactionPolicySchema = exports_external.strictObject({
+  redactionPolicyId: SafeRefSchema.optional(),
+  additionalSensitiveHeaderNames: exports_external.array(HeaderRedactionTokenSchema).max(64).default([]),
+  additionalSensitiveHeaderNameSubstrings: exports_external.array(HeaderRedactionTokenSchema).max(64).default([]),
+  additionalSensitiveValueSubstrings: exports_external.array(HeaderRedactionTokenSchema).max(64).default([])
+}).refine((policy) => policy.redactionPolicyId !== undefined || policy.additionalSensitiveHeaderNames.length === 0 && policy.additionalSensitiveHeaderNameSubstrings.length === 0 && policy.additionalSensitiveValueSubstrings.length === 0, {
+  message: "custom header redaction policy additions require a redactionPolicyId",
+  path: ["redactionPolicyId"]
+});
 var AgenticEndpointAccessMiddlewareOptionsSchema = exports_external.strictObject({
   tenantId: IdSchema,
   organizationId: IdSchema,
   kernelVersion: SafeRefSchema,
   middlewareVersion: SafeRefSchema,
   publicVerifyBaseUrl: exports_external.string().url().optional(),
-  defaultLeaseTtlSeconds: exports_external.number().finite().positive().default(300)
+  defaultLeaseTtlSeconds: exports_external.number().finite().positive().default(300),
+  maxRequestBodyBytes: exports_external.number().int().positive().max(agenticEndpointAccessMaxRequestBodyBytesCeiling).default(agenticEndpointAccessDefaultMaxRequestBodyBytes),
+  headerRedactionPolicy: AgenticEndpointAccessHeaderRedactionPolicySchema.optional()
 });
 var AgenticEndpointAccessConfigSnapshotSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(agenticEndpointAccessMiddlewareConfigSchemaVersion),
@@ -18370,6 +18867,33 @@ async function buildTransitionRequestContext(draft, scope2) {
 
 // src/protocol/events/records.ts
 var MAX_STREAM_COMMIT_RETRIES = 3;
+async function buildStoredProtocolRecord(record2) {
+  return {
+    objectId: getObjectId(record2),
+    objectType: record2.objectType,
+    tenantId: record2.payload.tenantId,
+    organizationId: record2.payload.organizationId,
+    schemaVersion: record2.payload.schemaVersion,
+    canonicalDigest: await digestCanonical(record2.payload),
+    payload: record2.payload,
+    createdAt: record2.payload.createdAt,
+    sourceEventId: null
+  };
+}
+function bindTransitionRequestContextToEventDescriptors(eventDescriptors, contextRecord) {
+  if (!contextRecord || contextRecord.objectType !== "transition_request_context")
+    return [...eventDescriptors];
+  const context = contextRecord.payload;
+  return eventDescriptors.map((descriptor) => ({
+    ...descriptor,
+    objectRefs: [context.transitionRequestContextId, ...descriptor.objectRefs],
+    payload: {
+      ...descriptor.payload,
+      transitionRequestContextId: context.transitionRequestContextId,
+      requestContextDigest: context.requestContextDigest
+    }
+  }));
+}
 
 class ProtocolRecorder {
   store;
@@ -18398,17 +18922,7 @@ class ProtocolRecorder {
     return result;
   }
   async buildRecord(record2) {
-    return {
-      objectId: getObjectId(record2),
-      objectType: record2.objectType,
-      tenantId: record2.payload.tenantId,
-      organizationId: record2.payload.organizationId,
-      schemaVersion: record2.payload.schemaVersion,
-      canonicalDigest: await digestCanonical(record2.payload),
-      payload: record2.payload,
-      createdAt: record2.payload.createdAt,
-      sourceEventId: null
-    };
+    return buildStoredProtocolRecord(record2);
   }
   async commitRecordsWithEvents(protocolRecords, eventDescriptors, options = {}) {
     const result = await this.tryCommitRecordsWithEvents(protocolRecords, eventDescriptors, options);
@@ -18461,18 +18975,7 @@ class ProtocolRecorder {
     return { objectType: "transition_request_context", payload: context };
   }
   withTransitionRequestContextEventDescriptors(eventDescriptors, contextRecord) {
-    if (!contextRecord || contextRecord.objectType !== "transition_request_context")
-      return eventDescriptors;
-    const context = contextRecord.payload;
-    return eventDescriptors.map((descriptor) => ({
-      ...descriptor,
-      objectRefs: [context.transitionRequestContextId, ...descriptor.objectRefs],
-      payload: {
-        ...descriptor.payload,
-        transitionRequestContextId: context.transitionRequestContextId,
-        requestContextDigest: context.requestContextDigest
-      }
-    }));
+    return bindTransitionRequestContextToEventDescriptors(eventDescriptors, contextRecord);
   }
   async withTransitionRequestContext(protocolRecords, eventDescriptors) {
     if (!this.transitionRequestContext || protocolRecords.length === 0) {
@@ -18583,11 +19086,25 @@ async function evaluateAgenticEndpointAccessMiddlewareReadiness(input) {
       syncProofRef: null
     };
   }
-  const capabilityReport = snapshot.capabilities ?? buildAgenticEndpointAccessCapabilitiesFromSnapshot(snapshot, {
-    kernelVersion: input.kernelVersion ?? syncProof.kernelVersion,
-    middlewareVersion: input.middlewareVersion ?? syncProof.middlewareVersion,
-    nowIso: observedAt
-  });
+  if (!snapshot.capabilities) {
+    const capabilityEvaluation3 = evaluateAgenticEndpointAccessCapabilities({
+      capabilityReport: null,
+      expectedSchemaVersion: agenticEndpointAccessSchemaVersion,
+      expectedCloudConfigRevision: snapshot.configRevision,
+      minimumKernelVersion: input.kernelVersion ?? syncProof.kernelVersion,
+      minimumMiddlewareVersion: input.middlewareVersion ?? syncProof.middlewareVersion,
+      requiredDelegationEvidenceKinds: input.requiredDelegationEvidenceKinds ?? snapshot.policy.requiredDelegationEvidence,
+      requiredPolicyFeatures: input.requiredPolicyFeatures ?? ["lease-ttl"],
+      requiredReadbackKinds: input.requiredReadbackKinds ?? ["agentic-endpoint-access-readback"]
+    });
+    return {
+      status: "proof_gap",
+      reasonCodes: capabilityEvaluation3.reasonCodes,
+      capabilityEvaluation: capabilityEvaluation3,
+      syncProofRef: syncProof.syncProofRef
+    };
+  }
+  const capabilityReport = snapshot.capabilities;
   const capabilityEvaluation2 = evaluateAgenticEndpointAccessCapabilities({
     capabilityReport,
     expectedSchemaVersion: agenticEndpointAccessSchemaVersion,
@@ -18624,14 +19141,14 @@ function buildAgenticEndpointAccessCapabilitiesFromSnapshot(snapshotValue, input
     kernelVersion: input.kernelVersion,
     middlewareVersion: input.middlewareVersion,
     cloudConfigRevision: snapshot.configRevision,
-    runtimePostureStatus: "supported",
-    rawBypassPosture: "blocked",
-    siblingBypassPosture: "blocked",
+    runtimePostureStatus: "unknown",
+    rawBypassPosture: "unknown",
+    siblingBypassPosture: "unknown",
     supportedEndpointAccessSchemaVersions: [agenticEndpointAccessSchemaVersion],
     supportedDelegationEvidenceKinds: snapshot.policy.requiredDelegationEvidence,
     supportedPolicyFeatures: ["lease-ttl", "per-lease-budget"],
     supportedReadbackKinds: ["agentic-endpoint-access-readback"],
-    failClosedReasons: [],
+    failClosedReasons: ["agentic_endpoint_access_capability_report_missing"],
     reportedAt: input.nowIso ?? snapshot.pulledAt
   });
 }
@@ -18668,15 +19185,6 @@ var AgenticEndpointAccessCloudSharedModuleSchema = exports_external.enum([
   "@handshake-cloud/shared/schemas/agentic-endpoint-access-capabilities",
   "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback",
   "@handshake-cloud/shared/schemas/agentic-endpoint-public-api"
-]);
-var AgenticEndpointAccessCloudSharedSourceFileSchema = exports_external.enum([
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts",
-  "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts"
 ]);
 var AgenticEndpointAccessCloudSharedStateSchema = exports_external.enum([
   "attempted",
@@ -18758,6 +19266,16 @@ var AgenticEndpointAccessKernelRequestEvidenceFieldSchema = exports_external.enu
   "redactionPolicyId",
   "requestEvidenceDigest"
 ]);
+var AgenticEndpointAccessCloudSharedSourceProvenanceSchema = exports_external.strictObject({
+  cloudRepoBoundary: exports_external.literal("separate_cloud_repo"),
+  repositoryName: exports_external.literal("handshake-cloud"),
+  packageName: exports_external.literal("@handshake-cloud/shared"),
+  packagePath: exports_external.literal("packages/shared"),
+  sourcePackageVersion: exports_external.literal("0.0.0"),
+  sourceProofKind: exports_external.literal("customer_edge_cloud_source_contract_readback"),
+  sourceProofDigestRequired: exports_external.literal(true),
+  sourcePathLabelsAllowedInKernelPin: exports_external.literal(false)
+});
 var AgenticEndpointAccessCloudSharedContractDigestMaterialSchema = exports_external.strictObject({
   schemaVersion: exports_external.literal(agenticEndpointAccessCloudSharedContractPinSchemaVersion),
   contractVersion: exports_external.literal("0.3.0"),
@@ -18770,7 +19288,7 @@ var AgenticEndpointAccessCloudSharedContractDigestMaterialSchema = exports_exter
     sourceOnlyReference: exports_external.literal(true)
   }),
   pinnedModules: exports_external.array(AgenticEndpointAccessCloudSharedModuleSchema).min(1),
-  sourceFiles: exports_external.array(AgenticEndpointAccessCloudSharedSourceFileSchema).min(1),
+  sourceProvenance: AgenticEndpointAccessCloudSharedSourceProvenanceSchema,
   constants: exports_external.strictObject({
     states: exports_external.array(AgenticEndpointAccessCloudSharedStateSchema).min(1),
     capabilityStatuses: exports_external.array(AgenticEndpointAccessCloudSharedCapabilityStatusSchema).min(1),
@@ -18836,15 +19354,16 @@ var agenticEndpointAccessCloudSharedContractDigestMaterial = AgenticEndpointAcce
     "@handshake-cloud/shared/schemas/agentic-endpoint-access-readback",
     "@handshake-cloud/shared/schemas/agentic-endpoint-public-api"
   ],
-  sourceFiles: [
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/constants/agentic-endpoint-access.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-config.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-events.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-capabilities.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-access-readback.ts",
-    "../01. Pre-Implementation/handshake-cloud/packages/shared/src/schemas/agentic-endpoint-public-api.ts"
-  ],
+  sourceProvenance: {
+    cloudRepoBoundary: "separate_cloud_repo",
+    repositoryName: "handshake-cloud",
+    packageName: "@handshake-cloud/shared",
+    packagePath: "packages/shared",
+    sourcePackageVersion: "0.0.0",
+    sourceProofKind: "customer_edge_cloud_source_contract_readback",
+    sourceProofDigestRequired: true,
+    sourcePathLabelsAllowedInKernelPin: false
+  },
   constants: {
     states: ["attempted", "leased", "refused", "proof_gap", "expired", "exhausted", "quarantined", "revoked"],
     capabilityStatuses: ["ready", "unsupported", "stale", "proof_gap", "unknown"],
@@ -18949,7 +19468,7 @@ var agenticEndpointAccessCloudSharedContractPin = AgenticEndpointAccessCloudShar
   schemaVersion: agenticEndpointAccessCloudSharedContractPinSchemaVersion,
   digestAlgorithm: "handshake-jcs-lite-sha256",
   digestMaterial: agenticEndpointAccessCloudSharedContractDigestMaterial,
-  contractDigest: "sha256:d8dc60eb184e72d808dc756db3daf5ffdc6efcb838b6c193fb95fa04e1ca47aa",
+  contractDigest: "sha256:0f64ce89ca9dd8d1adf2c26304da88bc842581f3e82770c47631233a77f86666",
   cloudRuntimeImportAllowed: false,
   packageExportAllowed: false,
   authorityCreated: false
@@ -19376,6 +19895,7 @@ var agenticEndpointAccessCloudHttpRoutes = {
   configPull: "/agentic-endpoint-access/config/pull",
   eventIngest: "/agentic-endpoint-access/events/ingest"
 };
+var DEFAULT_AGENTIC_ENDPOINT_ACCESS_CLOUD_REQUEST_TIMEOUT_MS = 30000;
 function createAgenticEndpointAccessCloudHttpClient(options) {
   const client = new AgenticEndpointAccessCloudHttpClientImpl(options);
   return {
@@ -19389,6 +19909,7 @@ class AgenticEndpointAccessCloudHttpClientImpl {
   routes;
   fetchImpl;
   now;
+  requestTimeoutMs;
   constructor(options) {
     this.options = options;
     this.routes = {
@@ -19397,12 +19918,15 @@ class AgenticEndpointAccessCloudHttpClientImpl {
     };
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
     this.now = options.now ?? (() => new Date);
+    this.requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
   }
   async pullConfig(requestValue) {
     const request = AgenticEndpointAccessConfigPullRequestSchema.parse(requestValue);
     const route = this.routes.configPull;
     const rawBody = JSON.stringify(request);
-    const response = await this.postSigned(route, rawBody, `config:${request.endpointId}`);
+    const response = await this.safePostSigned(route, rawBody, `config:${request.endpointId}`);
+    if (!response)
+      return failClosedConfigResponse();
     if (!response.ok)
       return failClosedConfigResponse();
     const parsed = AgenticEndpointAccessCloudConfigResponseSchema.safeParse(await parseJson(response));
@@ -19412,11 +19936,20 @@ class AgenticEndpointAccessCloudHttpClientImpl {
     const envelope = AgenticEndpointAccessCloudEventEnvelopeSchema.parse(envelopeValue);
     const route = this.routes.eventIngest;
     const rawBody = JSON.stringify(envelope);
-    const response = await this.postSigned(route, rawBody, `event:${envelope.eventId}`);
+    const response = await this.safePostSigned(route, rawBody, `event:${envelope.eventId}`);
+    if (!response)
+      return queuedIngestResponse(envelope.eventId);
     if (!response.ok)
       return queuedIngestResponse(envelope.eventId);
     const parsed = AgenticEndpointAccessCloudIngestResultSchema.safeParse(await parseJson(response));
     return parsed.success ? parsed.data : queuedIngestResponse(envelope.eventId);
+  }
+  async safePostSigned(route, rawBody, deliveryNonce) {
+    try {
+      return await this.postSigned(route, rawBody, deliveryNonce);
+    } catch {
+      return null;
+    }
   }
   async postSigned(route, rawBody, deliveryNonce) {
     const timestamp = this.now().toISOString();
@@ -19428,7 +19961,7 @@ class AgenticEndpointAccessCloudHttpClientImpl {
       binding,
       ...this.options.keyId === undefined ? {} : { keyId: this.options.keyId }
     });
-    return this.fetchImpl(urlFor(this.options.baseUrl, route), {
+    return withRequestTimeout((signal) => this.fetchImpl(urlFor(this.options.baseUrl, route), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -19439,8 +19972,9 @@ class AgenticEndpointAccessCloudHttpClientImpl {
         [agenticEndpointAccessCloudHttpHeaders.tenantId]: this.options.tenantId,
         [agenticEndpointAccessCloudHttpHeaders.organizationId]: this.options.organizationId
       },
-      body: rawBody
-    });
+      body: rawBody,
+      signal
+    }), this.requestTimeoutMs);
   }
   hmacBinding(route, deliveryNonce) {
     return {
@@ -19452,6 +19986,27 @@ class AgenticEndpointAccessCloudHttpClientImpl {
       deliveryNonce
     };
   }
+}
+async function withRequestTimeout(run, timeoutMs) {
+  const controller = new AbortController;
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error("agentic_endpoint_access_cloud_request_timeout"));
+    }, timeoutMs);
+  });
+  return Promise.race([run(controller.signal), timeout]).finally(() => {
+    if (timeoutId !== undefined)
+      clearTimeout(timeoutId);
+  });
+}
+function normalizeRequestTimeoutMs(value) {
+  if (value === undefined)
+    return DEFAULT_AGENTIC_ENDPOINT_ACCESS_CLOUD_REQUEST_TIMEOUT_MS;
+  if (!Number.isFinite(value) || value <= 0)
+    return DEFAULT_AGENTIC_ENDPOINT_ACCESS_CLOUD_REQUEST_TIMEOUT_MS;
+  return Math.floor(value);
 }
 async function parseJson(response) {
   try {
@@ -19534,8 +20089,20 @@ async function normalizeAgenticEndpointAccessIngress(input) {
       "agentic_endpoint_access_delegation_evidence_kind_unsupported"
     ]);
   }
-  const redactedHeaders = redactAgenticEndpointAccessHeaders(ingress.headers ?? {});
-  const computedBodyDigest = await digestCanonical(toJsonValue3(ingress.body ?? ""));
+  const headerRedactionPolicy = AgenticEndpointAccessHeaderRedactionPolicySchema.parse(input.headerRedactionPolicy ?? {});
+  const headerEvidence = normalizeAgenticEndpointAccessHeaders(ingress.headers ?? {}, headerRedactionPolicy);
+  if (!headerEvidence.ok) {
+    return failure("proof_gap", requestId, idempotencyKey, ["agentic_endpoint_access_header_evidence_invalid"]);
+  }
+  const redactedHeaders = headerEvidence.redactedHeaders;
+  const bodyEvidence = serializeBodyEvidence(ingress.body ?? "");
+  if (!bodyEvidence.ok) {
+    return failure("proof_gap", requestId, idempotencyKey, ["agentic_endpoint_access_body_evidence_not_serializable"]);
+  }
+  if (input.maxBodyBytes !== undefined && bodyEvidence.byteLength > input.maxBodyBytes) {
+    return failure("proof_gap", requestId, idempotencyKey, ["agentic_endpoint_access_request_body_too_large"]);
+  }
+  const computedBodyDigest = await digestCanonical(bodyEvidence.jsonValue);
   if (ingress.bodyDigest && ingress.body !== undefined && ingress.bodyDigest !== computedBodyDigest) {
     return failure("proof_gap", requestId, idempotencyKey, ["agentic_endpoint_access_body_digest_mismatch"]);
   }
@@ -19549,7 +20116,7 @@ async function normalizeAgenticEndpointAccessIngress(input) {
     requestUrlDigest: urlDigest,
     requestHeaderDigest: headerDigest,
     requestBodyDigest: bodyDigest,
-    redactionPolicyId: agenticEndpointAccessHeaderRedactionPolicyId
+    redactionPolicyId: headerRedactionPolicy.redactionPolicyId ?? agenticEndpointAccessHeaderRedactionPolicyId
   };
   const requestEvidence = {
     ...requestEvidenceBase,
@@ -19582,22 +20149,50 @@ async function normalizeAgenticEndpointAccessIngress(input) {
   }
   return { status: "normalized", context: parsed.data, redactedHeaders };
 }
-function redactAgenticEndpointAccessHeaders(headers) {
-  const normalized = {};
-  const entries = headers instanceof Headers ? [...headers.entries()] : Object.entries(headers).flatMap(([key, value]) => {
-    if (value === undefined)
-      return [];
-    return [[key, Array.isArray(value) ? value.join(",") : value]];
-  });
-  for (const [rawName, rawValue] of entries) {
-    const name = rawName.toLowerCase();
-    const value = typeof rawValue === "string" ? rawValue : [...rawValue].join(",");
-    normalized[name] = shouldRedactHeader(name, value) ? "[redacted]" : value;
-  }
-  return Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)));
+function redactAgenticEndpointAccessHeaders(headers, policyValue) {
+  const result2 = normalizeAgenticEndpointAccessHeaders(headers, policyValue);
+  if (!result2.ok)
+    throw new TypeError("agentic_endpoint_access_header_evidence_invalid");
+  return result2.redactedHeaders;
 }
-function shouldRedactHeader(name, value) {
-  return sensitiveHeaderNamePattern.test(name) || looksLikeEndpointAccessSecret(value);
+function normalizeAgenticEndpointAccessHeaders(headers, policyValue) {
+  const policy = AgenticEndpointAccessHeaderRedactionPolicySchema.parse(policyValue ?? {});
+  const normalized = {};
+  const entries = normalizeHeaderEntries(headers);
+  if (!entries)
+    return { ok: false };
+  for (const [rawName, value] of entries) {
+    const name = rawName.toLowerCase();
+    normalized[name] = shouldRedactHeader(name, value, policy) ? "[redacted]" : value;
+  }
+  return {
+    ok: true,
+    redactedHeaders: Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)))
+  };
+}
+function normalizeHeaderEntries(headers) {
+  if (headers instanceof Headers)
+    return [...headers.entries()];
+  const entries = [];
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined)
+      continue;
+    if (typeof value === "string") {
+      entries.push([key, value]);
+      continue;
+    }
+    if (Array.isArray(value) && value.every((entry2) => typeof entry2 === "string")) {
+      entries.push([key, value.join(",")]);
+      continue;
+    }
+    return null;
+  }
+  return entries;
+}
+function shouldRedactHeader(name, value, policy) {
+  const normalizedName = name.toLowerCase();
+  const normalizedValue = value.toLowerCase();
+  return sensitiveHeaderNamePattern.test(normalizedName) || looksLikeEndpointAccessSecret(value) || policy.additionalSensitiveHeaderNames.some((headerName) => headerName.toLowerCase() === normalizedName) || policy.additionalSensitiveHeaderNameSubstrings.some((fragment) => normalizedName.includes(fragment.toLowerCase())) || policy.additionalSensitiveValueSubstrings.some((fragment) => normalizedValue.includes(fragment.toLowerCase()));
 }
 function unsupportedDelegationEvidence(observedRefs, requiredRefs) {
   if (observedRefs.length === 0 || requiredRefs.length === 0)
@@ -19623,8 +20218,22 @@ function safeIdOrNull(value) {
     return null;
   return value.length >= 3 && value.length <= 160 ? value : null;
 }
-function toJsonValue3(value) {
-  return JSON.parse(JSON.stringify(value));
+function serializeBodyEvidence(value) {
+  if (typeof value === "string") {
+    return { ok: true, jsonValue: value, byteLength: new TextEncoder().encode(value).byteLength };
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined)
+      return { ok: false };
+    return {
+      ok: true,
+      jsonValue: JSON.parse(serialized),
+      byteLength: new TextEncoder().encode(serialized).byteLength
+    };
+  } catch {
+    return { ok: false };
+  }
 }
 // src/customer-edge/agentic-endpoint-access/kernel-client.ts
 function createAgenticEndpointAccessKernelClient(input) {
@@ -19779,6 +20388,56 @@ function sameJson(a, b) {
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 var nodeFileStoreSchemaVersion = "handshake.agentic-endpoint-access.node-file-store.v1";
+var nodeFileAgenticEndpointAccessLocalStorePostureSchemaVersion = "handshake.agentic-endpoint-access.node-file-store-posture.v0.3.0";
+var NodeFileAgenticEndpointAccessRequiredProductionCapabilitySchema = exports_external.enum([
+  "transactional_write_boundary",
+  "cross_process_mutual_exclusion_or_cas",
+  "atomic_outcome_and_outbox_commit",
+  "conflict_detection_for_usage_outcome_outbox_callback",
+  "durable_readiness_and_config_sync",
+  "bounded_replay_idempotency"
+]);
+var NodeFileAgenticEndpointAccessLocalStorePostureSchema = exports_external.strictObject({
+  schemaVersion: exports_external.literal(nodeFileAgenticEndpointAccessLocalStorePostureSchemaVersion),
+  storeKind: exports_external.literal("node_file_reference"),
+  deploymentPosture: exports_external.literal("single_process_reference"),
+  restartDurable: exports_external.literal(true),
+  localReplayBlockingAfterRestart: exports_external.literal(true),
+  multiProcessSafe: exports_external.literal(false),
+  crossProcessLocking: exports_external.literal(false),
+  compareAndSwapWrites: exports_external.literal(false),
+  transactionalAcrossProcesses: exports_external.literal(false),
+  productionMultiProcessEligible: exports_external.literal(false),
+  requiredProductionCapabilities: exports_external.array(NodeFileAgenticEndpointAccessRequiredProductionCapabilitySchema).min(1),
+  nonClaims: exports_external.array(exports_external.string().min(1)).min(1)
+});
+var nodeFileAgenticEndpointAccessLocalStorePosture = NodeFileAgenticEndpointAccessLocalStorePostureSchema.parse({
+  schemaVersion: nodeFileAgenticEndpointAccessLocalStorePostureSchemaVersion,
+  storeKind: "node_file_reference",
+  deploymentPosture: "single_process_reference",
+  restartDurable: true,
+  localReplayBlockingAfterRestart: true,
+  multiProcessSafe: false,
+  crossProcessLocking: false,
+  compareAndSwapWrites: false,
+  transactionalAcrossProcesses: false,
+  productionMultiProcessEligible: false,
+  requiredProductionCapabilities: [
+    "transactional_write_boundary",
+    "cross_process_mutual_exclusion_or_cas",
+    "atomic_outcome_and_outbox_commit",
+    "conflict_detection_for_usage_outcome_outbox_callback",
+    "durable_readiness_and_config_sync",
+    "bounded_replay_idempotency"
+  ],
+  nonClaims: [
+    "multi_process_customer_edge_safety",
+    "production_transactional_store",
+    "cross_process_replay_safety",
+    "hosted_cloud_durability",
+    "shared_file_cas"
+  ]
+});
 
 class NodeFileAgenticEndpointAccessLocalStore {
   filePath;
@@ -20000,11 +20659,11 @@ function sameJson2(a, b) {
 }
 // src/customer-edge/agentic-endpoint-access/stable-ids/index.ts
 async function stableAgenticEndpointAccessId(prefix, material) {
-  const digest = await digestCanonical(toJsonValue4(material));
+  const digest = await digestCanonical(toJsonValue3(material));
   const suffix = digest.slice("sha256:".length, "sha256:".length + 48);
   return IdSchema.parse(`${prefix}_${suffix}`);
 }
-function toJsonValue4(value) {
+function toJsonValue3(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
@@ -20076,12 +20735,12 @@ async function forwardedEventForProtectionOutcome(outcome) {
     usageEvents: [],
     reasonCodes: outcome.reasonCodes,
     proofGapRefs: outcome.proofGapRefs,
-    payloadDigest: await digestCanonical(toJsonValue5(outcome)),
+    payloadDigest: await digestCanonical(toJsonValue4(outcome)),
     boundary: agenticEndpointAccessMiddlewareAuthorityBoundary,
     occurredAt: outcome.recordedAt
   };
 }
-function toJsonValue5(value) {
+function toJsonValue4(value) {
   return JSON.parse(JSON.stringify(value));
 }
 // src/customer-edge/agentic-endpoint-access/package-posture/index.ts
@@ -20115,6 +20774,14 @@ var AgenticEndpointAccessMiddlewarePackagePostureSchema = exports_external.stric
   acceptedSourceBoundaryEvidence: exports_external.array(AgenticEndpointAccessMiddlewarePackagePromotionGateSchema).min(1),
   requiredPromotionGates: exports_external.array(AgenticEndpointAccessMiddlewarePackagePromotionGateSchema).min(1),
   missingPromotionGates: exports_external.array(AgenticEndpointAccessMiddlewarePackagePromotionGateSchema),
+  localStorePosture: exports_external.strictObject({
+    referenceStoreKind: exports_external.literal("node_file_reference"),
+    deploymentPosture: exports_external.literal("single_process_reference"),
+    restartDurable: exports_external.literal(true),
+    productionMultiProcessEligible: exports_external.literal(false),
+    productionStoreRequiredForMultiProcess: exports_external.literal(true),
+    requiredProductionCapabilities: exports_external.array(exports_external.string().min(1)).min(1)
+  }),
   nonClaims: exports_external.array(exports_external.string().min(1)).min(1)
 });
 var agenticEndpointAccessMiddlewarePackagePosture = AgenticEndpointAccessMiddlewarePackagePostureSchema.parse({
@@ -20159,6 +20826,14 @@ var agenticEndpointAccessMiddlewarePackagePosture = AgenticEndpointAccessMiddlew
     "package_export_ledger_promoted"
   ],
   missingPromotionGates: [],
+  localStorePosture: {
+    referenceStoreKind: nodeFileAgenticEndpointAccessLocalStorePosture.storeKind,
+    deploymentPosture: nodeFileAgenticEndpointAccessLocalStorePosture.deploymentPosture,
+    restartDurable: nodeFileAgenticEndpointAccessLocalStorePosture.restartDurable,
+    productionMultiProcessEligible: nodeFileAgenticEndpointAccessLocalStorePosture.productionMultiProcessEligible,
+    productionStoreRequiredForMultiProcess: true,
+    requiredProductionCapabilities: nodeFileAgenticEndpointAccessLocalStorePosture.requiredProductionCapabilities
+  },
   nonClaims: [
     "package subpath availability as endpoint access authority",
     "hosted Cloud authority",
@@ -20167,7 +20842,9 @@ var agenticEndpointAccessMiddlewarePackagePosture = AgenticEndpointAccessMiddlew
     "provider credential custody",
     "signer custody",
     "payment custody",
-    "broad customer-edge package surface"
+    "broad customer-edge package surface",
+    "multi-process local-store safety",
+    "production transactional customer-edge storage"
   ]
 });
 // src/customer-edge/agentic-endpoint-access/usage/index.ts
@@ -20246,12 +20923,12 @@ async function usageForwardedEvent(idempotencyKey, usageEvent) {
     usageEvents: [usageEvent],
     reasonCodes: [],
     proofGapRefs: usageEvent.proofGapRefs,
-    payloadDigest: await digestCanonical(toJsonValue6(usageEvent)),
+    payloadDigest: await digestCanonical(toJsonValue5(usageEvent)),
     boundary: agenticEndpointAccessMiddlewareAuthorityBoundary,
     occurredAt: usageEvent.occurredAt
   };
 }
-function toJsonValue6(value) {
+function toJsonValue5(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
@@ -20259,8 +20936,7 @@ function toJsonValue6(value) {
 function createAgenticEndpointAccessMiddleware(configValue) {
   const config2 = {
     ...configValue,
-    options: AgenticEndpointAccessMiddlewareOptionsSchema.parse(configValue.options),
-    recordRequestUsageBeforeHandler: configValue.recordRequestUsageBeforeHandler ?? true
+    options: AgenticEndpointAccessMiddlewareOptionsSchema.parse(configValue.options)
   };
   return {
     evaluate(input) {
@@ -20271,30 +20947,28 @@ function createAgenticEndpointAccessMiddleware(configValue) {
         const result2 = await protectAgenticEndpointAccess({ ...config2, ...input, request });
         if (!result2.executeHandler)
           return jsonOutcome(result2.outcome);
-        if (config2.recordRequestUsageBeforeHandler) {
-          const usage = await recordAgenticEndpointAccessMiddlewareUsage({
-            store: config2.store,
-            kernelClient: config2.kernelClient,
-            leaseRef: result2.outcome.leaseRef ?? "",
-            idempotencyKey: result2.outcome.idempotencyKey ?? input.ingress.idempotencyKey ?? "missing_idempotency",
-            usageKind: "request",
-            amount: 1,
-            occurredAt: input.nowIso
+        const usage = await recordAgenticEndpointAccessMiddlewareUsage({
+          store: config2.store,
+          kernelClient: config2.kernelClient,
+          leaseRef: result2.outcome.leaseRef ?? "",
+          idempotencyKey: result2.outcome.idempotencyKey ?? input.ingress.idempotencyKey ?? "missing_idempotency",
+          usageKind: "request",
+          amount: 1,
+          occurredAt: input.nowIso
+        });
+        if (usage.status !== "recorded") {
+          const blocked = buildMiddlewareFailureOutcome({
+            options: config2.options,
+            status: usage.status,
+            requestId: result2.outcome.requestId,
+            idempotencyKey: result2.outcome.idempotencyKey,
+            attemptRef: result2.outcome.attemptRef,
+            refusalRefs: usage.refusalRef ? [usage.refusalRef] : [],
+            proofGapRefs: usage.proofGapRef ? [usage.proofGapRef] : [],
+            reasonCodes: [usage.reasonCode],
+            nowIso: input.nowIso
           });
-          if (usage.status !== "recorded") {
-            const blocked = buildMiddlewareFailureOutcome({
-              options: config2.options,
-              status: usage.status,
-              requestId: result2.outcome.requestId,
-              idempotencyKey: result2.outcome.idempotencyKey,
-              attemptRef: result2.outcome.attemptRef,
-              refusalRefs: usage.refusalRef ? [usage.refusalRef] : [],
-              proofGapRefs: usage.proofGapRef ? [usage.proofGapRef] : [],
-              reasonCodes: [usage.reasonCode],
-              nowIso: input.nowIso
-            });
-            return jsonOutcome(blocked);
-          }
+          return jsonOutcome(blocked);
         }
         try {
           return await handler(request, result2.handlerContext);
@@ -20392,14 +21066,31 @@ async function protectAgenticEndpointAccess(input) {
       nowIso: nowIso2
     }), options);
   }
+  const bodyEvidence = await resolveRequestBodyEvidence(input.request, input.ingress, options.maxRequestBodyBytes);
+  if (!bodyEvidence.ok) {
+    return await persistAndReturnNonLease(input.store, buildMiddlewareFailureOutcome({
+      options,
+      status: "proof_gap",
+      requestId: input.ingress.requestId,
+      idempotencyKey: input.ingress.idempotencyKey ?? null,
+      reasonCodes: [bodyEvidence.reasonCode],
+      nowIso: nowIso2,
+      body: {
+        requestBodyEvidenceAccepted: false,
+        maxRequestBodyBytes: options.maxRequestBodyBytes
+      }
+    }), options);
+  }
   const ingress = await normalizeAgenticEndpointAccessIngress({
     ingress: {
       ...input.ingress,
       method: input.ingress.method || input.request.method,
       url: input.ingress.url || input.request.url,
-      body: input.ingress.body ?? await input.request.clone().text()
+      ...bodyEvidence.body === undefined ? {} : { body: bodyEvidence.body }
     },
     snapshot,
+    ...options.headerRedactionPolicy ? { headerRedactionPolicy: options.headerRedactionPolicy } : {},
+    maxBodyBytes: options.maxRequestBodyBytes,
     nowIso: nowIso2
   });
   if (ingress.status !== "normalized") {
@@ -20602,6 +21293,58 @@ function reasonCodesForLocalState(readinessState) {
   if (readinessState.status === "fail_closed")
     return ["agentic_endpoint_access_local_fail_closed"];
   return ["agentic_endpoint_access_readiness_unknown"];
+}
+async function resolveRequestBodyEvidence(request, ingress, maxRequestBodyBytes) {
+  if (ingress.body !== undefined)
+    return { ok: true, body: ingress.body };
+  if (ingress.bodyDigest)
+    return { ok: true, body: undefined };
+  return await readRequestBodyTextWithinLimit(request, maxRequestBodyBytes);
+}
+async function readRequestBodyTextWithinLimit(request, maxRequestBodyBytes) {
+  const declaredLength = parseContentLength(request.headers.get("content-length"));
+  if (declaredLength !== null && declaredLength > maxRequestBodyBytes) {
+    return { ok: false, reasonCode: "agentic_endpoint_access_request_body_too_large" };
+  }
+  let body;
+  try {
+    body = request.clone().body;
+  } catch {
+    return { ok: false, reasonCode: "agentic_endpoint_access_request_body_read_failed" };
+  }
+  if (!body)
+    return { ok: true, body: "" };
+  const reader = body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    for (;; ) {
+      const read = await reader.read();
+      if (read.done)
+        break;
+      totalBytes += read.value.byteLength;
+      if (totalBytes > maxRequestBodyBytes) {
+        await reader.cancel();
+        return { ok: false, reasonCode: "agentic_endpoint_access_request_body_too_large" };
+      }
+      chunks.push(read.value);
+    }
+  } catch {
+    return { ok: false, reasonCode: "agentic_endpoint_access_request_body_read_failed" };
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, body: new TextDecoder().decode(bytes) };
+}
+function parseContentLength(value) {
+  if (!value)
+    return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 // src/surfaces/agentic-endpoint-access-readback/index.ts
 var AgenticEndpointAccessConsumerDisplayStateSchema = exports_external.enum([
@@ -20849,7 +21592,7 @@ async function readbackForwardedEvent(outcome, readback2) {
     usageEvents: [],
     reasonCodes: outcome.reasonCodes,
     proofGapRefs: outcome.proofGapRefs,
-    payloadDigest: await digestCanonical(toJsonValue7(readback2)),
+    payloadDigest: await digestCanonical(toJsonValue6(readback2)),
     boundary: agenticEndpointAccessMiddlewareAuthorityBoundary,
     occurredAt: readback2.createdAt
   };
@@ -20860,7 +21603,7 @@ function refId(ref, expectedType) {
   const [type, id] = ref.split(":");
   return type === expectedType && id ? id : null;
 }
-function toJsonValue7(value) {
+function toJsonValue6(value) {
   return JSON.parse(JSON.stringify(value));
 }
 export {
@@ -20879,6 +21622,8 @@ export {
   protectCloudflareWorkerAgenticEndpoint,
   protectAgenticEndpointAccess,
   normalizeAgenticEndpointAccessIngress,
+  nodeFileAgenticEndpointAccessLocalStorePostureSchemaVersion,
+  nodeFileAgenticEndpointAccessLocalStorePosture,
   looksLikeEndpointAccessSecret,
   forwardedEventForProtectionOutcome,
   forwardAgenticEndpointAccessReadback,
@@ -20899,13 +21644,16 @@ export {
   agenticEndpointAccessMiddlewareEventSchemaVersion,
   agenticEndpointAccessMiddlewareConfigSchemaVersion,
   agenticEndpointAccessMiddlewareAuthorityBoundary,
+  agenticEndpointAccessMaxRequestBodyBytesCeiling,
   agenticEndpointAccessHeaderRedactionPolicyId,
+  agenticEndpointAccessDefaultMaxRequestBodyBytes,
   agenticEndpointAccessCloudSharedContractPinSchemaVersion,
   agenticEndpointAccessCloudSharedContractPin,
   agenticEndpointAccessCloudHttpRoutes,
   agenticEndpointAccessCloudHttpHeaders,
   agenticEndpointAccessCloudContractTable,
   agenticEndpointAccessAuthorityBoundary,
+  NodeFileAgenticEndpointAccessLocalStorePostureSchema,
   NodeFileAgenticEndpointAccessLocalStore,
   InMemoryAgenticEndpointAccessLocalStore,
   EndpointAccessSurfaceBindingSchema,
@@ -20921,6 +21669,7 @@ export {
   AgenticEndpointAccessMiddlewareOptionsSchema,
   AgenticEndpointAccessMiddlewareAuthorityBoundarySchema,
   AgenticEndpointAccessIngressContextSchema,
+  AgenticEndpointAccessHeaderRedactionPolicySchema,
   AgenticEndpointAccessHandlerContextSchema,
   AgenticEndpointAccessForwardedEventSchema,
   AgenticEndpointAccessConfigSyncProofSchema,
